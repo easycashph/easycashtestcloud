@@ -4337,3 +4337,50 @@ still rotating normally) - no code touched, no rebuild needed.
 - No MIS-facing UI exists to withdraw an individual AUTO_ROTATION pool item outside this direct-DB
   intervention - worth a possible future feature if this becomes a recurring request, but not built
   this pass (single one-off removal, not asked to be turned into a feature).
+
+## §92 — 2026-09-04: Portal Cloudflare Pages deploy wasn't picking up ANY of today's code changes; §80's "(304) Not Modified" fix recurred
+
+User asked why `dataprivacyofficer@easycash.ph` was still showing on the LIVE `easycash-portal.pages.dev` footer despite §90's fix being committed and pushed hours earlier. Verified via a fresh (non-cached) browser session that the live site was indeed still serving old code - but §91's MIS-post DB change (same session, no deploy needed) WAS live, proving this was specifically a stalled Portal *frontend* deploy, not a general cache or DB-sync issue, and not something wrong with the fix itself (confirmed correct and already committed in `67b30a7d`).
+
+User then ran `Start Cloudflare Tunnel (Auto-Update).bat` (its normal daily use, unrelated to this
+investigation) and shared its output, which explained everything: the LMS Pages project's redeploy
+succeeded, but the Portal Pages project's redeploy failed with `The remote server returned an
+error: (304) Not Modified` - the exact same PowerShell/WinINet quirk already diagnosed and
+"fixed" in §80 (2026-09-03), recurring on the SECOND `Invoke-RestMethod` call to
+`api.cloudflare.com` within the same script run (LMS's identical call, first in the run,
+succeeded). This meant every Portal deploy trigger since whenever this last succeeded had silently
+required a manual "Retry deployment" click in the Cloudflare dashboard that never happened - not
+just today's commits, an unknown backlog.
+
+Root cause of the recurrence: §80's fix (per-request `Cache-Control`/`Pragma: no-cache` headers +
+a cache-buster query param on the retry-deployment call only) is a header *hint* -
+`Invoke-RestMethod` has no per-call way to actually set `System.Net.WebRequest`'s `CachePolicy`,
+so the shared, process-wide WinINet cache layer can still override it based on an earlier call in
+the same run, which is exactly what happened (LMS's call polluted/primed something the Portal
+call's headers couldn't override).
+
+**Fix**: `scripts/Start Cloudflare Tunnel (Auto-Update).ps1` now sets
+`[System.Net.WebRequest]::DefaultCachePolicy` to `NoCacheNoStore` for the whole script process
+(via a small inline `Add-Type`'d `RequestCachePolicy` subclass), right after
+`$ErrorActionPreference = 'Stop'` - every `Invoke-RestMethod` call in the script inherits this,
+not just the retry-deployment one that happened to hit the bug this time. §80's original
+per-request headers/cache-buster were left in place as a harmless second layer. Verified the
+edited script still parses cleanly (`PSParser]::Tokenize`). Committed and pushed (`8e994a6b`) -
+this fixes future runs; it does NOT retroactively fix the currently-stuck Portal deployment, so the
+user was told to manually click "Retry deployment" in the Cloudflare dashboard for the Portal
+project to get today's already-pushed fixes (§90, §91's frontend-adjacent pieces if any, and every
+other portalfrontend commit since whenever this last silently failed) live immediately.
+
+### Current state / follow-ups
+
+- **User still needs to manually retry the Portal deployment once** (not done as of this log entry)
+  to actually get §90's DPO-email fix and any other pending portalfrontend commits live - the code
+  fix alone doesn't retroactively redeploy anything.
+- Unknown how far back this silent-failure backlog goes - every portalfrontend change since the
+  last time a Portal deploy genuinely succeeded may still be sitting undeployed. Worth the user
+  checking the Portal project's Deployments tab in the Cloudflare dashboard for the true last-good
+  deploy's commit hash next time, to see how large that gap actually is.
+- If this recurs a third time even with the process-wide `DefaultCachePolicy` fix, the WinINet
+  theory should be considered disproven and the actual Cloudflare API response investigated
+  directly (e.g. capture the raw HTTP response headers/body on failure) rather than assuming client
+  caching again.
