@@ -12,7 +12,6 @@ import {
   Quote,
   ShieldCheck,
   Smartphone,
-  Sparkles,
   UserPlus,
   FileEdit,
   BadgeCheck,
@@ -98,6 +97,25 @@ const fadeUp: Variants = {
 const stagger: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.12 } },
+};
+
+/** How-it-works section only (2026-09-04, "pwede ba natin lagyan ng animation" request,
+ * mockup-approved): the connecting rail "draws" left-to-right as its own staggered child, timed
+ * to finish roughly as the step cards start popping in below it. `scaleX` from a `transform-
+ * origin: left` element, not an animated `width`, so the browser only ever compositor-animates a
+ * transform (no layout thrash). */
+const railDraw: Variants = {
+  hidden: { scaleX: 0 },
+  show: { scaleX: 1, transition: { duration: 0.9, ease: [0.65, 0, 0.35, 1] } },
+};
+
+/** The numbered badge floating above each step card - pops in with a spring after its card has
+ * started fading up (the `delay` lets the card's own `fadeUp` lead), picked up automatically via
+ * framer-motion's variant propagation (a nested motion element with matching 'hidden'/'show' keys
+ * inherits its parent's animation state without needing its own `initial`/`animate` props). */
+const badgePop: Variants = {
+  hidden: { scale: 0 },
+  show: { scale: 1, transition: { type: 'spring', stiffness: 260, damping: 18, delay: 0.2 } },
 };
 
 function Reveal({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -494,15 +512,15 @@ export function LandingPage() {
       {/* How it works (2026-09-04, "high-end, advance sophisticated design" request, mockup-
           approved): steps moved off a bare numbered-circle-on-a-line layout into individual cards
           with a floating number badge and a gradient connecting rail, matching the elevated-card
-          language the Ways-to-Pay section below already established. */}
+          language the Ways-to-Pay section below already established.
+          2026-09-04 (follow-up, mockup-approved): the eyebrow pill above the heading was removed
+          per user request, and the rail/badges now animate in on scroll (rail draws left-to-right,
+          then each card fades up with its badge popping in just after) instead of appearing
+          statically - see `railDraw`/`badgePop` above this component. */}
       <section id="how-it-works" className="py-20 sm:py-24">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-primary">
-              <Sparkles className="h-3.5 w-3.5" />
-              {t.landing.howItWorksEyebrow}
-            </span>
-            <h2 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.howItWorksTitle}</h2>
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.howItWorksTitle}</h2>
           </Reveal>
           <motion.div
             initial="hidden"
@@ -511,8 +529,9 @@ export function LandingPage() {
             variants={stagger}
             className="relative mt-16 grid gap-8 sm:grid-cols-3"
           >
-            <div
-              className="pointer-events-none absolute top-[1.375rem] hidden h-px sm:block sm:left-[16.67%] sm:right-[16.67%]"
+            <motion.div
+              variants={railDraw}
+              className="pointer-events-none absolute top-[1.375rem] hidden h-px origin-left sm:block sm:left-[16.67%] sm:right-[16.67%]"
               style={{ background: 'linear-gradient(to right, hsl(var(--primary)), hsl(var(--primary) / 0.15))' }}
             />
             {t.landing.steps.map((step, index) => {
@@ -523,9 +542,12 @@ export function LandingPage() {
                   variants={fadeUp}
                   className="group relative rounded-2xl border border-border bg-card p-6 pt-9 text-center shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg"
                 >
-                  <div className="absolute -top-5 left-1/2 flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-full bg-primary text-sm font-extrabold text-primary-foreground shadow-lg ring-4 ring-background">
+                  <motion.div
+                    variants={badgePop}
+                    className="absolute -top-5 left-1/2 flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-full bg-primary text-sm font-extrabold text-primary-foreground shadow-lg ring-4 ring-background"
+                  >
                     {index + 1}
-                  </div>
+                  </motion.div>
                   <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <Icon className="h-5 w-5" />
                   </div>

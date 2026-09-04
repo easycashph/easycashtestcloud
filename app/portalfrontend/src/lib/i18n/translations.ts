@@ -98,7 +98,6 @@ export const en = {
     productsSubtitle: "Whatever you're working toward, there's an Easycash product built for it.",
     applyForThisLoan: 'Apply for this loan',
     seeRequirements: 'See requirements',
-    howItWorksEyebrow: 'Simple by design',
     howItWorksTitle: 'No nonsense. Just a better borrowing experience.',
     steps: [
       { title: 'Create an account', body: 'Sign up with your email in under a minute.' },
@@ -977,7 +976,6 @@ export const fil: Translations = {
     productsSubtitle: 'Anuman ang iyong pinagsusumikapan, may produkto ang Easycash na iginawa para dito.',
     applyForThisLoan: 'Mag-apply ng loan na ito',
     seeRequirements: 'Tingnan ang mga kailangan',
-    howItWorksEyebrow: 'Simple lang talaga',
     howItWorksTitle: 'Walang kalabisan. Mas mahusay na karanasan sa paghiram.',
     steps: [
       { title: 'Gumawa ng account', body: 'Mag-sign up gamit ang iyong email sa loob ng isang minuto.' },
