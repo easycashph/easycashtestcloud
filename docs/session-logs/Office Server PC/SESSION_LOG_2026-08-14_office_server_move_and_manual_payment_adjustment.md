@@ -4427,3 +4427,42 @@ written - see follow-ups.
   remembering that a slow-but-genuinely-in-progress build can look identical to a stuck one for
   several minutes; check `latest_stage`/`stages` via the API (or the dashboard's live log) before
   concluding a deploy needs a manual kick.
+
+## §94 — 2026-09-04: Portal footer redesign (trust badges, icon-led contact list)
+
+User asked for a "high-end, advance design" for the footer, mockup-first. Built an Artifact mockup
+using the Portal's ACTUAL brand identity (confirmed by reading `index.css`/`tailwind.config.ts`
+directly rather than assuming - emerald green primary `hsl(158 64% 26%)`, Plus Jakarta Sans, not
+the LMS's navy/Inter used in earlier mockups this session) showing a tinted footer band, a
+trust-badge row, and an icon-led contact list. User approved: "tuloy mo na, i-apply mo na."
+
+Implemented in `SiteFooter.tsx` keeping every legal disclosure value exactly as before
+(`COMPANY`/`FORMATTED_ADDRESS`/`REGULATORY_DISCLOSURE` untouched, same source of truth) - only
+layout/presentation changed:
+- `bg-secondary/30` tinted band instead of a plain white footer.
+- Three trust badge chips (SEC-registered, no-advance-fee, data-protected) as rounded pills with
+  icon circles - reused the hero's own `t.landing.trustSecRegistered`/`trustNoAdvanceFee`/
+  `trustDataProtected` translation strings and `ShieldCheck`/`CheckCircle2`/`Lock` icons
+  (`LandingPage.tsx`) rather than writing new duplicate copy, so the two can't drift apart.
+  Registration line also gained a small `ShieldCheck` icon.
+- Contact list got icon badges per row (`Phone`/`Mail`/`Clock` in a rounded `bg-primary/10` square)
+  instead of a bare bullet list - `loans@easycash.ph` (added back in §93) sits in this new format.
+- Clearer column headings (`text-[11px] font-bold uppercase tracking-wider`), a separated bottom
+  bar with its own hairline border, and the scam-warning line bolded for visibility.
+
+Type-checked clean, rebuilt, verified via DOM/computed-style checks in the Browser pane (correct
+tint color, exact trust-badge/icon counts, exact footer text including `loans@easycash.ph`) -
+visual screenshots repeatedly came back solid-color/blank after any scroll in this session's
+Browser tab (a capture-timing glitch, reproduced even after a fresh navigate/resize, unrelated to
+the page itself per the DOM checks), so this pass relied on DOM verification instead of a pixel
+screenshot. Committed and pushed (`4ba49e3a`); deploy was still polling in the background as this
+entry was written.
+
+### Current state / follow-ups
+
+- **Verify `4ba49e3a` is actually live** - was still polling. If the trust badges/icon list aren't
+  visible on a later check, re-poll rather than assuming success (same caution as §93).
+- The Browser pane's screenshot tool returned a blank/solid-color image on every attempt after
+  scrolling in this tab this session (even a fresh `navigate` didn't reset it) - `zoom` worked once
+  at scroll position 0 but not afterward. If this recurs, prefer DOM-based verification
+  (`get_page_text`, `javascript_exec` computed-style checks) over screenshots, or open a fresh tab.
