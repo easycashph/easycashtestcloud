@@ -114,8 +114,12 @@ const railDraw: Variants = {
  * framer-motion's variant propagation (a nested motion element with matching 'hidden'/'show' keys
  * inherits its parent's animation state without needing its own `initial`/`animate` props). */
 const badgePop: Variants = {
-  hidden: { scale: 0 },
-  show: { scale: 1, transition: { type: 'spring', stiffness: 260, damping: 18, delay: 0.2 } },
+  // x: '-50%' is repeated in both keyframes because framer-motion owns this element's `transform`
+  // once `variants` is set - it only renders the motion values it's animating (here just `scale`),
+  // silently dropping the Tailwind `-translate-x-1/2` class that centers the badge. Without it, the
+  // badge's left edge (not center) lands at 50%, shifting it half its own width to the right.
+  hidden: { scale: 0, x: '-50%' },
+  show: { scale: 1, x: '-50%', transition: { type: 'spring', stiffness: 260, damping: 18, delay: 0.2 } },
 };
 
 function Reveal({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -540,15 +544,19 @@ export function LandingPage() {
                 <motion.div
                   key={step.title}
                   variants={fadeUp}
-                  className="group relative rounded-2xl border border-border bg-card p-6 pt-9 text-center shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg"
+                  className="group relative overflow-hidden rounded-2xl border border-border bg-card p-6 pt-9 text-center shadow-sm transition-[transform,box-shadow,border-color] duration-300 ease-out hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl"
                 >
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 -z-10 rounded-2xl bg-primary/10 opacity-0 blur-2xl transition-opacity duration-300 ease-out group-hover:opacity-100"
+                  />
                   <motion.div
                     variants={badgePop}
-                    className="absolute -top-5 left-1/2 flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-full bg-primary text-sm font-extrabold text-primary-foreground shadow-lg ring-4 ring-background"
+                    className="absolute -top-5 left-1/2 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-sm font-extrabold text-primary-foreground shadow-lg ring-4 ring-background transition-transform duration-300 ease-out group-hover:scale-110"
                   >
                     {index + 1}
                   </motion.div>
-                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 ease-out group-hover:-rotate-6 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground">
                     <Icon className="h-5 w-5" />
                   </div>
                   <h3 className="mt-4 text-base font-bold tracking-tight">{step.title}</h3>
@@ -576,16 +584,16 @@ export function LandingPage() {
               <motion.div
                 key={feature.title}
                 variants={fadeUp}
-                className="group relative overflow-hidden rounded-2xl border border-border bg-card p-7 transition-all hover:-translate-y-1 hover:shadow-lg"
+                className="group relative overflow-hidden rounded-2xl border border-border bg-card p-7 text-center transition-[transform,box-shadow,border-color] duration-300 ease-out hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl"
               >
                 <span
                   aria-hidden="true"
-                  className="absolute right-5 top-5 text-4xl font-extrabold leading-none text-primary/[0.08] tabular-nums"
+                  className="absolute right-5 top-5 text-4xl font-extrabold leading-none text-primary/[0.08] tabular-nums transition-colors duration-300 ease-out group-hover:text-primary/[0.16]"
                 >
                   {String(index + 1).padStart(2, '0')}
                 </span>
-                <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/[0.06]" />
-                <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md">
+                <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/[0.06] transition-transform duration-500 ease-out group-hover:scale-125" />
+                <div className="relative mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md transition-transform duration-300 ease-out group-hover:rotate-6 group-hover:scale-110">
                   <Icon className="h-5 w-5" />
                 </div>
                 <h3 className="relative mt-4 text-base font-bold tracking-tight">{feature.title}</h3>
