@@ -4217,3 +4217,40 @@ after writing.
   one row) and the batch resync scripts themselves is worth remembering for future single-loan data
   corrections on this machine - expect to need explicit "Allow it" each time, not just once per
   session.
+
+## §89 — 2026-09-03: Removed 6 test/dummy Client records
+
+User asked to delete 6 obviously-fake Client records: ROXANNE EBIA TESTONLY, DEVELOPER TEST
+ACCOUNT, KABORROW T TESTING, TEST ACCOUNT PAYLATER, EASYCASH TEST ACCOUNT, JAY LLLL TEST - all
+carried over from SDevTech's own test data during migration.
+
+Investigated dependencies before touching anything (no "delete client" feature exists in the LMS,
+so this had to be a direct DB operation, same posture as §88):
+- 5 of the 6 had zero loans/applications - just one `Address` row each (plus one `PortalAccount`,
+  `developer@easycash.ph`, on DEVELOPER TEST ACCOUNT).
+- `EASYCASH TEST ACCOUNT` was the borrower behind 3 of §87's flagged loans
+  (`SL-CORP_00071`/`REL-REG_00001`/`SML-REG_00281`) - all `PENDING_APPROVAL` (never approved or
+  disbursed), but carrying 11 migrated `LoanTransaction` rows (fake `FEE_CHARGED`/`DISBURSEMENT`
+  entries, including one obviously-fake ₱10,000,000.00 "disbursement") and 21
+  `RepaymentSchedule` rows.
+- Checked `audit_logs` for any row referencing these entities (1 found) - left untouched, since
+  `AuditLog.entityId` is a plain string with no FK constraint (an orphaned audit trail entry is
+  expected/fine, by design - the whole point of an audit log is that it outlives the entity it
+  describes).
+
+User confirmed ("Oo, ituloy mo na"). Executed as one SQL transaction, in FK-safe order:
+`repayment_schedules` (21) -> `loan_transactions` (11) -> `loan_accounts` (3) -> `portal_accounts`
+(1) -> `addresses` (6) -> `borrowers` (6). All committed together - a hard, permanent delete, not a
+soft-delete/status flip (no such convention exists for `Borrower`, unlike `PortalAccount.status =
+DELETED`).
+
+Data-only change, no code touched - no rebuild needed.
+
+### Current state / follow-ups
+
+- Of §87's original 6 flagged not-yet-disbursed loans, 3 were test-account loans just deleted here
+  (via their borrower), Rodgie's and Samuel Campos's were reviewed in §87/§88. Only
+  `SML-Self_O1N9B` (JOSEPH GAA UMALI) remains unreviewed - a real-looking borrower, not a test
+  account, so needs its own one-at-a-time look rather than being swept into a cleanup like this one.
+- The 4 loans flagged in §88 with stale penalty balances (SHOJI JALOG, ERNESTO BRUCE JR., MARIA
+  TORRENTE, KENNETH PALOMARES) are still unactioned.
