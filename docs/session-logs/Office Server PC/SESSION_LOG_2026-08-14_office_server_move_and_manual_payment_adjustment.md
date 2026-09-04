@@ -4254,3 +4254,53 @@ Data-only change, no code touched - no rebuild needed.
   account, so needs its own one-at-a-time look rather than being swept into a cleanup like this one.
 - The 4 loans flagged in §88 with stale penalty balances (SHOJI JALOG, ERNESTO BRUCE JR., MARIA
   TORRENTE, KENNETH PALOMARES) are still unactioned.
+
+## §90 — 2026-09-04: Retired dataprivacyofficer@easycash.ph across the Easycash Portal
+
+User asked to remove `dataprivacyofficer@easycash.ph` from the public Portal footer, then expanded
+the request across two more turns to cover the whole site and specified two replacement addresses:
+`loans@easycash.ph` (general contact) and `feedback@easycash.ph` (complaints/data-privacy). Business
+owner reasoning implied - no dedicated DPO mailbox exists anymore.
+
+Investigated every occurrence before editing, since `companyInfo.ts` carries a standing warning
+that every value in it is a legal disclosure requiring management/legal confirmation to change
+("If a value becomes unknown, remove the disclosure rather than publishing a wrong one" - the file's
+own anticipated remedy for exactly this situation). Found 8 occurrences across `portalfrontend`
+(none in `lmsfrontend`/`easycashbackend`): `companyInfo.ts` (the `dpoEmail` source-of-truth field +
+`OFFICIAL_CHANNELS`), `SiteFooter.tsx`, `ContactPage.tsx`, `ComplaintsPage.tsx` (two places - the
+"In writing" card and a dedicated data-privacy-concern section), `ErrorBoundary.tsx`'s crash-page
+fallback, `translations.ts` (EN + TL copy), and `index.html`'s JSON-LD structured-data block (SEO
+metadata, not visibly rendered but still a real disclosure surface). Also found it in
+`PrivacyPolicyPage.tsx` (the formal Privacy Policy statement itself, naming "the Easycash Data
+Privacy and Protection Officer" as a role, not just an address) and in
+`docs/PORTAL_WEBSITE_STRATEGY.md` (an internal provenance record, not user-facing).
+
+Asked the user two clarifying questions before touching anything, given the file's own edit
+caution: (1) whether to also update the surrounding "Data Protection Officer"/"data privacy
+matters" copy or just swap the value - user chose to update the copy too; (2) which of the two new
+addresses maps to which page/section - user confirmed loans@ for general contact (Contact Us page,
+official-channels list, error fallback, JSON-LD) and feedback@ for the Complaints page (both
+spots). A third question, on `PrivacyPolicyPage.tsx`'s formal legal text specifically, user said
+**leave alone** pending real written legal/management confirmation - not touched.
+
+Implemented: renamed `companyInfo.ts`'s `dpoEmail` field to `email` (`loans@easycash.ph`) and added
+a new `feedbackEmail` (`feedback@easycash.ph`); updated every live-rendered reference above to the
+correct one of the two per the confirmed mapping; genericized the surrounding copy (`channelDpo`,
+`inWritingNote`, `emailNote`, `privacyBody` in both EN and TL) so it no longer claims a "Data
+Protection Officer" title that no longer exists. `SiteFooter.tsx` had its email line dropped
+entirely (matching the original ask) rather than given a replacement address, since none was
+requested there specifically. `PrivacyPolicyPage.tsx` and the internal strategy doc were left
+untouched per the user's explicit answer.
+
+Frontend type-checked clean, `portalfrontend` rebuilt, verified healthy and the new `loans@` address
+confirmed live in the served HTML. Committed and pushed (`67b30a7d`).
+
+### Current state / follow-ups
+
+- **`PrivacyPolicyPage.tsx` still names `dataprivacyofficer@easycash.ph` and "the Easycash Data
+  Privacy and Protection Officer" as a role** - deliberately left alone, user wants written
+  legal/management confirmation before editing the formal Privacy Policy statement itself. Flag
+  this again if the user brings it up.
+- `docs/PORTAL_WEBSITE_STRATEGY.md` line 105 still records the old DPO address as a historical
+  "CONFIRMED (legacy site)" provenance note - untouched, not user-facing, arguably shouldn't change
+  since it documents what was true at time of writing.
