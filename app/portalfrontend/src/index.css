@@ -10,10 +10,19 @@
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
 
-    /* Easycash Emerald - the platform's default brand accent (matches app/frontend's
-       ACCENT_OPTIONS 'emerald' default), used here as the portal's fixed primary color. */
-    --primary: 158 64% 26%;
+    /* 2026-09-05 (user request, "high-end, advance, sophisticated" full landing-page redesign,
+       mockup-approved): switched the portal's primary from the platform-default emerald to
+       Easycash's own logo navy, sampled directly from public/logo-easycash.png (#22316A, the
+       "easy" wordmark color) - paired with --brand-green (#7CC142, the "cash" wordmark color) as
+       a second accent for gradients/CTAs. Only this portal's brand changes; app/frontend (the
+       internal LMS) keeps its own emerald default untouched. */
+    --primary: 227 53% 27%;
     --primary-foreground: 210 40% 98%;
+
+    /* Easycash logo lime green (#7CC142) - accent only, used for gradient endpoints and small
+       highlights, never as a large fill (fails contrast for body text on white). */
+    --brand-green: 90 51% 51%;
+    --brand-green-foreground: 90 60% 16%;
 
     --secondary: 210 40% 96%;
     --secondary-foreground: 222 47% 11%;
@@ -44,8 +53,11 @@
     --card: 222 42% 11%;
     --card-foreground: 210 40% 96%;
 
-    --primary: 158 55% 42%;
+    --primary: 227 60% 62%;
     --primary-foreground: 222 47% 8%;
+
+    --brand-green: 90 51% 58%;
+    --brand-green-foreground: 90 60% 12%;
 
     --secondary: 222 30% 16%;
     --secondary-foreground: 210 40% 96%;
@@ -81,6 +93,20 @@
   :focus-visible {
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
+}
+
+/* Landing-page glassmorphism utilities (2026-09-05 redesign, mockup-approved). Kept out of
+   tailwind.config.ts since they're compositing tricks (backdrop-filter, radial gradients), not
+   reusable design tokens - `@apply`-ing a `bg-primary/10` etc. still pulls the live CSS vars, so
+   this stays in sync with light/dark mode and any future brand-color change automatically. */
+.glass-panel {
+  @apply border border-white/40 bg-white/60 shadow-[0_30px_60px_-24px_hsl(227_53%_27%/0.35)] backdrop-blur-xl dark:border-white/10 dark:bg-card/60;
+}
+
+.gradient-mesh {
+  background:
+    radial-gradient(700px 480px at 15% 10%, hsl(var(--brand-green) / 0.28), transparent 65%),
+    radial-gradient(600px 420px at 85% 0%, hsl(var(--primary) / 0.22), transparent 60%);
 }
 
 /* Respect the OS "reduce motion" setting (WCAG 2.3.3). The landing page uses framer-motion

@@ -28,7 +28,7 @@ import { LanguageToggle } from '@/components/LanguageToggle';
 import { SiteFooter } from '@/components/SiteFooter';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/lib/authContext';
-import { COMPANY, REGULATORY_DISCLOSURE } from '@/lib/companyInfo';
+import { COMPANY, OFFICIAL_BANK_ACCOUNT, REGULATORY_DISCLOSURE } from '@/lib/companyInfo';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LOAN_PRODUCTS, localizedProductText } from '@/lib/loanProducts';
 import { getDocumentsForProduct } from '@/lib/loanRequirements';
@@ -41,6 +41,9 @@ const FEATURE_ICONS = [Smartphone, CheckCircle2, ShieldCheck];
  * Unearned Income, etc.), never something a client actually pays through, so this is deliberately
  * a curated subset, not the full list. */
 const WAYS_TO_PAY_ICONS = [Banknote, CalendarClock];
+/** Decorative micro-labels only (not a disclosure), paired by index with t.landing.waysToPay -
+ * same non-translated, index-paired pattern already used for WAYS_TO_PAY_ICONS above. */
+const WAYS_TO_PAY_TAGS = ['Instant', 'Scheduled'];
 
 /** Client stories inherited from the legacy Easycash website. The numeric star ratings that
  * previously accompanied these were removed on 2026-07-28: they implied a verified review system
@@ -323,16 +326,20 @@ export function LandingPage() {
 
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-primary/5 to-transparent" />
+        <div className="gradient-mesh pointer-events-none absolute inset-0 -z-10 h-[900px]" />
         <div className="container grid gap-10 py-16 md:grid-cols-2 md:items-center md:py-24">
           <motion.div initial="hidden" animate="show" variants={stagger}>
             <motion.span
               variants={fadeUp}
-              className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"
+              className="glass-panel inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-primary"
             >
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
               {t.landing.badge}
             </motion.span>
-            <motion.h1 variants={fadeUp} className="mt-4 text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
+            <motion.h1
+              variants={fadeUp}
+              className="mt-5 font-display text-4xl font-medium leading-[1.05] tracking-tight sm:text-5xl"
+            >
               {t.landing.heroTitle}
             </motion.h1>
             <motion.p variants={fadeUp} className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
@@ -385,14 +392,16 @@ export function LandingPage() {
             transition={{ duration: 0.6, ease: 'easeOut', delay: 0.1 }}
             className="relative"
           >
-            <ImageWithFallback
-              src="./images/hero-seafarer.jpg"
-              alt="Easycash client"
-              className="aspect-[4/3] w-full rounded-3xl object-cover shadow-lg"
-              fallbackIcon={<ShieldCheck className="h-16 w-16" />}
-              priority
-            />
-            <div className="absolute -bottom-6 left-1/2 w-[calc(100%-2rem)] -translate-x-1/2 rounded-2xl border border-border bg-card p-5 shadow-xl sm:p-6">
+            <div className="rounded-[28px] p-1.5 shadow-[0_30px_60px_-24px_hsl(227_53%_27%/0.45)]" style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--brand-green)))' }}>
+              <ImageWithFallback
+                src="./images/hero-seafarer.jpg"
+                alt="Easycash client"
+                className="aspect-[4/3] w-full rounded-[22px] object-cover"
+                fallbackIcon={<ShieldCheck className="h-16 w-16" />}
+                priority
+              />
+            </div>
+            <div className="glass-panel absolute -bottom-6 left-1/2 w-[calc(100%-2rem)] -translate-x-1/2 rounded-2xl p-5 sm:p-6">
               <div className="grid grid-cols-3 gap-3">
                 {[
                   { label: t.landing.statYearsLabel, value: '14' },
@@ -400,7 +409,7 @@ export function LandingPage() {
                   { label: t.landing.statPartnersLabel, value: '20' },
                 ].map((stat) => (
                   <div key={stat.label} className="text-center">
-                    <p className="text-xl font-bold text-primary sm:text-2xl">{stat.value}</p>
+                    <p className="font-display text-xl font-medium text-primary sm:text-2xl">{stat.value}</p>
                     <p className="mt-1 text-[11px] leading-tight text-muted-foreground sm:text-xs">{stat.label}</p>
                   </div>
                 ))}
@@ -417,7 +426,7 @@ export function LandingPage() {
       <section className="py-16 sm:py-20">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.missionTitle}</h2>
+            <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.missionTitle}</h2>
             <p className="mt-4 text-base leading-relaxed text-muted-foreground">{t.landing.missionBody}</p>
           </Reveal>
         </div>
@@ -427,7 +436,7 @@ export function LandingPage() {
       <section id="products" className="border-t border-border bg-secondary/30 py-20 sm:py-24">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.productsTitle}</h2>
+            <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.productsTitle}</h2>
             <p className="mt-3 text-muted-foreground">{t.landing.productsSubtitle}</p>
           </Reveal>
           <motion.div
@@ -524,7 +533,7 @@ export function LandingPage() {
       <section id="how-it-works" className="py-20 sm:py-24">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.howItWorksTitle}</h2>
+            <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.howItWorksTitle}</h2>
           </Reveal>
           <motion.div
             initial="hidden"
@@ -608,7 +617,7 @@ export function LandingPage() {
       <section className="border-t border-border bg-secondary/30 py-20 sm:py-24">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.waysToPayTitle}</h2>
+            <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.waysToPayTitle}</h2>
             <p className="mt-3 text-muted-foreground">{t.landing.waysToPaySubtitle}</p>
           </Reveal>
           <motion.div
@@ -616,22 +625,49 @@ export function LandingPage() {
             whileInView="show"
             viewport={{ once: true, margin: '-80px' }}
             variants={stagger}
-            className="mx-auto mt-10 grid max-w-2xl gap-6 sm:grid-cols-2"
+            className="mx-auto mt-10 grid max-w-3xl gap-6 sm:grid-cols-2"
           >
             {t.landing.waysToPay.map((way, index) => {
               const Icon = WAYS_TO_PAY_ICONS[index];
+              const tag = WAYS_TO_PAY_TAGS[index];
+              // Only the Bank Transfer card gets a real-data chip - Easycash has exactly one
+              // official collection account (see OFFICIAL_BANK_ACCOUNT), not several banks to
+              // choose from. No equivalent chip for PDC: a real per-loan payment-frequency list
+              // isn't confirmed anywhere in this codebase, and inventing one would fabricate a
+              // business rule (see CLAUDE.md / EligibilityCheckWidget's own doc comment).
+              const chip = index === 0 ? `${OFFICIAL_BANK_ACCOUNT.bankName} · ${OFFICIAL_BANK_ACCOUNT.branch}` : null;
               return (
                 <motion.div
                   key={way.title}
                   variants={fadeUp}
-                  className="flex items-start gap-3 rounded-2xl border border-border bg-card p-6 shadow-sm"
+                  className="group relative overflow-hidden rounded-[22px] border border-border bg-card p-7 shadow-sm transition-[transform,box-shadow,border-color] duration-300 ease-out hover:-translate-y-1 hover:border-primary/40 hover:shadow-xl"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <div
+                    aria-hidden="true"
+                    className="absolute -right-14 -top-14 h-40 w-40 rounded-full opacity-30 blur-3xl transition-transform duration-500 ease-out group-hover:scale-125"
+                    style={{ background: index === 0 ? 'hsl(var(--brand-green))' : 'hsl(var(--primary))' }}
+                  />
+                  {tag && (
+                    <span className="glass-panel absolute right-6 top-6 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-primary">
+                      {tag}
+                    </span>
+                  )}
+                  <div
+                    className="relative flex h-12 w-12 items-center justify-center rounded-2xl text-white shadow-md"
+                    style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--brand-green)))' }}
+                  >
                     <Icon className="h-5 w-5" />
                   </div>
-                  <div>
-                    <h3 className="text-sm font-semibold">{way.title}</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">{way.body}</p>
+                  <div className="relative mt-5">
+                    <h3 className="font-display text-lg font-medium">{way.title}</h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{way.body}</p>
+                    {chip && (
+                      <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
+                        <span className="rounded-full border border-border bg-background px-3 py-1 text-xs font-bold text-muted-foreground">
+                          {chip}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               );
@@ -644,7 +680,7 @@ export function LandingPage() {
       <section className="py-20 sm:py-24">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.testimonialsTitle}</h2>
+            <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.testimonialsTitle}</h2>
             <p className="mt-3 text-muted-foreground">{t.landing.testimonialsSubtitle}</p>
             {/* Testimonials themselves are never translated - see TESTIMONIALS' doc comment. */}
             {locale === 'fil' && (
@@ -673,7 +709,7 @@ export function LandingPage() {
       <section className="border-t border-border bg-secondary/30 py-20 sm:py-24">
         <div className="container max-w-2xl">
           <Reveal className="text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.faqTitle}</h2>
+            <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.faqTitle}</h2>
           </Reveal>
           <motion.div
             initial="hidden"
@@ -695,14 +731,22 @@ export function LandingPage() {
       <section className="py-20 sm:py-24">
         <div className="container">
           <Reveal>
-            <div className="rounded-3xl bg-primary px-8 py-12 text-center text-primary-foreground sm:px-16">
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.ctaTitle}</h2>
-              <p className="mx-auto mt-3 max-w-lg text-primary-foreground/80">{t.landing.ctaBody}</p>
-              <Link to="/signup" className="mt-6 inline-block">
+            <div
+              className="relative overflow-hidden rounded-3xl px-8 py-12 text-center text-primary-foreground sm:px-16"
+              style={{ background: 'linear-gradient(155deg, hsl(var(--primary)), hsl(227 60% 8%) 60%)' }}
+            >
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -inset-x-[10%] -top-[40%] h-[340px] rounded-full opacity-40 blur-3xl"
+                style={{ background: 'hsl(var(--brand-green))' }}
+              />
+              <h2 className="relative font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.ctaTitle}</h2>
+              <p className="relative mx-auto mt-3 max-w-lg text-primary-foreground/80">{t.landing.ctaBody}</p>
+              <Link to="/signup" className="relative mt-6 inline-block">
                 <Button
                   size="lg"
-                  variant="outline"
-                  className="border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10"
+                  className="border-0 text-white shadow-lg hover:brightness-105"
+                  style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--brand-green)) 70%)' }}
                 >
                   {t.common.createAccount}
                 </Button>

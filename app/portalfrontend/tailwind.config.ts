@@ -46,6 +46,12 @@ export default {
           DEFAULT: 'hsl(var(--warning))',
           foreground: 'hsl(var(--warning-foreground))',
         },
+        /** Easycash logo lime green - accent only (gradients, small highlights). See index.css's
+         * --brand-green comment. Not a general-purpose color; reach for `primary` first. */
+        'brand-green': {
+          DEFAULT: 'hsl(var(--brand-green))',
+          foreground: 'hsl(var(--brand-green-foreground))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -54,6 +60,8 @@ export default {
       },
       fontFamily: {
         sans: ['"Plus Jakarta Sans"', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        /** Serif display face for headlines only (2026-09-05 redesign) - never body text. */
+        display: ['Fraunces', 'ui-serif', 'Georgia', 'serif'],
       },
       keyframes: {
         /** News Flash ticker (2026-08-20 user request: "gumagalaw from right to left...

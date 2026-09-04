@@ -40,7 +40,7 @@ export function SiteFooter() {
           ].map(({ icon: Icon, label }) => (
             <span
               key={label}
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-2 pr-3.5 text-xs font-semibold text-foreground shadow-sm"
+              className="glass-panel inline-flex items-center gap-2 rounded-full py-1.5 pl-2 pr-3.5 text-xs font-semibold text-foreground"
             >
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Icon className="h-3 w-3" />
@@ -54,7 +54,7 @@ export function SiteFooter() {
           <div className="sm:col-span-2">
             <div className="flex items-center gap-2.5">
               <img src="./logo-easycash.png" alt="" className="h-9 w-9 rounded-xl object-contain" />
-              <span className="text-base font-extrabold tracking-tight">{COMPANY.legalName}</span>
+              <span className="font-display text-base font-medium tracking-tight">{COMPANY.legalName}</span>
             </div>
             <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">
               {FORMATTED_ADDRESS}
@@ -77,6 +77,17 @@ export function SiteFooter() {
               {REGULATORY_DISCLOSURE}
             </p>
             <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">{t.footer.tagline}</p>
+            {/* 2026-09-05 (user request): real NPC (National Privacy Commission) DPO/DPS
+                registration seal, extracted from the company's own COR SEAL 2026-2027 certificate
+                PDF - not a placeholder or invented badge. public/npc-seal.png. */}
+            <div className="mt-4 flex items-center gap-3">
+              <img src="./npc-seal.png" alt="National Privacy Commission - DPO/DPS Registered" className="h-16 w-auto object-contain" />
+              <span className="text-xs font-semibold leading-tight text-muted-foreground">
+                NPC Certificate of
+                <br />
+                Registration (DPO/DPS)
+              </span>
+            </div>
           </div>
 
           <div>
