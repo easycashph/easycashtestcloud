@@ -4384,3 +4384,46 @@ other portalfrontend commit since whenever this last silently failed) live immed
   theory should be considered disproven and the actual Cloudflare API response investigated
   directly (e.g. capture the raw HTTP response headers/body on failure) rather than assuming client
   caching again.
+
+## §93 — 2026-09-04: Verified the stalled Portal deploy resolved itself; homepage MIS banner removed, footer email restored
+
+Following §92, checked whether the user needed to manually click "Retry deployment" as advised.
+Queried the Cloudflare Pages API directly (using the token in the gitignored
+`local/tunnel-autoupdate.env`, same credential the tunnel script already uses) and found a build
+was ALREADY actively running for the latest commit (`a520c6c6`) - meaning ordinary git-push
+auto-deploy was working fine all along; the "(304) Not Modified" bug in §92 only affects the
+tunnel script's own explicit "force a redeploy without a new commit" API call, a different
+mechanism from GitHub's push-triggered auto-deploy. So the earlier stale-footer symptom was really
+just this specific auto-deploy build taking unusually long (~7 minutes stage-to-stage: build
+finished ~6.5 min in, then deploy stage ~30s more) - not a genuinely stuck/failed deployment, and
+not something the manual-retry advice in §92 was actually needed for this time.
+
+Polled the deployment via the same API (`GET .../deployments`, watching `latest_stage`) until it
+reached `deploy` stage `success`, then verified live via a fresh Browser tab: `SiteFooter.tsx`'s
+`dataprivacyofficer@easycash.ph` line was confirmed gone from the actual served page (not just the
+source), confirming §90's fix was finally live end-to-end.
+
+Two more requests followed once the deploy was confirmed working:
+1. User pointed at the homepage's `MisPostBanner` card (screenshot) and said to remove it from the
+   homepage specifically ("dito sa front"), keeping it on the News & Announcements page ("hayaan
+   nalang ito sa may news"). Checked `NewsPage.tsx` first - confirmed it has its own independent
+   `MisPostFeedCard` rendering, not a dependency on the `MisPostBanner` component, so removing the
+   homepage's usage doesn't affect the News page at all. Removed the `<MisPostBanner />` call and
+   its now-unused import from `LandingPage.tsx`.
+2. User asked to add `loans@easycash.ph` back to the footer's CONTACT list - the footer's email
+   line had been dropped entirely (not replaced) in §90, since nothing was asked to replace it with
+   at the time. Added it back as a `mailto:` link using `COMPANY.contact.email`.
+
+Both type-checked clean, `portalfrontend` rebuilt and verified healthy, committed and pushed
+(`ba0639f3`). Deploy for this commit was still polling in the background as this entry was
+written - see follow-ups.
+
+### Current state / follow-ups
+
+- **Verify `ba0639f3` actually deployed and is live** - was still polling as of this entry. If the
+  homepage banner and the footer email aren't both visibly correct on a later check, re-poll rather
+  than assuming success.
+- §92's "user needs to manually retry" advice turned out to be unnecessary this time - worth
+  remembering that a slow-but-genuinely-in-progress build can look identical to a stuck one for
+  several minutes; check `latest_stage`/`stages` via the API (or the dashboard's live log) before
+  concluding a deploy needs a manual kick.
