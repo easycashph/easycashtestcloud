@@ -4304,3 +4304,36 @@ confirmed live in the served HTML. Committed and pushed (`67b30a7d`).
 - `docs/PORTAL_WEBSITE_STRATEGY.md` line 105 still records the old DPO address as a historical
   "CONFIRMED (legacy site)" provenance note - untouched, not user-facing, arguably shouldn't change
   since it documents what was true at time of writing.
+
+## §91 — 2026-09-04: Removed one auto-rotating homepage MIS post ("Life doesn't stop...")
+
+User shared a screenshot of the Portal homepage's `MisPostBanner` (the "EASYCASH" card above the
+News Flash ticker) showing "Life doesn't stop, and neither should your finances... DON'T BE A
+VICTIM OF FIXERS AND..." and asked to remove it.
+
+This banner's content is not in the codebase - it's DB data (`mis_posts` table, `AUTO_ROTATION`
+type), a 17-item pool that advances one post per 24h (`AdvanceAutoRotationUseCase`, run by
+`misPostRotationScheduler.ts`). Found the exact row: `d340a465-4816-4d29-8b29-22a901e8c654`,
+`poolOrder` 8, `isCurrentlyLive: true` (why it was the one showing).
+
+No existing use case supports withdrawing a pool item on demand (`WithdrawManualMisPostUseCase`
+only covers `MANUAL`-type posts, not the `AUTO_ROTATION` pool) - handled directly via SQL,
+mirroring `AdvanceAutoRotationUseCase`'s own logic so the site wouldn't sit with zero live posts
+for up to 24h waiting on the next scheduled advance:
+1. `poolActive = false, isCurrentlyLive = false` on the target row - permanently removes it from
+   future rotation (`findAutoRotationPool` filters `poolActive: true`), not just a one-time skip.
+2. `isCurrentlyLive = true` on the pool's first remaining item by `poolOrder` (`79f07828...`,
+   "Need a secure and trusted loan?...") - promotes it immediately rather than waiting for the next
+   scheduled rotation run.
+
+Verified directly against the DB: exactly one `AUTO_ROTATION` row now has `isCurrentlyLive = true`,
+and it is the new one, not the removed one. Data-only change (16 posts remain in the pool,
+still rotating normally) - no code touched, no rebuild needed.
+
+### Current state / follow-ups
+
+- The pool now has 16 items instead of 17 (poolOrder 8 permanently retired via `poolActive: false`,
+  row kept for history rather than hard-deleted).
+- No MIS-facing UI exists to withdraw an individual AUTO_ROTATION pool item outside this direct-DB
+  intervention - worth a possible future feature if this becomes a recurring request, but not built
+  this pass (single one-off removal, not asked to be turned into a feature).
