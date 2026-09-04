@@ -4155,3 +4155,65 @@ Backend type-checked clean, rebuilt, verified healthy. Committed and pushed (`bc
   transactions despite never being activated in the LMS) was NOT touched - this fix only changes
   what the report displays. Whether those 6 loans' migrated data should be corrected (e.g. cleared
   `activatedAt`, transactions reversed) is a separate question, not asked about yet.
+
+## §88 — 2026-09-03: SAMUEL CAMPOS's loan (SML-REG_00174) actually disbursed, dated 2012-09-15
+
+Following on from §87, user asked directly about one of the other 5 loans that fix's dry-run turned
+up: SAMUEL CAMPOS's `SML-REG_00174`. Investigated the loan's full state (transactions + schedule +
+loan_account row) before touching anything, per this session's standing "one loan at a time, ask
+before changing" rule.
+
+Findings, presented to the user before any write:
+- `status` was `APPROVED` (never activated in the LMS), but `activatedAt` was already
+  `2012-09-14 16:00:00 UTC` (= 2012-09-15 Manila time) - matching what the user later confirmed as
+  the real disbursement date.
+- `approvedAt` was `2024-12-18` - 12 years AFTER `activatedAt`, itself a sign of confused migrated
+  data.
+- The loan's one `DISBURSEMENT` transaction was dated `2024-12-10`, not `2012-09-15` - meaning two
+  `REPAYMENT` transactions dated 2017 predate it, an impossible sequence (paid before disbursed).
+- `principalBalance`/`interestBalance`/`feesBalance`/`penaltyBalance` (and their Paid/Due
+  counterparts) were all `0.00` despite a real 2-installment repayment schedule already existing
+  with real paid/due figures on it (`ActivateLoanUseCase`, which normally populates these fields,
+  had never run against this loan) - the same root cause as §'s 59+958-loan fix earlier this
+  session, just never caught by that batch because this loan's status was still APPROVED, outside
+  that fix's `status IN (ACTIVE, ACTIVE_IN_ARREARS, ...)` scope.
+
+User confirmed: "Oo, gawin mong ACTIVE, at ayusin din ang DISBURSEMENT date. huwag galawin ang
+repayment." Applied, in order:
+1. `status`: `APPROVED` -> `ACTIVE_IN_ARREARS` (not plain `ACTIVE` - matches the convention already
+   used for the other 1,134 migrated overdue loans, and matches reality: both installments are
+   `LATE`, unpaid, 13+ years overdue).
+2. The `DISBURSEMENT` transaction's `entryDate`: `2024-12-10` -> `2012-09-14 16:00:00` (matching
+   `activatedAt`, same invariant a real Activate-Loan click always produces).
+3. Balance fields resynced from the schedule (dry-run of `resync-stale-migrated-loan-balances.ts`/
+   `resync-stale-migrated-loan-penalty.ts` confirmed the exact target figures first - the balances
+   script's dry-run showed ONLY this loan needed a principal/interest/fees fix; the penalty script's
+   dry-run additionally turned up 4 unrelated loans (SHOJI JALOG, ERNESTO BRUCE JR., MARIA
+   TORRENTE, KENNETH PALOMARES) with their own stale penalty - explicitly NOT touched, out of scope
+   of what was asked, flagged as a separate follow-up below). Applied via a scoped SQL `UPDATE`
+   naming only `SML-REG_00174` (not the batch scripts themselves - Claude Code's auto-mode
+   classifier blocked running either batch script even though the dry-run proved only one loan would
+   change; user said "Allow it, ituloy mo na" to the scoped SQL alternative) -
+   `principalBalance/principalDue` 0 -> 61010.59, `principalPaid` 0 -> 3989.41,
+   `interestBalance/interestDue` 0 -> 989.41, `interestPaid` 0 -> 1950.00, `feesPaid` 0 -> 966.33,
+   `penaltyBalance/penaltyDue` 0 -> 3493.60. REPAYMENT transactions themselves were not touched, per
+   the user's explicit instruction.
+
+Data-only change, no code touched - no rebuild needed. Verified final state directly against the DB
+after writing.
+
+### Current state / follow-ups
+
+- **Flagged, not acted on**: the penalty-resync dry-run surfaced 4 OTHER migrated loans with stale
+  `penaltyBalance` (SHOJI JALOG `SML-REG_00361`: 0 -> 599.01; ERNESTO BRUCE JR. `PFL-GAD_00016`:
+  0 -> 173.40; MARIA TORRENTE `SL-REG_00106`: 0 -> 1036.52; KENNETH PALOMARES `SL-REG_00116`:
+  0 -> 478.52) - these are unrelated to Samuel Campos and to §87's not-yet-disbursed finding (their
+  status is presumably already ACTIVE/ACTIVE_IN_ARREARS, just penalty went stale since the last
+  batch run). Needs its own confirmation before touching.
+- Of §87's original 6 flagged loans, only Rodgie (excluded from the report) and Samuel Campos (now
+  properly activated) have been looked at. `SML-Self_O1N9B` (JOSEPH GAA UMALI), `SL-CORP_00071` /
+  `REL-REG_00001` / `SML-REG_00281` (all "EASYCASH TEST ACCOUNT") remain unreviewed.
+- Auto-mode classifier blocking direct multi-field `loan_accounts` balance UPDATEs (even scoped to
+  one row) and the batch resync scripts themselves is worth remembering for future single-loan data
+  corrections on this machine - expect to need explicit "Allow it" each time, not just once per
+  session.
