@@ -4466,3 +4466,41 @@ entry was written.
   scrolling in this tab this session (even a fresh `navigate` didn't reset it) - `zoom` worked once
   at scroll position 0 but not afterward. If this recurs, prefer DOM-based verification
   (`get_page_text`, `javascript_exec` computed-style checks) over screenshots, or open a fresh tab.
+
+## §95 — 2026-09-04: LOAN_OVERDUE/LOAN_MATURED were re-notifying daily instead of once
+
+User asked why "HAS MATURED"/"IS OVERDUE" kept reappearing in the bell. Investigated directly
+against the DB: one loan (`00080c95...`) had 94 LOAN_OVERDUE/LOAN_MATURED rows since 2026-08-19 -
+a fresh notification every single day it remained overdue, going back to before this session
+started (not caused by anything changed today). Root cause: `syncLoanAccountEvent`'s anti-spam
+guard (`NotificationService.ts`) was a rolling 24-hour window (`existsRecent`) - since the daily
+scan runs once a day, 24h always elapses before the next tick, so a persistently overdue/matured
+loan got re-notified on every scan indefinitely. This was tolerable when it silently added to the
+badge count; the new toast popup (§86) made the same daily re-fire much more visible/annoying.
+
+User confirmed the intended behavior: LOAN_MATURED should fire once when a loan crosses its
+maturity date, LOAN_OVERDUE once when it crosses its due date - not a recurring reminder.
+
+Added `INotificationRepository.existsEver(type, entityId)` (no time window - true if this
+type/entity combination was EVER notified) alongside the existing `existsRecent`. Gave
+`syncLoanAccountEvent` a `dedupe: 'once' | 'window'` parameter and switched
+`syncOverdueNotifications`/`syncMaturedNotifications` to `'once'`.
+`LOAN_FIRST_AMORTIZATION_DUE_TODAY` kept the original window-based check - unaffected, since its
+own account-selection query is already scoped to "due today" (a genuinely single-day condition,
+not an ever-persisting one like overdue/matured).
+
+Updated `NotificationService.test.ts` (added `existsEver` to the mock deps, rewrote the "skips
+already-notified" test to assert on `existsEver` instead of `existsRecent`, added a matching skip
+test for `syncMaturedNotifications` which had none before) and `ListNotificationsUseCase.test.ts`
+(added the new mock method for interface completeness). All 13 notification unit tests pass.
+Verified live: restarted the backend (which fires the scan once immediately on startup) and
+confirmed zero new LOAN_OVERDUE/LOAN_MATURED rows were created for loans that already had one -
+the fix takes effect without needing to wait for tomorrow's scan. Committed and pushed (`c0eea5af`).
+
+### Current state / follow-ups
+
+- **Historical duplicate rows were NOT cleaned up** - the fix only stops NEW duplicates from being
+  created going forward; the existing backlog (e.g. that loan's 94 rows) still sits in the
+  `notifications` table and will still show in a staff member's dropdown/history. Not asked to
+  purge these; flag if the user wants a one-off cleanup script for the historical noise.
+  <br>Sample loan for reference if a cleanup script is ever wanted: `00080c95-120d-4adf-bded-6a19dbd5022d`.
