@@ -4546,3 +4546,37 @@ written.
   across separate page loads/sessions within this same conversation - worth raising with the user
   or trying a fresh Browser pane tab if a real pixel-level visual check is ever needed instead of
   DOM verification.
+
+## §97 — 2026-09-04: How-it-works eyebrow removed; rail/badges animated on scroll
+
+Follow-up to §96. User asked why the "Simple by design" eyebrow pill was there (it was in the
+§96 mockup and got approved along with everything else, but not something the user had
+specifically asked for) and requested it removed, plus asked for animation on the same section -
+mockup-first again (Artifact with a "↻ replay" button showing heading fade-in, the rail drawing
+left-to-right, then each card fading up with its badge popping in). Approved: "tuloy mo na,
+i-apply mo na."
+
+Implemented in `LandingPage.tsx`:
+- Removed the eyebrow `<span>`, the now-unused `Sparkles` icon import, and the
+  `howItWorksEyebrow` translation key (EN + TL).
+- Added two new `Variants` objects (`railDraw`, `badgePop`) alongside the existing `fadeUp`/
+  `stagger`. The rail div became a `motion.div` with `railDraw` (`scaleX` 0->1, `transform-origin:
+  left` via the new `origin-left` class) - animates a transform only, not `width`, to stay
+  compositor-only rather than trigger layout. Each card's numbered badge became a nested
+  `motion.div` with `badgePop` (spring `scale` 0->1, small delay) - picked up automatically via
+  framer-motion's variant-state propagation from its parent card (no new scroll observer or
+  `initial`/`animate` props needed - the existing `whileInView="show"` on the outer `stagger`
+  container already cascades down).
+
+Type-checked clean, rebuilt, verified via DOM checks (eyebrow text absent, 3 badges + the
+gradient rail element still present - the animation's actual motion isn't checkable via a DOM
+snapshot, so trusted the framer-motion variant wiring plus the earlier Artifact mockup preview
+that already demonstrated the same choreography). Committed and pushed (`3e3b7344`); deploy was
+still polling in the background as this entry was written.
+
+### Current state / follow-ups
+
+- **Verify `3e3b7344` is actually live and the animation plays correctly** - was still polling.
+  Since a DOM check can't confirm animation timing/motion itself, the user should also eyeball it
+  live once deployed (scroll the How-it-works section into view) rather than relying solely on
+  this session's automated checks.
