@@ -82,6 +82,13 @@ export class PrismaNotificationRepository implements INotificationRepository {
     return count > 0;
   }
 
+  async existsEver(type: string, entityId: string): Promise<boolean> {
+    const count = await prisma.notification.count({
+      where: { type: type as NotificationType, entityId },
+    });
+    return count > 0;
+  }
+
   /** Same live due-date-based definition as `PrismaDashboardRepository.findOverdueLoanAccounts` -
    * a loan is overdue if it has at least one `RepaymentSchedule` row past due with less paid than
    * owed, matching `RepaymentInstallment.status`'s own `LATE` definition. Deliberately not shared

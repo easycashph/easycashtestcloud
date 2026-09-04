@@ -129,20 +129,33 @@ export class NotificationService {
 
   /**
    * Shared by every daily-scan sync method: creates one notification per account in `accounts`,
-   * skipping any that already got this exact type within the anti-spam window so a loan sitting in
-   * the same state day after day doesn't get a fresh notification on every scan.
+   * skipping any that should be treated as already covered per `dedupe`:
+   *   - 'once' (2026-09-04, user-confirmed for LOAN_OVERDUE/LOAN_MATURED): fires exactly once per
+   *     loan - the first scan that finds it overdue/matured, never again while that same
+   *     notification row exists, even if the condition is still true a day later. Was previously
+   *     a 24h rolling window, which meant a persistently overdue/matured loan got a fresh
+   *     notification (and, since the toast popup was added, a fresh popup) every single day -
+   *     not what staff wanted, just a reminder-once alert on the loan first crossing the line.
+   *   - 'window' (LOAN_FIRST_AMORTIZATION_DUE_TODAY only): the original 24h anti-spam guard,
+   *     still appropriate there since that type's own account-selection query is already scoped to
+   *     "due today" - the window only guards against more than one scan on the same calendar day,
+   *     not a genuine daily repeat.
    */
   private async syncLoanAccountEvent(
     accounts: LoanAccountNotificationTarget[],
     type: NotificationType,
     title: (account: LoanAccountNotificationTarget) => string,
     body: string,
+    dedupe: 'once' | 'window' = 'window',
   ): Promise<void> {
     const resyncCutoff = new Date(Date.now() - NOTIFICATION_RESYNC_WINDOW_HOURS * 60 * 60 * 1000);
 
     for (const account of accounts) {
-      const alreadyNotifiedRecently = await this.deps.notificationRepository.existsRecent(type, account.id, resyncCutoff);
-      if (alreadyNotifiedRecently) continue;
+      const alreadyNotified =
+        dedupe === 'once'
+          ? await this.deps.notificationRepository.existsEver(type, account.id)
+          : await this.deps.notificationRepository.existsRecent(type, account.id, resyncCutoff);
+      if (alreadyNotified) continue;
 
       await this.notifyStaff({
         branchId: account.branchId,
@@ -175,6 +188,7 @@ export class NotificationService {
       'LOAN_OVERDUE',
       (a) => `Loan ${a.loanCode} (${a.borrowerName}) is overdue`,
       'At least one installment is past due and not fully paid.',
+      'once',
     );
   }
 
@@ -191,6 +205,7 @@ export class NotificationService {
       'LOAN_MATURED',
       (a) => `Loan ${a.loanCode} (${a.borrowerName}) has matured`,
       'The full scheduled term is over and the loan is still unpaid.',
+      'once',
     );
   }
 

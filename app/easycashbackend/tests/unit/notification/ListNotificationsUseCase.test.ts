@@ -18,6 +18,7 @@ describe('ListNotificationsUseCase', () => {
       markRead: vi.fn(),
       markAllRead: vi.fn(),
       existsRecent: vi.fn(),
+      existsEver: vi.fn(),
       findOverdueLoanAccounts: vi.fn(),
     };
     const useCase = new ListNotificationsUseCase({ notificationRepository });

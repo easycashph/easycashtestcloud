@@ -10,6 +10,7 @@ function buildDeps() {
     markRead: vi.fn(),
     markAllRead: vi.fn(),
     existsRecent: vi.fn().mockResolvedValue(false),
+    existsEver: vi.fn().mockResolvedValue(false),
     findOverdueLoanAccounts: vi.fn().mockResolvedValue([]),
     findMaturedLoanAccounts: vi.fn().mockResolvedValue([]),
     findFirstAmortizationDueTodayLoanAccounts: vi.fn().mockResolvedValue([]),
@@ -74,16 +75,17 @@ describe('NotificationService', () => {
     expect(notificationRepository.create.mock.calls[0][0].entityId).toBe('loan-1');
   });
 
-  it('syncOverdueNotifications skips an account already notified within the resync window', async () => {
+  it('syncOverdueNotifications skips an account already notified at any point in the past (2026-09-04: fires once, not a recurring daily reminder)', async () => {
     const { notificationRepository, userRepository } = buildDeps();
     notificationRepository.findOverdueLoanAccounts.mockResolvedValue([
       { id: 'loan-1', branchId: 'branch-1', loanCode: 'LN-0001' },
     ]);
-    notificationRepository.existsRecent.mockResolvedValue(true);
+    notificationRepository.existsEver.mockResolvedValue(true);
     const service = new NotificationService({ notificationRepository, userRepository });
 
     await service.syncOverdueNotifications();
 
+    expect(notificationRepository.existsEver).toHaveBeenCalledWith('LOAN_OVERDUE', 'loan-1');
     expect(notificationRepository.create).not.toHaveBeenCalled();
     expect(userRepository.findByRolesAndBranch).not.toHaveBeenCalled();
   });
@@ -120,6 +122,20 @@ describe('NotificationService', () => {
     expect(notificationRepository.create).toHaveBeenCalledTimes(1);
     expect(notificationRepository.create.mock.calls[0][0].type).toBe('LOAN_MATURED');
     expect(notificationRepository.create.mock.calls[0][0].entityId).toBe('loan-2');
+  });
+
+  it('syncMaturedNotifications skips an account already notified at any point in the past (2026-09-04: fires once, not a recurring daily reminder)', async () => {
+    const { notificationRepository, userRepository } = buildDeps();
+    notificationRepository.findMaturedLoanAccounts.mockResolvedValue([
+      { id: 'loan-2', branchId: 'branch-1', loanCode: 'LN-0002', borrowerName: 'Juan Dela Cruz' },
+    ]);
+    notificationRepository.existsEver.mockResolvedValue(true);
+    const service = new NotificationService({ notificationRepository, userRepository });
+
+    await service.syncMaturedNotifications();
+
+    expect(notificationRepository.existsEver).toHaveBeenCalledWith('LOAN_MATURED', 'loan-2');
+    expect(notificationRepository.create).not.toHaveBeenCalled();
   });
 
   it('syncFirstAmortizationDueNotifications notifies staff LOAN_FIRST_AMORTIZATION_DUE_TODAY for each account due today', async () => {
