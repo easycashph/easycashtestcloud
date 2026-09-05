@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-05T10:46:06+08:00",
-    "commitMessage":  "Update build-info; note the 7 remaining coded addresses as manual-review",
-    "commit":  "f86de5b3",
-    "builtAt":  "2026-09-05T05:54:27.1768842Z"
+    "commitDate":  "2026-09-05T14:07:20+08:00",
+    "commitMessage":  "Extend AI Extraction with gender/nationality/DOB, add camera capture",
+    "commit":  "37a7e0cb",
+    "builtAt":  "2026-09-05T06:08:16.4097232Z"
 }

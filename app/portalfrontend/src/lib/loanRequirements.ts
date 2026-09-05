@@ -16,10 +16,12 @@ import type { PortalDocumentCategory } from '@/lib/portalApiTypes';
 export type UploadableDocumentCategory = Exclude<PortalDocumentCategory, 'PROFILE_PICTURE'>;
 
 export const DOCUMENT_LABELS: Record<UploadableDocumentCategory, string> = {
-  VALID_ID_BORROWER: 'Valid ID',
+  // 2026-09-05 (business owner request): relabeled from "Valid ID"/"Employee ID" for clarity -
+  // same upload category/backend value, display text only.
+  VALID_ID_BORROWER: 'Government Valid ID',
   VALID_ID_CO_BORROWER: 'Valid ID (Co-Borrower)',
   PROOF_OF_BILLING: 'Proof of Billing',
-  EMPLOYEE_ID: 'Employee ID',
+  EMPLOYEE_ID: 'Company ID',
   BUSINESS_CLEARANCE: 'Business Clearance',
   CORPORATE_PAYSLIP: 'Payslip',
   SEAMANS_BOOK: "Seaman's Book",
@@ -77,6 +79,25 @@ export function getDocumentsForProduct(loanCategory: string): {
 
   return { always, productSpecific };
 }
+
+/**
+ * Informational-only additional requirements (business owner confirmed, 2026-09-05) - listed on
+ * the public Requirements page but deliberately NOT added to `DOCUMENT_SLOTS`/`UploadableDocumentCategory`
+ * above. Those two are also the real upload-slot config `LoanApplicationFormPage.tsx` renders, and
+ * are backed by the `AttachmentDocumentCategory` Prisma enum on the backend - adding a genuinely
+ * new upload category there needs a migration plus backend schema updates, not just a content
+ * edit. Until that's done, these are things to have ready, not yet something a client can attach
+ * through the Portal.
+ */
+export const ADDITIONAL_REQUIREMENTS_NOTES: Record<string, string[]> = {
+  'Salary Loan': ['Latest Certificate of Employment (COE)'],
+  'Seafarer Loan': [
+    'Latest POEA Contract of Employment',
+    'Latest Allotment Slip or Certificate of Salary and Allowance (CSA)',
+    'Flight Details/Guarantee Letter (if available)',
+    'Passport ID',
+  ],
+};
 
 /**
  * Basic eligibility criteria.

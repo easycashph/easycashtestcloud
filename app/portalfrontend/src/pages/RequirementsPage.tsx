@@ -1,10 +1,15 @@
 import { Link } from 'react-router-dom';
-import { FileCheck2 } from 'lucide-react';
-import { PublicPageLayout } from '@/components/PublicPageLayout';
-import { Button } from '@/components/ui/Button';
+import { ArrowLeft, Check } from 'lucide-react';
+import { SiteFooter } from '@/components/SiteFooter';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { usePageMeta } from '@/lib/usePageMeta';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
-import { ELIGIBILITY_CRITERIA, getDocumentsForProduct } from '@/lib/loanRequirements';
+import { ADDITIONAL_REQUIREMENTS_NOTES, ELIGIBILITY_CRITERIA, getDocumentsForProduct } from '@/lib/loanRequirements';
+import '@/pages/landingMockupClone.css';
+
+/** Decorative category labels, same pattern/reasoning as LandingPage's own PRODUCT_TAGS - paired
+ * by index with LOAN_PRODUCTS, not a value from loanProducts.ts itself. */
+const PRODUCT_TAGS = ['Business', 'Everyday', 'Overseas'];
 
 /**
  * Public requirements page.
@@ -14,85 +19,133 @@ import { ELIGIBILITY_CRITERIA, getDocumentsForProduct } from '@/lib/loanRequirem
  * before they start, which raises completion rates and cuts support calls.
  *
  * Everything shown here is derived from `@/lib/loanRequirements` — the same definitions the
- * application form uses — so the two can never drift apart. See
+ * application form uses — so the two can never drift apart (except `ADDITIONAL_REQUIREMENTS_NOTES`,
+ * deliberately kept separate - see that constant's own doc comment). See
  * `docs/PORTAL_WEBSITE_STRATEGY.md` §3.2.
  *
  * Page chrome (headings, notes, buttons) is translated; `ELIGIBILITY_CRITERIA`, loan product
  * names/details, and document names stay English - they're shared verbatim with the (untranslated)
  * application form, so translating them here only would make this page disagree with the form.
+ *
+ * 2026-09-05 (user request, "high end, advance layout design", mockup-approved): redesigned from
+ * the plain `PublicPageLayout` shell (which every other standalone page - Privacy, Terms,
+ * Complaints - still uses) to the landing page's own glassmorphism look, since this page benefits
+ * from the same "browse products" visual treatment the landing page's Products section already
+ * established. Not using `PublicPageLayout` here, but keeping its two real obligations: the "back
+ * to home" link and the real `SiteFooter` (required on every public page - see that component's
+ * own doc comment).
  */
 export function RequirementsPage() {
   const { t } = useLanguage();
+  usePageMeta(t.requirements.title, t.requirements.intro);
 
   return (
-    <PublicPageLayout title={t.requirements.title} intro={t.requirements.intro}>
-      <div className="space-y-8">
-        <section>
-          <h2 className="text-lg font-bold tracking-tight">{t.requirements.whoCanApply}</h2>
-          <ul className="mt-4 space-y-2.5">
+    <div className="landing-mockup">
+      <div className="page">
+        <div className="mesh" />
+        <div className="wrap">
+          <div style={{ paddingTop: 24 }}>
+            <Link
+              to="/"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.86rem', fontWeight: 600, color: 'var(--ink-soft)', textDecoration: 'none' }}
+            >
+              <ArrowLeft className="h-4 w-4" /> {t.common.backToHome}
+            </Link>
+          </div>
+
+          <div style={{ padding: '40px 0 20px', textAlign: 'center' }}>
+            <span className="eyebrow">Application checklist</span>
+            <h1 className="display" style={{ margin: '20px auto 14px', maxWidth: '20ch', fontSize: 'clamp(2rem, 3.6vw, 2.9rem)' }}>
+              {t.requirements.title}
+            </h1>
+            <p className="lede" style={{ margin: '0 auto' }}>
+              {t.requirements.intro}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <section className="mission" style={{ padding: '10px 0 40px' }}>
+        <div className="wrap">
+          <h2 style={{ fontSize: '1.9rem' }}>{t.requirements.whoCanApply}</h2>
+          <p style={{ maxWidth: '52ch' }}>{t.requirements.eligibilityNote}</p>
+          <div className="elig-grid" style={{ marginTop: 28, textAlign: 'left' }}>
             {ELIGIBILITY_CRITERIA.map((criterion) => (
-              <li key={criterion} className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <FileCheck2 className="h-3 w-3" />
+              <div key={criterion} className="elig-card">
+                <div className="ico">
+                  <Check className="h-4 w-4" />
                 </div>
-                <span className="text-sm leading-relaxed text-muted-foreground">{criterion}</span>
-              </li>
+                <p>{criterion}</p>
+              </div>
             ))}
-          </ul>
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{t.requirements.eligibilityNote}</p>
-        </section>
+          </div>
+        </div>
+      </section>
 
-        <section>
-          <h2 className="text-lg font-bold tracking-tight">{t.requirements.documentsHeading}</h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{t.requirements.documentsIntro}</p>
-
-          <div className="mt-4 space-y-4">
-            {LOAN_PRODUCTS.map((product) => {
+      <section className="products" style={{ padding: '0 0 60px' }}>
+        <div className="wrap">
+          <div className="section-head" style={{ alignItems: 'center', textAlign: 'center', flexDirection: 'column' }}>
+            <h2>{t.requirements.documentsHeading}</h2>
+            <p style={{ margin: '8px auto 0' }}>{t.requirements.documentsIntro}</p>
+          </div>
+          <div className="product-row" style={{ marginTop: 34 }}>
+            {LOAN_PRODUCTS.map((product, index) => {
               const { always, productSpecific } = getDocumentsForProduct(product.category);
+              const additionalNotes = ADDITIONAL_REQUIREMENTS_NOTES[product.category] ?? [];
               return (
-                <div key={product.category} className="rounded-2xl border border-border bg-card p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <product.icon className="h-4 w-4" />
-                    </div>
-                    <h3 className="text-sm font-semibold">{product.displayLabel}</h3>
-                  </div>
+                <div key={product.category} className={`product-card ${index === 1 ? 'navy' : ''}`}>
+                  <div className="glow" />
+                  <div className="product-tag">{PRODUCT_TAGS[index]}</div>
+                  <h3>{product.displayLabel}</h3>
                   {/* Deliberately .en - see this page's own doc comment: kept in sync with the
                       untranslated application form, not translated independently. */}
-                  <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
-                    {product.details.en}
-                  </p>
-                  <ul className="mt-4 space-y-2">
-                    {[...always, ...productSpecific].map((document) => (
-                      <li key={document} className="flex items-start gap-3">
-                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                        <span className="text-sm text-muted-foreground">{document}</span>
-                      </li>
+                  <p style={{ marginBottom: 18 }}>{product.details.en}</p>
+                  <div className="doc-list">
+                    {always.map((doc) => (
+                      <div key={doc} className="doc-item">
+                        <Check className="h-[15px] w-[15px]" />
+                        <span>{doc}</span>
+                      </div>
                     ))}
-                  </ul>
+                    {productSpecific.map((doc) => (
+                      <div key={doc} className="doc-item">
+                        <Check className="h-[15px] w-[15px]" />
+                        <span>{doc}</span>
+                      </div>
+                    ))}
+                    {additionalNotes.map((doc) => (
+                      <div key={doc} className="doc-item new">
+                        <Check className="h-[15px] w-[15px]" />
+                        <span>{doc}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               );
             })}
           </div>
+          <p style={{ marginTop: 24, textAlign: 'center', fontSize: '0.86rem', color: 'var(--ink-soft)' }}>{t.requirements.coBorrowerNote}</p>
+        </div>
+      </section>
 
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{t.requirements.coBorrowerNote}</p>
-        </section>
-
-        <section className="rounded-2xl border border-border bg-secondary/40 p-5">
-          <h2 className="text-sm font-bold">{t.requirements.readyHeading}</h2>
-          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{t.requirements.readyBody}</p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <Link to="/signup">
-              <Button size="sm">{t.common.applyNow}</Button>
-            </Link>
-            <Link to="/login">
-              <Button size="sm" variant="outline">
+      <footer className="tease">
+        <div className="wrap">
+          <div className="footer-card">
+            <h3 style={{ position: 'relative', zIndex: 1 }}>{t.requirements.readyHeading}</h3>
+            <p style={{ position: 'relative', zIndex: 1 }}>{t.requirements.readyBody}</p>
+            <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 12 }}>
+              <Link to="/signup" className="btn-solid">
+                {t.common.applyNow}
+              </Link>
+              <Link to="/login" className="btn-ghost" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', borderColor: 'rgba(255,255,255,0.25)' }}>
                 {t.common.logIn}
-              </Button>
-            </Link>
+              </Link>
+            </div>
           </div>
-        </section>
-      </div>
-    </PublicPageLayout>
+        </div>
+      </footer>
+
+      <SiteFooter />
+    </div>
   );
 }
