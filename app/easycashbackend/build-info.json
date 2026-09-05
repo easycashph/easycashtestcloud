@@ -1,6 +1,1 @@
-﻿{
-    "commitDate":  "2026-09-05T14:19:00+08:00",
-    "commitMessage":  "Update session log: §101 AI Extraction extension (gender/nationality/DOB + camera)",
-    "commit":  "3dacedd8",
-    "builtAt":  "2026-09-05T06:42:42.5890297Z"
-}
+{"commit":"3e8b9b2","commitDate":"2026-09-05T17:00:34+08:00","commitMessage":"Fix host.docker.internal DNS resolution broken by the SMS-gateway DNS override","builtAt":"2026-09-05T09:08:17.000Z"}

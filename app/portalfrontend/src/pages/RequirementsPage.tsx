@@ -36,7 +36,7 @@ const PRODUCT_TAGS = ['Business', 'Everyday', 'Overseas'];
  * own doc comment).
  */
 export function RequirementsPage() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   usePageMeta(t.requirements.title, t.requirements.intro);
 
   return (
@@ -56,7 +56,15 @@ export function RequirementsPage() {
           <div style={{ padding: '40px 0 20px', textAlign: 'center' }}>
             <span className="eyebrow">Application checklist</span>
             <h1 className="display" style={{ margin: '20px auto 14px', maxWidth: '20ch', fontSize: 'clamp(2rem, 3.6vw, 2.9rem)' }}>
-              {t.requirements.title}
+              {locale === 'fil' ? (
+                <>
+                  Alamin nang eksakto <em>kung ano ang ihahanda.</em>
+                </>
+              ) : (
+                <>
+                  Know exactly <em>what to prepare.</em>
+                </>
+              )}
             </h1>
             <p className="lede" style={{ margin: '0 auto' }}>
               {t.requirements.intro}
