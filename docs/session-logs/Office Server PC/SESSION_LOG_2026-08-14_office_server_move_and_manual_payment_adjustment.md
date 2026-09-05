@@ -4953,3 +4953,62 @@ re-enable). Confirmed: free RAM recovered to ~3GB, LMS containers (`easycashback
 - Office Server PC's real total RAM is 7.87GB - confirmed too tight to run Docker (postgres + 3
   web containers) and a resident vision-LLM comfortably at the same time. A RAM upgrade is the
   actual fix, not further tuning.
+
+## §103 — 2026-09-05: Set up Ollama on Macbook Nomer instead - 16GB RAM made the keep-alive
+tradeoff safe here
+
+Continuing directly from §102: since Office Server PC's 7.87GB RAM made a permanently-resident
+vision model too risky, the user asked to set up Ollama on Macbook Nomer (16GB RAM) instead, so
+AI Extraction (ID scan auto-fill, including today's Gender/Nationality/DOB fields and the camera
+capture + review-step work from §101) has somewhere it actually works.
+
+**Installation hit the same macOS-version wall as `poppler` earlier in the day**: this Mac runs
+macOS 12.7.6 (Monterey). `brew install ollama` started compiling `libssh2` from source (no bottle
+for this OS) - killed quickly once the pattern was recognized. The official Ollama `.app`/cask
+also gates on macOS >= 14. Worked around both by downloading the standalone CLI binary tarball
+(`ollama-darwin.tgz`, v0.33.3) directly from the GitHub releases page - no OS-version check, runs
+fine on Monterey. Installed to `/usr/local/lib/ollama` with a symlink at `/usr/local/bin/ollama`.
+
+**Run as a service via a launchd LaunchAgent** (`~/Library/LaunchAgents/com.ollama.serve.plist`)
+instead of `brew services`, since it wasn't installed via brew - `RunAtLoad`/`KeepAlive` both true,
+with `OLLAMA_HOST=0.0.0.0` and `OLLAMA_KEEP_ALIVE=-1` baked in via the plist's own
+`EnvironmentVariables` block (equivalent to the User env vars used on Office Server PC in §102).
+Unlike Office Server PC, keeping ~2GB permanently resident is a safe tradeoff on this 16GB machine
+- no RAM-pressure concern here.
+
+Pulled `moondream:latest` (1.7GB).
+
+**Verified end-to-end after restarting the service and rebuilding the backend container** (ran
+`write-build-info.sh` first, then `docker compose up -d --build easycashbackend` from `app/docker`
+to pick up the `extra_hosts` DNS fix from commit `3e8b9b2`, already present on this machine via an
+earlier `git pull` this session):
+- `lsof -i :11434` → `*:11434 (LISTEN)`, and the running process's env confirms
+  `OLLAMA_HOST=0.0.0.0` (not just `127.0.0.1`) - reachable from Docker.
+- `docker exec easycash-easycashbackend-1 cat /etc/hosts` → `host.docker.internal` present,
+  confirming the DNS fix is live in the rebuilt container.
+- `docker exec ... wget -qO- http://host.docker.internal:11434/api/tags` → `moondream:latest`
+  visible from inside the container (the container's minimal image has `wget` but not `curl`, so
+  all in-container tests used `wget --post-file` instead).
+- Real vision-inference call from inside the container, using an actual JPEG (not hand-typed fake
+  base64): a plain solid-color test image was correctly described ("a blue square... encased
+  within a gray border"); a synthetic ID-mockup image with small PIL-rendered text produced a
+  garbled OCR result - a legibility limitation of that specific low-quality synthetic image on
+  moondream (a small 1B-parameter vision model), not a pipeline problem, since the first test
+  proved the model does correctly interpret real image content end-to-end through the container.
+- Did not test the actual Create Application Profile UI (upload/camera-capture flow) - no LMS
+  login credentials were available in this session (the seed script deliberately creates no
+  default admin), so this was left for the user or a future session with real credentials.
+
+No code changes were needed this session - everything was infra-only (Ollama install/config,
+plist, container rebuild to pick up the already-committed DNS fix).
+
+### Current state after §103
+
+- **AI Extraction now has one working Ollama instance: Macbook Nomer.** Office Server PC's Ollama
+  stays deliberately stopped (see §102) until its RAM is upgraded. Laptop Nomer has not been set
+  up and wasn't touched this session.
+- Recommended real-world validation still open: exercising the actual "Take a photo"/"Upload a
+  file" flow on the Create Application Profile page with a genuine ID photo, to confirm extraction
+  accuracy (not just pipeline connectivity) - the garbled OCR result above came from a
+  low-fidelity synthetic test image, not a real ID scan, so it isn't a signal on real-world
+  accuracy either way.

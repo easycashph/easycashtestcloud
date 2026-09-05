@@ -1,1 +1,1 @@
-{"commit":"3e8b9b2","commitDate":"2026-09-05T17:00:34+08:00","commitMessage":"Fix host.docker.internal DNS resolution broken by the SMS-gateway DNS override","builtAt":"2026-09-05T09:08:17.000Z"}
+{"commit":"fb32018","commitDate":"2026-09-05T17:45:46+08:00","commitMessage":"docs: update §2026-09-05 session log with post-clone fixes, Requirements page redesign","builtAt":"2026-09-05T13:14:22.000Z"}
