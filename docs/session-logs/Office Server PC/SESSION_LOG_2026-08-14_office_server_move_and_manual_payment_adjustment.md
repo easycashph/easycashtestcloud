@@ -5083,3 +5083,55 @@ temperature) - worth revisiting if 1-2 minute waits prove too slow in real use.
   been a chance to see `minicpm-v`'s real-world speed/accuracy tradeoff play out further.
 - Extraction latency (30s-2min per scan) has not been evaluated against real usage patterns or
   user tolerance yet - flagged above as an open question, not a decided acceptable cost.
+
+## §105 — 2026-09-05: Real ID uploads ran 4:30+; added image downscaling to cut CPU-bound latency
+
+§104's "not yet tested via the real UI" gap closed immediately after: the user uploaded an actual
+ID photo through the Create Application Profile form. It worked (populated fields, not blank like
+moondream's failure in §104) but took **269.9s (4:30)** end to end (`responseTime` in the backend's
+own request log), confirmed genuine via Ollama's own per-request timing breakdown: 233.8s prompt
+eval / 850 tokens (~275ms/token) + 35.6s generation / 105 tokens, `truncated = 0` (completed
+cleanly this time, unlike §104's cut-off run).
+
+**Root cause of the slowness**: this Mac's CPU is an Intel i7-4980HQ (2014, 4 physical/8 logical
+cores, no usable GPU acceleration for Ollama) - confirmed via `sysctl`. Per-token cost is
+essentially fixed at ~200-275ms regardless of what's being processed, so total latency is roughly
+linear in token count - and the dominant cost is the image itself: a phone-camera-resolution photo
+produces far more vision-encoder tokens than a small test image (my earlier synthetic 400x250 test
+was only 258-745 tokens; this real photo was 850+).
+
+**Fix, with the user's explicit approval before touching code** (CLAUDE.md workflow: analyze,
+explain, wait for approval): added `sharp` as a new backend dependency and resize the uploaded
+image to a max 1024px edge (`fit: 'inside', withoutEnlargement`, re-encoded as JPEG q85, EXIF
+`.rotate()` applied first so a sideways phone photo doesn't stay sideways) inside
+`OllamaVisionModelClient.describeImage()` - the one place images reach Ollama, so
+`ExtractLoanApplicationFieldsUseCase.ts` and the multer upload/validation code needed no changes.
+1024px keeps ID/payslip text legible while meaningfully cutting image-token count.
+
+Verified in three steps:
+1. `npx tsc --noEmit` clean, then rebuilt (`write-build-info.sh` + `docker compose up -d --build
+   easycashbackend`) - a request that was in-flight against the *old* container at the moment of
+   the rebuild got a `500` from Ollama (connection killed mid-response by the recreate) - a
+   one-off artifact of testing during a live rebuild, not a bug in the fix itself.
+2. Sanity-checked `sharp` actually runs inside the alpine/musl container (`docker exec ... node -e
+   "require('sharp')..."`) - resized the test JPEG without crashing, confirming the native binary
+   resolved correctly for this platform.
+3. **Real second ID upload through the actual UI, post-fix**: `responseTime` dropped to **199.6s
+   (3:20)** - about 26% faster - with a similarly-sized populated result (417 bytes vs 376 bytes
+   pre-fix, i.e. still a real, non-blank extraction). Smaller improvement than hoped for, most
+   likely because the source photo wasn't dramatically larger than 1024px to begin with, so there
+   wasn't as much slack to cut as a full 3000px+ phone photo would have had.
+
+### Current state after §105
+
+- AI Extraction on Macbook Nomer now: works correctly (`minicpm-v`), and image downscaling is live
+  to reduce (not eliminate) the CPU-bound latency. Real-world extraction still takes **roughly
+  3-4.5 minutes per scan** on this hardware - a real UX cost users will notice, not fully solved by
+  this fix alone.
+- Not yet tried: capping `num_predict`/generation length (generation was already a small fraction
+  of total time here, so low expected payoff), tuning Ollama's thread count explicitly, or a
+  smaller-than-minicpm-v but more-accurate-than-moondream middle-ground model. Worth revisiting if
+  3-4 minute waits prove unacceptable in daily use.
+- `sharp` is a new backend dependency (`app/easycashbackend/package.json` /
+  `package-lock.json`) - committed and pushed like any other code change, unlike the machine-local
+  `.env`/Ollama config from §103-§104.
