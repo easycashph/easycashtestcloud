@@ -4692,3 +4692,63 @@ after upload. Data-only - no code touched, no rebuild needed.
   least once each this session before being explicitly allowed - consistent with §88's
   observation that this machine's classifier requires fresh "Allow it"-style confirmation per
   action rather than a standing grant for a whole task.
+
+## §99 — 2026-09-05: Synced 57 commits from Laptop Nomer/Macbook Nomer; ran the PSGC numbered-barangay backfill here too
+
+`git pull` brought in a full day+ of parallel work from the other two machines while this session
+was focused on the loan-release/attachment tasks above:
+- **Laptop Nomer** (`311c1b7c`): fixed a real centering bug in §96's feature cards (left-aligned,
+  should be centered) and the badge-offset bug already covered in §97's own commit message -
+  framer-motion's `variants` silently drops the Tailwind `-translate-x-1/2` class once it owns the
+  transform; fixed with `x: '-50%'` in both keyframes. Also added hover micro-interactions. This
+  session had already independently deployed the same badgePop fix's *cause* diagnosis in §97's
+  commit message but Laptop Nomer's fix is what actually landed and is now live.
+- **Macbook Nomer**: two new backfill scripts (`backfill-psgc-code-addresses-to-names.ts`,
+  `backfill-numbered-barangay-addresses.ts`) for the same CIC-report address bug family as this
+  session's earlier `fix-coded-addresses.ts` run; a full DB restore onto that Mac from an Office
+  Server PC dump; and (`bbf25691`, `765734d0`) a complete rewrite of the Portal landing page into a
+  navy/lime glassmorphism design with a real NPC (National Privacy Commission) DPO/DPS
+  registration seal - a different visual direction from this session's emerald/Plus-Jakarta-Sans
+  work in §94/§96/§97, now superseding it on `main`.
+
+Rebuilt all three containers after the pull (`docker compose up -d --build`, no args - hit the
+recurring "frontend grpc server closed unexpectedly" buildkit glitch twice, succeeded on retry
+both times without needing a full PC restart this time) - confirmed all four containers
+(postgres/backend/lmsfrontend/portalfrontend) healthy.
+
+**Checked whether the two new PSGC backfill scripts still had work to do on THIS machine's live
+DB** - the Macbook Nomer log claimed re-running them post-restore found 0 remaining, implying
+Office Server PC's own DB already had them applied. That was stale: this DB actually had **122**
+address rows with a numeric `barangay` (new records added since whatever moment that Mac's dump
+was taken). Showed the user 5 examples first (all short-number "Barangay {N}" pattern, city name
+already correct) before running anything, per this session's established investigate-before-write
+discipline.
+
+Ran both scripts as designed: `backfill-psgc-code-addresses-to-names.ts` (dry run) correctly found
+0 fixable of the 122 - none were full PSGC codes, all were the short-number convention the *other*
+script handles. `backfill-numbered-barangay-addresses.ts` dry run found 99 of 122 cleanly
+resolvable (exact-match city name -> that city's "Barangay {N}" PSGC entry) and 23 unresolved
+(mostly a city-name-suffix mismatch - e.g. "Caloocan City, NCR" or "Tondo I / Ii, City Of Manila"
+not exactly matching the PSGC table's plain "Caloocan City"/"Tondo I / Ii" - plus a few genuine old
+Manila district names with no modern PSGC equivalent, same category Macbook Nomer's session
+already found unresolvable). User confirmed applying the 99 clean matches; ran with `--apply`,
+verified directly against the DB: 122 -> 23 remaining, exactly the 99 expected. Both script runs
+needed an explicit "Allow it"-equivalent confirmation from the user before the auto-mode classifier
+let them execute - the pattern from §88/§98 recurring again for read-only dry-run scripts too, not
+just writes.
+
+### Current state / follow-ups
+
+- **23 addresses still have a numeric barangay value** - the city-name-suffix mismatches (e.g.
+  "Caloocan City, NCR") could likely be fixed with a fuzzier city-name match (contains/startsWith
+  instead of exact) rather than manual review; the true old-Manila-district ones (Santa Ana,
+  Malate, Binondo, Intramuros, Tondo Manila) don't map to a modern PSGC entry and were correctly
+  left alone by both sessions that have now looked at them. Not fixed this pass - flagged only.
+- **The Portal landing page is now the Macbook Nomer navy/lime glassmorphism redesign**, not this
+  session's emerald/Plus-Jakarta-Sans work from §94/§96/§97 - both directions are functional and
+  now merged in sequence (glassmorphism is what's actually live), so no conflict, but worth noting
+  for anyone reading §94-§97 above expecting that visual direction to still be current on `main`.
+- Docker's "frontend grpc server closed unexpectedly" buildkit glitch recurred twice this session
+  (§ - once during this pull's rebuild) - a plain retry resolved it both times without needing the
+  full Windows restart §-level intervention required once earlier this session. Worth trying a
+  retry or two before escalating to a restart next time.
