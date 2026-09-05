@@ -4800,3 +4800,7 @@ intended number is still out of range even once the name is corrected) - Malate 
   `backfill-numbered-barangay-addresses-ncr-fallback.ts`) are idempotent and safe to re-run on any
   machine (Laptop Nomer, Macbook Nomer) - each only touches rows still matching its own numeric-
   value filter, so a row already fixed by an earlier script or a prior run is silently skipped.
+- User reviewed the 7 remaining rows with borrower name + `legacyId` shown (Ma Dalusong, Jenny
+  Santiago, Dennis Abal, Peter Soriano, Alyssa Cruzat, Gilbert Magat, Angelita Soriano) and decided
+  to leave them as a manual-review item for now rather than chase the legacy SDevTech/Mambu source
+  data for the correct barangay number - no further action taken.
