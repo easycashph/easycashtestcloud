@@ -926,7 +926,7 @@
   text-align: center;
   position: relative;
   overflow: hidden;
-  background: linear-gradient(155deg, var(--brand-navy-deep), #060a1c 60%);
+  background: linear-gradient(155deg, #2f4290, #0e1730 65%);
   border: 1px solid var(--glass-line);
 }
 .landing-mockup .footer-card::after {
@@ -934,7 +934,7 @@
   position: absolute;
   inset: -40% -10% auto;
   height: 340px;
-  background: radial-gradient(420px 260px at 70% 0%, color-mix(in srgb, var(--brand-green) 30%, transparent), transparent 70%);
+  background: radial-gradient(420px 260px at 70% 0%, rgba(90, 140, 255, 0.28), transparent 70%);
 }
 .landing-mockup .footer-card h3 {
   position: relative;

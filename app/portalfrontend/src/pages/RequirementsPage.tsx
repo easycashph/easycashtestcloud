@@ -4,7 +4,7 @@ import { PublicPageLayout } from '@/components/PublicPageLayout';
 import { Button } from '@/components/ui/Button';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
-import { ELIGIBILITY_CRITERIA, getDocumentsForProduct } from '@/lib/loanRequirements';
+import { ADDITIONAL_REQUIREMENTS_NOTES, ELIGIBILITY_CRITERIA, getDocumentsForProduct } from '@/lib/loanRequirements';
 
 /**
  * Public requirements page.
@@ -49,6 +49,7 @@ export function RequirementsPage() {
           <div className="mt-4 space-y-4">
             {LOAN_PRODUCTS.map((product) => {
               const { always, productSpecific } = getDocumentsForProduct(product.category);
+              const additionalNotes = ADDITIONAL_REQUIREMENTS_NOTES[product.category] ?? [];
               return (
                 <div key={product.category} className="rounded-2xl border border-border bg-card p-5">
                   <div className="flex items-center gap-3">
@@ -63,7 +64,7 @@ export function RequirementsPage() {
                     {product.details.en}
                   </p>
                   <ul className="mt-4 space-y-2">
-                    {[...always, ...productSpecific].map((document) => (
+                    {[...always, ...productSpecific, ...additionalNotes].map((document) => (
                       <li key={document} className="flex items-start gap-3">
                         <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                         <span className="text-sm text-muted-foreground">{document}</span>
