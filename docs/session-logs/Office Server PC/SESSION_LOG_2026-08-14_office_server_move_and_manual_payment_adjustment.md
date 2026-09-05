@@ -4804,3 +4804,62 @@ intended number is still out of range even once the name is corrected) - Malate 
   Santiago, Dennis Abal, Peter Soriano, Alyssa Cruzat, Gilbert Magat, Angelita Soriano) and decided
   to leave them as a manual-review item for now rather than chase the legacy SDevTech/Mambu source
   data for the correct barangay number - no further action taken.
+
+## §101 — 2026-09-05: Extended AI Extraction (ID scan auto-fill) - Gender/Nationality/DOB + camera capture
+
+User asked for ways to cut down manual encoding on the LMS's Create Application Profile form,
+specifically for applicants who struggle to type and for staff throughput. Landed on ID scan/OCR
+first; asked to see a mockup before any implementation - built and published one (3-stage
+capture -> scanning -> review flow with per-field confidence-style badges,
+`https://claude.ai/code/artifact/39f2aa4f-63f2-436a-8bee-8882f15a5ee7`). User approved and asked to
+proceed, picking Tesseract.js as the OCR engine when offered a choice between that and a paid cloud
+OCR service.
+
+**Caught before writing any component code**: reading `LoanApplicationCreatePage.tsx`'s imports to
+plan the Tesseract integration surfaced an existing, more capable feature already in the codebase -
+"AI Extraction" / "Upload & auto-fill", backed by a local Ollama vision-language model (moondream),
+already extracting Name/Age/Address/Employer/Monthly Income from an uploaded ID/payslip/document.
+Building a parallel Tesseract-based OCR path would have been redundant work solving an
+already-solved problem with a strictly weaker (text-only, no document-type awareness) engine.
+Uninstalled the already-added `tesseract.js` package, reported the finding to the user instead of
+proceeding. User confirmed: extend the existing feature, and still apply the mockup's visual
+concept on top of it ("Oo, i-extend mo na. gawin mo rin yung konsepto na pinakita mo sa mockup").
+
+**Backend** (`ExtractLoanApplicationFieldsUseCase.ts`): added `gender`, `nationality`, `dateOfBirth`
+to `ExtractedLoanApplicationFields` and three new lines to `EXTRACTION_PROMPT`. Same "NONE = never
+guess" discipline as the existing fields, with one addition to handle two fields that have strict
+format requirements on the frontend (`GENDER_OPTIONS = ['FEMALE','MALE']`; `<input type="date">`
+needs exact `YYYY-MM-DD`): rather than parsing an ambiguous slash-date string after the fact
+(`MM/DD/YYYY` vs `DD/MM/YYYY` is genuinely unresolvable from the string alone), the model is
+instructed to read the date off the document and reformat it as ISO directly, and to output GENDER
+as exactly `MALE`/`FEMALE`/`NONE` - both validated against a strict regex/enum on receipt, and
+dropped with a warning (never passed through malformed) if the model's response doesn't match.
+Confirmed `AiDocumentReviewResult`/`GenerateAiDocumentReviewUseCase` (found via the same
+Ollama/moondream grep) is a distinct, still-mocked feature (post-submission credit-review
+placeholder) - unaffected by this change.
+
+**Frontend** (`LoanApplicationCreatePage.tsx`): wired the three new fields into the existing
+`onSuccess` handler using the same "only fill if currently empty" convention as name/employer.
+Added a live camera-capture option (`getUserMedia`, rear camera preference, capture-to-canvas ->
+JPEG `File` -> same `extractMutation.mutate()` path as file upload - one extraction code path, not
+two) via a small Dialog with a viewfinder overlay, alongside the existing upload button. Restyled
+the results panel per the approved mockup's concept: a "scanning" state while the mutation is
+pending, and per-field auto-fill badges (green pill + check icon) instead of a plain comma-joined
+sentence. Address is still surfaced only as a manual suggestion, never force-written into the
+PSGC-constrained picker - unchanged from the existing design.
+
+Type-checked both packages clean. Rebuilt `easycashbackend` + `lmsfrontend`, verified healthy
+(`/health` 200, container logs clean). `git pull` brought in unrelated Portal landing-page/
+requirements-page work from another machine (auto-merged, only `build-info.json` conflicted -
+resolved by regenerating); rebuilt `portalfrontend` too before pushing. Committed
+(`37a7e0cb`) and merge-pushed (`c1041b2e`).
+
+### Current state / follow-ups
+
+- Camera capture requires the browser to grant camera permission over the page's own origin (HTTP
+  on LAN, or the Tailscale HTTPS the LMS is otherwise reachable on) - not yet tested against a
+  real phone/tablet camera in the field, only verified the code path builds and type-checks.
+  Worth a live test with an actual applicant-facing device before relying on it operationally.
+- ID-type chips (UMID/Driver's License/PhilID/etc.) from the mockup were deliberately not carried
+  into the real implementation - they had no effect on extraction in the mockup either, and adding
+  them for decoration only would be scope the user didn't ask for.
