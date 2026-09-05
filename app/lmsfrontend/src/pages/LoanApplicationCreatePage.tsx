@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, FilePlus2, Lock, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Camera, CheckCircle2, FilePlus2, Lock, Plus, RotateCcw, Sparkles, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -535,6 +535,18 @@ export function LoanApplicationForm({
         setEmployer(result.employer);
         filled.push('Employer');
       }
+      if (result.dateOfBirth && !dateOfBirth) {
+        setDateOfBirth(result.dateOfBirth);
+        filled.push('Date of birth');
+      }
+      if (result.gender && GENDER_OPTIONS.includes(result.gender) && !gender) {
+        setGender(result.gender);
+        filled.push('Gender');
+      }
+      if (result.nationality && !nationality.trim()) {
+        setNationality(result.nationality);
+        filled.push('Nationality');
+      }
       setAiFilledFieldLabels(filled);
       setAiError(null);
     },
@@ -557,6 +569,55 @@ export function LoanApplicationForm({
     }
     extractMutation.mutate(file);
   };
+
+  // Live camera capture - an alternative to picking a file, for applicants/staff who have the ID
+  // in hand but no scanned copy. Captures one still frame and feeds it into the same
+  // extractMutation used by file upload, so there is exactly one extraction code path.
+  const [cameraOpen, setCameraOpen] = React.useState(false);
+  const [cameraError, setCameraError] = React.useState<string | null>(null);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const cameraStreamRef = React.useRef<MediaStream | null>(null);
+
+  const stopCameraStream = () => {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current = null;
+  };
+
+  const openCamera = async () => {
+    setAiError(null);
+    setCameraError(null);
+    setCameraOpen(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      cameraStreamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+    } catch {
+      setCameraError('Could not access the camera. Check your browser/device camera permission, or upload a file instead.');
+    }
+  };
+
+  const closeCamera = () => {
+    stopCameraStream();
+    setCameraOpen(false);
+  };
+
+  const capturePhoto = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d')?.drawImage(video, 0, 0);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], `id-capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      closeCamera();
+      setAiExtractedFile(null);
+      extractMutation.mutate(file);
+    }, 'image/jpeg', 0.92);
+  };
+
+  React.useEffect(() => stopCameraStream, []);
 
   const handleDocumentFileSelected = (category: AttachmentDocumentCategory, file: File) => {
     if (!ATTACHMENT_ACCEPTED_MIME.has(file.type)) {
@@ -832,19 +893,39 @@ export function LoanApplicationForm({
               <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {aiError}
             </div>
           )}
+          {extractMutation.isPending && (
+            <div className="flex items-center gap-2.5 rounded-md border border-primary/30 bg-background p-3 text-xs">
+              <Sparkles className="h-4 w-4 shrink-0 animate-pulse text-primary" />
+              <span className="text-muted-foreground">Reading the document and matching fields…</span>
+            </div>
+          )}
           {extractMutation.isSuccess && !aiError && (
-            <div className="space-y-1.5 rounded-md border border-primary/30 bg-background p-3 text-xs">
+            <div className="space-y-2 rounded-md border border-primary/30 bg-background p-3 text-xs">
               <p className="text-muted-foreground">{extractMutation.data.summary}</p>
-              {extractMutation.data.age !== undefined && (
+              {extractMutation.data.age !== undefined && !extractMutation.data.dateOfBirth && (
                 <p className="text-muted-foreground">Extracted age: {extractMutation.data.age} (set the exact Date of Birth below manually).</p>
               )}
               {aiFilledFieldLabels.length > 0 ? (
-                <p className="font-medium text-primary">AI-suggested - please verify: {aiFilledFieldLabels.join(', ')}.</p>
+                <div className="space-y-1">
+                  <p className="font-medium text-primary">AI-suggested - please verify:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {aiFilledFieldLabels.map((label) => (
+                      <span
+                        key={label}
+                        className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
+                      >
+                        <CheckCircle2 className="h-3 w-3" /> {label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               ) : (
                 <p className="text-muted-foreground">No empty fields were filled (either nothing was confidently readable, or the fields were already filled in).</p>
               )}
               {extractMutation.data.warnings.map((w) => (
-                <p key={w} className="text-warning">{w}</p>
+                <div key={w} className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
+                  <AlertCircle className="h-3 w-3" /> {w}
+                </div>
               ))}
               {aiExtractedFile && (
                 <div className="flex items-center justify-between gap-2 pt-1">
@@ -856,6 +937,15 @@ export function LoanApplicationForm({
                   </Button>
                 </div>
               )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs text-muted-foreground"
+                onClick={() => aiFileInputRef.current?.click()}
+              >
+                <RotateCcw className="mr-1.5 h-3 w-3" /> Scan again
+              </Button>
             </div>
           )}
           <input
@@ -866,18 +956,52 @@ export function LoanApplicationForm({
             onChange={handleAiFileSelected}
             disabled={extractMutation.isPending}
           />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={extractMutation.isPending}
-            onClick={() => aiFileInputRef.current?.click()}
-          >
-            {extractMutation.isPending ? <Sparkles className="mr-2 h-3.5 w-3.5 animate-pulse" /> : <Upload className="mr-2 h-3.5 w-3.5" />}
-            {extractMutation.isPending ? 'Reading document…' : 'Upload & auto-fill'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={extractMutation.isPending} onClick={openCamera}>
+              <Camera className="mr-2 h-3.5 w-3.5" /> Take a photo
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={extractMutation.isPending}
+              onClick={() => aiFileInputRef.current?.click()}
+            >
+              <Upload className="mr-2 h-3.5 w-3.5" /> Upload a file
+            </Button>
+          </div>
         </CardContent>
       </Card>
+
+      <Dialog open={cameraOpen} onOpenChange={(open) => (open ? setCameraOpen(true) : closeCamera())}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="h-4 w-4 text-primary" /> Take a photo of the document
+            </DialogTitle>
+            <DialogDescription>Center the ID or document in the frame, then capture.</DialogDescription>
+          </DialogHeader>
+          {cameraError ? (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {cameraError}
+            </div>
+          ) : (
+            <div className="relative overflow-hidden rounded-md bg-black">
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <video ref={videoRef} autoPlay playsInline muted className="aspect-[4/3] w-full object-cover" />
+              <div className="pointer-events-none absolute inset-4 rounded-md border-2 border-dashed border-white/70" />
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeCamera}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={capturePhoto} disabled={!!cameraError}>
+              <Camera className="mr-2 h-4 w-4" /> Capture
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <SectionCard number="1" title="How did you find out about Easycash?">
         <div className="grid gap-3 sm:grid-cols-2">

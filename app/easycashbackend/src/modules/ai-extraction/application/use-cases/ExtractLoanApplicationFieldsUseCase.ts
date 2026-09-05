@@ -13,6 +13,18 @@ const SUPPORTED_MIME_TYPES = new Set([
 export interface ExtractedLoanApplicationFields {
   applicantName?: string;
   age?: number;
+  /** 2026-09-05 (user request, "Create Application Profile" auto-fill extension): the model is
+   * asked to read this off the ID itself and reformat it as ISO (YYYY-MM-DD) directly, rather than
+   * this use case guessing at a slash-separated string's field order (MM/DD/YYYY vs DD/MM/YYYY is
+   * genuinely ambiguous from the string alone - the model, looking at the actual source, isn't
+   * guessing). Validated against `^\d{4}-\d{2}-\d{2}$` before being trusted; anything else is
+   * dropped with a warning rather than passed through malformed. */
+  dateOfBirth?: string;
+  /** Normalized to exactly `MALE`/`FEMALE` (matching `GENDER_OPTIONS` in
+   * LoanApplicationCreatePage.tsx) or omitted - same "the model outputs the exact enum value,
+   * validated on receipt" approach as `dateOfBirth` above. */
+  gender?: string;
+  nationality?: string;
   address?: string;
   employer?: string;
   monthlyIncome?: number;
@@ -34,10 +46,16 @@ const EXTRACTION_PROMPT = `You are reading a document submitted by a loan applic
 Respond in exactly this format, one line per field:
 NAME: <full name, or NONE>
 AGE: <age in years as a number, or NONE>
+DATE_OF_BIRTH: <exact birth date in YYYY-MM-DD format, or NONE>
+GENDER: <MALE, FEMALE, or NONE>
+NATIONALITY: <nationality, or NONE>
 ADDRESS: <address, or NONE>
 EMPLOYER: <employer name, or NONE>
 MONTHLY_INCOME: <number only, no currency symbol or commas, or NONE>
 SUMMARY: <one sentence describing what kind of document this is and its key visible content>`;
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const GENDER_VALUES = new Set(['MALE', 'FEMALE']);
 
 function parseField(response: string, label: string): string | undefined {
   const match = new RegExp(`^${label}:\\s*(.+)$`, 'im').exec(response);
@@ -57,9 +75,23 @@ function parseExtractionResponse(response: string): ExtractedLoanApplicationFiel
     warnings.push(`Could not parse MONTHLY_INCOME value "${incomeRaw}" - left blank.`);
   }
 
+  // The model is asked to output ISO format directly (see prompt comment on `dateOfBirth` above) -
+  // anything that doesn't match is a malformed response, not a value worth guessing at further.
+  const dateOfBirthRaw = parseField(response, 'DATE_OF_BIRTH');
+  const dateOfBirth = dateOfBirthRaw && ISO_DATE_RE.test(dateOfBirthRaw) ? dateOfBirthRaw : undefined;
+  if (dateOfBirthRaw && !dateOfBirth) warnings.push(`Could not parse DATE_OF_BIRTH value "${dateOfBirthRaw}" - left blank.`);
+
+  const genderRaw = parseField(response, 'GENDER');
+  const genderNormalized = genderRaw?.toUpperCase();
+  const gender = genderNormalized && GENDER_VALUES.has(genderNormalized) ? genderNormalized : undefined;
+  if (genderRaw && !gender) warnings.push(`Could not parse GENDER value "${genderRaw}" - left blank.`);
+
   return {
     applicantName: parseField(response, 'NAME'),
     age: age !== undefined && !Number.isNaN(age) ? age : undefined,
+    dateOfBirth,
+    gender,
+    nationality: parseField(response, 'NATIONALITY'),
     address: parseField(response, 'ADDRESS'),
     employer: parseField(response, 'EMPLOYER'),
     monthlyIncome: monthlyIncome !== undefined && !Number.isNaN(monthlyIncome) ? monthlyIncome : undefined,
