@@ -5012,3 +5012,74 @@ plist, container rebuild to pick up the already-committed DNS fix).
   accuracy (not just pipeline connectivity) - the garbled OCR result above came from a
   low-fidelity synthetic test image, not a real ID scan, so it isn't a signal on real-world
   accuracy either way.
+
+## §104 — 2026-09-05: Real-world test on Macbook Nomer exposed moondream as too weak for
+extraction - swapped to minicpm-v
+
+The open item from §103 got resolved almost immediately: the user tried the real Create
+Application Profile UI (their own login, own browser) and uploaded an actual ID photo. Result:
+**every field came back blank.**
+
+Diagnosed from the backend and Ollama logs, not guessed at:
+- `POST /api/v1/ai-extraction/loan-application-fields` returned `200 OK` after **183.9s** (3
+  minutes) with an 81-byte response body - essentially an empty result.
+- Ollama's own log for that request showed `stop processing: n_tokens = 2047, truncated = 1` -
+  moondream generated 1075 tokens without ever emitting a stop token, and got forcibly cut off at
+  its 2048-token context limit.
+- `ExtractLoanApplicationFieldsUseCase.ts`'s parser (`parseExtractionResponse`) looks for exact
+  `NAME:`/`GENDER:`/etc. lines via regex - moondream's rambling, un-truncated-in-time output never
+  produced them, so every field parsed as absent. Not a parser bug: by design (CLAUDE.md "never
+  fabricate"), an unparseable response means "leave blank," not "guess."
+- This matches the synthetic-ID-image test from §103 (`ids/ids/1234656880/...` gibberish) - not a
+  fluke. **moondream (1B params) is too weak to reliably follow a structured-field-extraction
+  prompt on a real document image**, regardless of image quality. It's a strong image *captioner*
+  (correctly described a plain color-block test image both times), but not an instruction-following
+  OCR/extraction model.
+
+**Fix: swapped the vision model to `minicpm-v` (~5.5GB)** - much stronger at OCR + structured
+instruction-following, and Macbook Nomer's 16GB RAM (vs Office Server PC's 7.87GB) can afford
+keeping a model this size resident (`OLLAMA_KEEP_ALIVE=-1`).
+
+- Added `OLLAMA_VISION_MODEL=minicpm-v` to `app/easycashbackend/.env` (machine-local, not
+  committed - the code's own default in `env.ts` stays `moondream` for machines that haven't
+  opted in). Documented the reasoning inline in the `.env` comment.
+- `ollama pull minicpm-v` (4.4GB image layer) stalled twice mid-download to a crawl (18 KB/s, 57h
+  ETA at one point) - not a disk or general-network problem (827GB free, ping to the registry host
+  was 22-36ms with zero loss). Killing and re-running the same `ollama pull` resumed cleanly from
+  where it left off (content-addressed blobs) and completed at a normal rate - whatever caused the
+  stall was specific to that one connection, not the network path itself.
+- `docker compose up -d --force-recreate easycashbackend` to pick up the new `.env` var (confirmed
+  via `docker exec ... printenv OLLAMA_VISION_MODEL` → `minicpm-v`).
+- Re-ran the exact same real-JPEG extraction test from §103, both directly against Ollama and from
+  inside the container via `host.docker.internal` (same `wget --post-file` approach, since the
+  container has no `curl`): **`NAME: JUAN DELA CRUZ` and `GENDER: MALE` came back correctly** on
+  both paths - a real, populated result instead of blank fields. `DATE_OF_BIRTH` was also correct
+  in the direct-Ollama test. Two minor inaccuracies observed (an `AGE` value that didn't match the
+  stated birth year's arithmetic, and `NATIONALITY` picking up the document's header text instead
+  of inferring "FILIPINO") - not investigated further this session, worth watching for on real ID
+  photos.
+- Once `minicpm-v` was confirmed working, removed `moondream` entirely (`ollama rm moondream`) per
+  the user's explicit request, rather than keeping it as a fallback - only `minicpm-v` remains
+  installed on this machine.
+
+**Tradeoff accepted, not yet questioned by the user**: `minicpm-v` is dramatically slower than
+moondream - roughly **30s to 2 minutes per extraction even warm** (CPU-only inference on this Mac,
+no GPU; moondream was ~2.6-11s warm per §102/§103). This is the direct cost of a model that
+actually reads the document instead of rambling. No attempt was made this session to find a
+faster-but-still-accurate middle ground (e.g. a mid-size model, `num_predict` capping, or a lower
+temperature) - worth revisiting if 1-2 minute waits prove too slow in real use.
+
+### Current state after §104
+
+- **Macbook Nomer's AI Extraction now returns real, mostly-accurate results** on an actual ID
+  photo test, not blank fields - confirmed via both a direct Ollama call and the full
+  container-to-Ollama path, but **not yet via the LMS UI's own upload/camera-capture flow with a
+  real ID** (still blocked on not having LMS login credentials in this session).
+- Only `minicpm-v` is installed on this machine now (`moondream` removed). `OLLAMA_VISION_MODEL`
+  in `app/easycashbackend/.env` explicitly selects it; other machines (a hypothetical Laptop Nomer
+  setup, or Office Server PC once its RAM is upgraded) will still default to `moondream` unless
+  they get the same `.env` override - **worth deciding deliberately, not by accident, whether
+  `moondream`'s default should change repo-wide** given how poorly it performed here, once there's
+  been a chance to see `minicpm-v`'s real-world speed/accuracy tradeoff play out further.
+- Extraction latency (30s-2min per scan) has not been evaluated against real usage patterns or
+  user tolerance yet - flagged above as an open question, not a decided acceptable cost.
