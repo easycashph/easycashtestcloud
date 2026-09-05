@@ -41,7 +41,8 @@ export function NewsFlashTicker() {
           href={item.sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="shrink-0 text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+          className="shrink-0 hover:underline"
+          style={{ fontSize: '0.76rem', fontWeight: 500, color: 'var(--ink-soft, #4a5468)' }}
         >
           {item.category === 'ADVISORY' ? '⚠️ ' : ''}
           {item.title}
@@ -50,10 +51,14 @@ export function NewsFlashTicker() {
     </div>
   );
 
+  // 2026-09-05: this component only renders on the landing page mockup clone, which is
+  // deliberately light-only (see landingMockupClone.css) - fixed light colors here instead of
+  // Tailwind's dark-mode-aware tokens, so a visitor's dark-mode preference elsewhere in the app
+  // (Dashboard, etc.) never leaks a dark ticker strip onto this otherwise fixed-light page.
   return (
-    <div className="border-b border-border bg-secondary/50">
-      <div className="container flex items-center gap-3 py-2">
-        <span className="flex shrink-0 items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-primary">
+    <div style={{ borderBottom: '1px solid var(--line, #e2e5f0)', background: 'rgba(34,49,106,0.04)' }}>
+      <div className="wrap" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 28px' }}>
+        <span style={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 6, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--brand-navy, #22316a)' }}>
           <Radio className="h-3.5 w-3.5" />
           News Flash
         </span>

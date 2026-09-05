@@ -3,13 +3,17 @@ import { motion, type Variants } from 'framer-motion';
 import {
   Banknote,
   CalendarClock,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ClipboardList,
   Lock,
+  Mail,
   Menu,
   Phone,
   Quote,
+  Clock,
   ShieldCheck,
   Smartphone,
   UserPlus,
@@ -18,20 +22,30 @@ import {
   X,
 } from 'lucide-react';
 import * as React from 'react';
-import { Button } from '@/components/ui/Button';
 import { EligibilityCheckWidget } from '@/components/EligibilityCheckWidget';
-import { LoanCalculatorWidget } from '@/components/LoanCalculatorWidget';
-import { ImageWithFallback } from '@/components/ImageWithFallback';
 import { MobileApplyBar } from '@/components/MobileApplyBar';
 import { NewsFlashTicker } from '@/components/NewsFlashTicker';
 import { LanguageToggle } from '@/components/LanguageToggle';
-import { SiteFooter } from '@/components/SiteFooter';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/lib/authContext';
-import { COMPANY, OFFICIAL_BANK_ACCOUNT, REGULATORY_DISCLOSURE } from '@/lib/companyInfo';
+import { COMPANY, FORMATTED_ADDRESS, REGULATORY_DISCLOSURE } from '@/lib/companyInfo';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { LOAN_PRODUCTS, localizedProductText } from '@/lib/loanProducts';
-import { getDocumentsForProduct } from '@/lib/loanRequirements';
+import { getLoanProductDisplayLabel, LOAN_PRODUCTS, localizedProductText } from '@/lib/loanProducts';
+import { estimateMonthlyPayment } from '@/lib/loanEstimator';
+import './landingMockupClone.css';
+
+function peso(value: number): string {
+  return `₱${Math.round(value).toLocaleString()}`;
+}
+
+/** Hero estimate card inputs (2026-09-05 redesign) - a representative example only, same posture
+ * as LoanCalculatorWidget's own default ₱50,000/12-month starting values. Not Easycash's minimum,
+ * maximum, or "typical" loan - see that widget's doc comment for why these bounds aren't published
+ * anywhere this codebase has verified. */
+const HERO_ESTIMATE_PRINCIPAL = 150_000;
+const HERO_ESTIMATE_TERM_MONTHS = 12;
+const HERO_AMOUNT_MIN = 10_000;
+const HERO_AMOUNT_MAX = 500_000;
+const HERO_AMOUNT_STEP = 10_000;
 
 const STEP_ICONS = [UserPlus, FileEdit, BadgeCheck];
 const FEATURE_ICONS = [Smartphone, CheckCircle2, ShieldCheck];
@@ -44,6 +58,11 @@ const WAYS_TO_PAY_ICONS = [Banknote, CalendarClock];
 /** Decorative micro-labels only (not a disclosure), paired by index with t.landing.waysToPay -
  * same non-translated, index-paired pattern already used for WAYS_TO_PAY_ICONS above. */
 const WAYS_TO_PAY_TAGS = ['Instant', 'Scheduled'];
+/** Decorative category labels for the product cards (mockup-approved) - paired by index with
+ * LOAN_PRODUCTS, same non-translated pattern as WAYS_TO_PAY_TAGS above. Generic marketing
+ * groupings, not a value from loanProducts.ts (which only has the real `category`/`displayLabel`
+ * fields used for actual application submission - see that file's own doc comment). */
+const PRODUCT_TAGS = ['Business', 'Everyday', 'Overseas'];
 
 /** Client stories inherited from the legacy Easycash website. The numeric star ratings that
  * previously accompanied these were removed on 2026-07-28: they implied a verified review system
@@ -79,15 +98,12 @@ const TESTIMONIALS = [
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <div className="rounded-2xl border border-border bg-card">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left text-sm font-semibold"
-      >
+    <div className={`faq-item ${open ? 'open' : ''}`}>
+      <button type="button" className="faq-summary" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         {question}
-        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="faq-plus" aria-hidden="true">+</span>
       </button>
-      {open && <p className="px-5 pb-4 text-sm leading-relaxed text-muted-foreground">{answer}</p>}
+      {open && <p>{answer}</p>}
     </div>
   );
 }
@@ -119,23 +135,37 @@ const railDraw: Variants = {
 const badgePop: Variants = {
   // x: '-50%' is repeated in both keyframes because framer-motion owns this element's `transform`
   // once `variants` is set - it only renders the motion values it's animating (here just `scale`),
-  // silently dropping the Tailwind `-translate-x-1/2` class that centers the badge. Without it, the
-  // badge's left edge (not center) lands at 50%, shifting it half its own width to the right.
+  // silently overriding the CSS `.step-badge { left:50%; transform: translateX(-50%); }` rule.
+  // Without it, the badge's left edge (not center) lands at 50%, shifting it right by half its
+  // own width.
   hidden: { scale: 0, x: '-50%' },
   show: { scale: 1, x: '-50%', transition: { type: 'spring', stiffness: 260, damping: 18, delay: 0.2 } },
 };
 
 function Reveal({ children, className }: { children: React.ReactNode; className?: string }) {
+  const [inView, setInView] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setInView(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.15, rootMargin: '0px 0px -60px 0px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   return (
-    <motion.div
-      className={className}
-      initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, margin: '-80px' }}
-      variants={fadeUp}
-    >
+    <div ref={ref} className={`reveal ${inView ? 'in' : ''} ${className ?? ''}`}>
       {children}
-    </motion.div>
+    </div>
   );
 }
 
@@ -146,33 +176,21 @@ function Navbar() {
   const [productMenuOpen, setProductMenuOpen] = React.useState(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
-      {/* 2026-08-20 (user request): logo enlarged from h-12 (48px) to h-[72px] - navbar height
-          grown to match (h-16/64px -> h-[88px]) so the bigger logo doesn't get clipped/cramped. */}
-      <div className="container flex h-[88px] items-center justify-between">
-        <Link to="/" className="flex items-center gap-2.5">
-          <img src="./logo-easycash.png" alt="Easycash" className="h-[72px] w-[72px] rounded-lg object-contain" />
+    <header style={{ position: 'sticky', top: 0, zIndex: 40, background: 'transparent' }}>
+      <nav className="top wrap">
+        <Link to="/" className="brand">
+          <img src="./logo-easycash.png" alt="Easycash" style={{ height: 48, width: 'auto', objectFit: 'contain' }} />
         </Link>
 
-        <div className="hidden items-center gap-4 md:flex">
-          {/* Contact number visible in the header, not just the footer - reputable PH lending
-              sites keep a call-us option one glance away for visitors hesitant to apply online.
-              lg: only, since md-width already gets tight with the nav links + Login/Apply. */}
-          <a
-            href={`tel:${COMPANY.contact.landline.replace(/[^\d+]/g, '')}`}
-            className="hidden items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground lg:flex"
-          >
-            <Phone className="h-3.5 w-3.5" />
-            {COMPANY.contact.landline}
-          </a>
+        <div className="navlinks" style={{ alignItems: 'center' }}>
           <div
-            className="relative"
+            style={{ position: 'relative' }}
             onMouseEnter={() => setProductMenuOpen(true)}
             onMouseLeave={() => setProductMenuOpen(false)}
           >
             <button
               type="button"
-              className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+              style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', font: 'inherit', color: 'inherit', cursor: 'pointer' }}
               onClick={() => setProductMenuOpen((o) => !o)}
               aria-expanded={productMenuOpen}
             >
@@ -180,21 +198,21 @@ function Navbar() {
               <ChevronDown className="h-3.5 w-3.5" />
             </button>
             {productMenuOpen && (
-              <div className="absolute left-1/2 top-full z-50 mt-2.5 w-[420px] -translate-x-1/2 rounded-xl border border-border bg-card p-2 shadow-xl">
-                <div className="grid grid-cols-2 gap-1">
+              <div className="widget-card" style={{ position: 'absolute', left: '50%', top: '100%', zIndex: 50, marginTop: 10, width: 420, transform: 'translateX(-50%)', padding: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                   {LOAN_PRODUCTS.map((product) => (
                     <Link
                       key={product.category}
                       to="/signup"
                       onClick={() => setProductMenuOpen(false)}
-                      className="flex items-start gap-3 rounded-lg p-3 hover:bg-secondary"
+                      style={{ display: 'flex', alignItems: 'flex-start', gap: 12, borderRadius: 10, padding: 12, textDecoration: 'none', color: 'inherit' }}
                     >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <span className="icon-sq">
                         <product.icon className="h-[18px] w-[18px]" />
                       </span>
                       <span>
-                        <span className="block text-[13.5px] font-semibold">{product.displayLabel}</span>
-                        <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>{product.displayLabel}</span>
+                        <span style={{ marginTop: 2, display: 'block', fontSize: 12, lineHeight: 1.4, color: 'var(--ink-soft)' }}>
                           {localizedProductText(product.blurb, locale)}
                         </span>
                       </span>
@@ -204,7 +222,7 @@ function Navbar() {
                 <Link
                   to="/#products"
                   onClick={() => setProductMenuOpen(false)}
-                  className="mt-1 flex items-center justify-center gap-1 rounded-lg p-2.5 text-xs font-semibold text-primary hover:bg-secondary"
+                  style={{ marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 10, padding: 10, fontSize: 12, fontWeight: 700, color: 'var(--brand-navy)', textDecoration: 'none' }}
                 >
                   {t.nav.seeAllProducts}
                   <ChevronRight className="h-3.5 w-3.5" />
@@ -212,104 +230,250 @@ function Navbar() {
               </div>
             )}
           </div>
-          <Link
-            to="/requirements"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          <Link to="/requirements">{t.nav.requirements}</Link>
+          <Link to="/news">{t.nav.news}</Link>
+          <Link to="/security-tips">{t.nav.security}</Link>
+        </div>
+
+        <div className="navcta">
+          <a
+            href={`tel:${COMPANY.contact.landline.replace(/[^\d+]/g, '')}`}
+            className="link-inline"
+            style={{ display: 'none' }}
           >
-            {t.nav.requirements}
-          </Link>
-          <Link to="/news" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-            {t.nav.news}
-          </Link>
-          <Link
-            to="/security-tips"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            {t.nav.security}
-          </Link>
+            <Phone className="h-3.5 w-3.5" />
+            {COMPANY.contact.landline}
+          </a>
           <LanguageToggle />
-          <ThemeToggle />
           {isAuthenticated ? (
-            <Link to="/dashboard">
-              <Button size="sm">{t.nav.goToDashboard}</Button>
+            <Link to="/dashboard" className="btn-solid">
+              {t.nav.goToDashboard}
             </Link>
           ) : (
             <>
-              <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              <Link to="/login" className="btn-ghost">
                 {t.common.logIn}
               </Link>
-              <Link to="/signup">
-                <Button size="sm">{t.common.applyNow}</Button>
+              <Link to="/signup" className="btn-solid">
+                {t.common.applyNow}
               </Link>
             </>
           )}
+          <button
+            type="button"
+            style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer' }}
+            className="mobile-menu-toggle"
+            onClick={() => setOpen((o) => !o)}
+            aria-label="Toggle menu"
+          >
+            {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
         </div>
-
-        <button className="md:hidden" onClick={() => setOpen((o) => !o)} aria-label="Toggle menu">
-          {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </button>
-      </div>
+      </nav>
 
       {open && (
-        <div className="border-t border-border bg-background px-4 py-4 md:hidden">
-          <div className="flex flex-col gap-3">
-            <a
-              href={`tel:${COMPANY.contact.landline.replace(/[^\d+]/g, '')}`}
-              className="flex items-center gap-1.5 text-sm font-medium"
-            >
-              <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+        <div className="widget-card" style={{ margin: '0 20px 20px', borderRadius: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <a href={`tel:${COMPANY.contact.landline.replace(/[^\d+]/g, '')}`} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: 'inherit', textDecoration: 'none' }}>
+              <Phone className="h-3.5 w-3.5" />
               {COMPANY.contact.landline}
             </a>
-            <div>
-              <p className="text-sm font-medium">{t.nav.productFull}</p>
-              <div className="mt-2 flex flex-col gap-2 border-l border-border pl-3">
-                {LOAN_PRODUCTS.map((product) => (
-                  <Link
-                    key={product.category}
-                    to="/signup"
-                    onClick={() => setOpen(false)}
-                    className="text-sm text-muted-foreground hover:text-foreground"
-                  >
-                    {product.displayLabel}
-                  </Link>
-                ))}
-              </div>
+            <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{t.nav.productFull}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderLeft: '1px solid var(--line)', paddingLeft: 12 }}>
+              {LOAN_PRODUCTS.map((product) => (
+                <Link key={product.category} to="/signup" onClick={() => setOpen(false)} style={{ fontSize: 14, color: 'var(--ink-soft)', textDecoration: 'none' }}>
+                  {product.displayLabel}
+                </Link>
+              ))}
             </div>
-            <Link to="/requirements" onClick={() => setOpen(false)} className="text-sm font-medium">
+            <Link to="/requirements" onClick={() => setOpen(false)} style={{ fontSize: 14, fontWeight: 600, color: 'inherit', textDecoration: 'none' }}>
               {t.nav.requirementsFull}
             </Link>
-            <Link to="/news" onClick={() => setOpen(false)} className="text-sm font-medium">
+            <Link to="/news" onClick={() => setOpen(false)} style={{ fontSize: 14, fontWeight: 600, color: 'inherit', textDecoration: 'none' }}>
               {t.nav.newsFull}
             </Link>
-            <Link to="/security-tips" onClick={() => setOpen(false)} className="text-sm font-medium">
+            <Link to="/security-tips" onClick={() => setOpen(false)} style={{ fontSize: 14, fontWeight: 600, color: 'inherit', textDecoration: 'none' }}>
               {t.nav.securityFull}
             </Link>
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">{t.nav.language}</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-soft)' }}>{t.nav.language}</span>
               <LanguageToggle />
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">{t.nav.theme}</span>
-              <ThemeToggle />
-            </div>
             {isAuthenticated ? (
-              <Link to="/dashboard" onClick={() => setOpen(false)}>
-                <Button className="w-full">{t.nav.goToDashboard}</Button>
+              <Link to="/dashboard" onClick={() => setOpen(false)} className="btn-solid" style={{ justifyContent: 'center' }}>
+                {t.nav.goToDashboard}
               </Link>
             ) : (
               <>
-                <Link to="/login" onClick={() => setOpen(false)} className="text-sm font-medium">
+                <Link to="/login" onClick={() => setOpen(false)} className="btn-ghost" style={{ justifyContent: 'center' }}>
                   {t.common.logIn}
                 </Link>
-                <Link to="/signup" onClick={() => setOpen(false)}>
-                  <Button className="w-full">{t.common.applyNow}</Button>
+                <Link to="/signup" onClick={() => setOpen(false)} className="btn-solid" style={{ justifyContent: 'center' }}>
+                  {t.common.applyNow}
                 </Link>
               </>
             )}
           </div>
         </div>
       )}
+
+      <style>{`
+        @media (max-width: 860px) {
+          .landing-mockup .navlinks { display: none !important; }
+          .landing-mockup .navcta .btn-ghost,
+          .landing-mockup .navcta .btn-solid,
+          .landing-mockup .navcta > span { display: none !important; }
+          .landing-mockup .mobile-menu-toggle { display: block !important; }
+        }
+      `}</style>
     </header>
+  );
+}
+
+/** Landing-page-only footer, styled to clone the approved mockup's `.site-footer` exactly - kept
+ * separate from the shared `SiteFooter` component (which still renders normally, Tailwind-styled,
+ * on every other public page: Contact, Privacy Policy, Terms, etc.) rather than restyling that
+ * shared component, which would have broken it everywhere else it's used. All content still comes
+ * from the same single sources of truth (`companyInfo.ts`, `t.footer.*`) as SiteFooter - only the
+ * visual language differs here. */
+function LandingFooter() {
+  const { t } = useLanguage();
+
+  return (
+    <footer className="site-footer">
+      <div className="wrap">
+        <div className="badge-row">
+          {[
+            { icon: ShieldCheck, label: t.landing.trustSecRegistered },
+            { icon: CheckCircle2, label: t.landing.trustNoAdvanceFee },
+            { icon: Lock, label: t.landing.trustDataProtected },
+          ].map(({ icon: Icon, label }) => (
+            <span key={label} className="trust-badge">
+              <span className="dot-icon">
+                <Icon className="h-3 w-3" />
+              </span>
+              {label}
+            </span>
+          ))}
+        </div>
+
+        <div className="footer-grid">
+          <div className="footer-col">
+            <div className="footer-brand">
+              <span className="dot" />
+              {COMPANY.legalName}
+            </div>
+            <p className="addr">
+              {FORMATTED_ADDRESS} &middot;{' '}
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(FORMATTED_ADDRESS)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--brand-navy)', fontWeight: 700 }}
+              >
+                {t.footer.viewOnMap}
+              </a>
+            </p>
+            <p className="reg">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              {REGULATORY_DISCLOSURE}
+            </p>
+            <p className="tag">{t.footer.tagline}</p>
+            {/* Real NPC (National Privacy Commission) DPO/DPS registration seal - extracted from
+                the company's own COR SEAL 2026-2027 certificate PDF, not a placeholder. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
+              <img src="./npc-seal.png" alt="National Privacy Commission - DPO/DPS Registered" style={{ height: 64, width: 'auto', objectFit: 'contain' }} />
+              <span style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.4, color: 'var(--ink-soft)' }}>
+                NPC Certificate of
+                <br />
+                Registration (DPO/DPS)
+              </span>
+            </div>
+          </div>
+
+          <div className="footer-col">
+            <p className="footer-heading">{t.footer.contactHeading}</p>
+            <ul className="footer-list">
+              <li>
+                <a href={`tel:${COMPANY.contact.landline.replace(/[^\d+]/g, '')}`} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'inherit', textDecoration: 'none' }}>
+                  <span className="ico">
+                    <Phone className="h-3 w-3" />
+                  </span>
+                  {COMPANY.contact.landline}
+                </a>
+              </li>
+              <li style={{ paddingLeft: 30, fontSize: 12 }}>
+                SMART: {COMPANY.contact.mobileSmart} &middot; GLOBE: {COMPANY.contact.mobileGlobe}
+              </li>
+              <li>
+                <a href={`mailto:${COMPANY.contact.email}`} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'inherit', textDecoration: 'none' }}>
+                  <span className="ico">
+                    <Mail className="h-3 w-3" />
+                  </span>
+                  {COMPANY.contact.email}
+                </a>
+              </li>
+              <li>
+                <span className="ico">
+                  <Clock className="h-3 w-3" />
+                </span>
+                {COMPANY.contact.businessHours}
+              </li>
+              <li style={{ paddingLeft: 30 }}>
+                <Link to="/contact" style={{ fontWeight: 700, color: 'var(--brand-navy)', textDecoration: 'none' }}>
+                  {t.footer.contactPageLink}
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          <div className="footer-col">
+            <p className="footer-heading">{t.footer.quickLinksHeading}</p>
+            <ul className="footer-list">
+              <li>
+                <Link to="/requirements" style={{ color: 'inherit', textDecoration: 'none' }}>
+                  {t.footer.requirements}
+                </Link>
+              </li>
+              <li>
+                <Link to="/news" style={{ color: 'inherit', textDecoration: 'none' }}>
+                  {t.footer.news}
+                </Link>
+              </li>
+              <li>
+                <Link to="/security-tips" style={{ color: 'inherit', textDecoration: 'none' }}>
+                  {t.footer.security}
+                </Link>
+              </li>
+              <li>
+                <Link to="/complaints" style={{ color: 'inherit', textDecoration: 'none' }}>
+                  {t.footer.complaints}
+                </Link>
+              </li>
+              <li>
+                <Link to="/privacy-policy" style={{ color: 'inherit', textDecoration: 'none' }}>
+                  {t.footer.privacy}
+                </Link>
+              </li>
+              <li>
+                <Link to="/terms" style={{ color: 'inherit', textDecoration: 'none' }}>
+                  {t.footer.terms}
+                </Link>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div className="footer-bottom-wrap" style={{ borderTop: '1px solid var(--line)' }}>
+        <div className="wrap footer-bottom">
+          <p>
+            &copy; {new Date().getFullYear()} {COMPANY.legalName} {t.footer.rightsReserved}
+          </p>
+          <p className="warn">{t.footer.scamWarning}</p>
+        </div>
+      </div>
+    </footer>
   );
 }
 
@@ -317,259 +481,246 @@ export function LandingPage() {
   const { t, locale } = useLanguage();
   // Marks where the hero ends, so MobileApplyBar knows when to slide in - see its own doc comment.
   const heroEndRef = React.useRef<HTMLDivElement>(null);
+  // 2026-09-05 (user request): the hero card is now a REAL interactive calculator, not a static
+  // preview - same estimateMonthlyPayment formula LoanCalculatorWidget uses, fixed to a 12-month
+  // Salary Loan term (the mockup's own slider only ever adjusted amount, not term).
+  const [heroAmount, setHeroAmount] = React.useState(HERO_ESTIMATE_PRINCIPAL);
+  const heroEstimateMonthly = estimateMonthlyPayment(heroAmount, HERO_ESTIMATE_TERM_MONTHS, 'Salary Loan');
+  const heroFillPercent = ((heroAmount - HERO_AMOUNT_MIN) / (HERO_AMOUNT_MAX - HERO_AMOUNT_MIN)) * 100;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
+    <div className="landing-mockup">
       <NewsFlashTicker />
       <MobileApplyBar sentinelRef={heroEndRef} />
 
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="gradient-mesh pointer-events-none absolute inset-0 -z-10 h-[900px]" />
-        <div className="container grid gap-10 py-16 md:grid-cols-2 md:items-center md:py-24">
-          <motion.div initial="hidden" animate="show" variants={stagger}>
-            <motion.span
-              variants={fadeUp}
-              className="glass-panel inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-primary"
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
-              {t.landing.badge}
-            </motion.span>
-            <motion.h1
-              variants={fadeUp}
-              className="mt-5 font-display text-4xl font-medium leading-[1.05] tracking-tight sm:text-5xl"
-            >
-              {t.landing.heroTitle}
-            </motion.h1>
-            <motion.p variants={fadeUp} className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              {t.landing.heroSubtitle}
-            </motion.p>
-            <motion.div variants={fadeUp} className="mt-8 flex flex-wrap items-center gap-3">
-              <Link to="/signup">
-                <Button size="lg">{t.landing.applyToday}</Button>
-              </Link>
-              <Link to="/login">
-                <Button size="lg" variant="outline">
+      <div className="page">
+        <div className="mesh" />
+        <div className="wrap">
+          <Navbar />
+
+          {/* Hero */}
+          <motion.div className="hero" initial="hidden" animate="show" variants={stagger}>
+            <div>
+              <motion.span variants={fadeUp} className="eyebrow">
+                {t.landing.badge}
+              </motion.span>
+              <motion.h1 variants={fadeUp} className="display">
+                {locale === 'fil' ? (
+                  <>
+                    Pautang na kasabay ng <em>bilis ng iyong pangarap.</em>
+                  </>
+                ) : (
+                  <>
+                    Financing that moves at the <em>speed of your ambition.</em>
+                  </>
+                )}
+              </motion.h1>
+              <motion.p variants={fadeUp} className="lede">
+                {t.landing.heroSubtitle}
+              </motion.p>
+              <motion.div variants={fadeUp} className="hero-actions">
+                <Link to="/signup" className="btn-solid" style={{ padding: '14px 26px', fontSize: '0.88rem' }}>
+                  {t.landing.applyToday}
+                </Link>
+                <Link to="/login" className="link-inline">
                   {t.common.logIn}
-                </Button>
-              </Link>
-            </motion.div>
+                </Link>
+              </motion.div>
 
-            {/* Trust strip (2026-07-29) - regulatory disclosure lives in the footer, but a first-time
-                visitor decides whether to trust the site before ever scrolling that far. Placed right
-                under the CTA, the exact moment reassurance matters most. Values come from
-                companyInfo.ts, same single source of truth as the footer - never hardcode these.
-                2026-08-27 (user request, "mas mukhang malinis"): the SEC Reg./CA disclosure and the
-                disbursement-method notice used to each get their own stacked paragraph beneath this
-                row - collapsed into one compact block so the hero doesn't end in three separate
-                small-print lines. */}
-            <motion.div
-              variants={fadeUp}
-              className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-primary" />
-                {t.landing.trustSecRegistered}
-              </span>
-              <Link to="/security-tips" className="inline-flex items-center gap-1.5 hover:text-foreground">
-                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />
-                {t.landing.trustNoAdvanceFee}
-              </Link>
-              <span className="inline-flex items-center gap-1.5">
-                <Lock className="h-3.5 w-3.5 shrink-0 text-primary" />
-                {t.landing.trustDataProtected}
-              </span>
-            </motion.div>
-            <motion.p variants={fadeUp} className="mt-2 text-[11px] leading-relaxed text-muted-foreground/80">
-              {REGULATORY_DISCLOSURE} &middot; {t.landing.disbursementNotice}
-            </motion.p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, ease: 'easeOut', delay: 0.1 }}
-            className="relative"
-          >
-            <div className="rounded-[28px] p-1.5 shadow-[0_30px_60px_-24px_hsl(227_53%_27%/0.45)]" style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--brand-green)))' }}>
-              <ImageWithFallback
-                src="./images/hero-seafarer.jpg"
-                alt="Easycash client"
-                className="aspect-[4/3] w-full rounded-[22px] object-cover"
-                fallbackIcon={<ShieldCheck className="h-16 w-16" />}
-                priority
-              />
-            </div>
-            <div className="glass-panel absolute -bottom-6 left-1/2 w-[calc(100%-2rem)] -translate-x-1/2 rounded-2xl p-5 sm:p-6">
-              <div className="grid grid-cols-3 gap-3">
+              <motion.div variants={fadeUp} className="trust-row">
                 {[
-                  { label: t.landing.statYearsLabel, value: '14' },
+                  { label: t.landing.statYearsLabel, value: '16' },
                   { label: t.landing.statDreamsLabel, value: '7,000+' },
                   { label: t.landing.statPartnersLabel, value: '20' },
                 ].map((stat) => (
-                  <div key={stat.label} className="text-center">
-                    <p className="font-display text-xl font-medium text-primary sm:text-2xl">{stat.value}</p>
-                    <p className="mt-1 text-[11px] leading-tight text-muted-foreground sm:text-xs">{stat.label}</p>
+                  <div key={stat.label}>
+                    <b>{stat.value}</b>
+                    <span>{stat.label}</span>
                   </div>
                 ))}
-              </div>
+              </motion.div>
+
             </div>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.6, ease: 'easeOut', delay: 0.1 }}
+            >
+              {/* Glass loan-estimate card - a REAL interactive calculator (2026-09-05 user
+                  request), same estimateMonthlyPayment formula LoanCalculatorWidget uses, fixed
+                  to a 12-month Salary Loan term. Not a duplicate of that widget: this one only
+                  adjusts amount (matching the mockup's own single slider), while the full widget
+                  (loan type + amount + term) lives at /signup once an applicant starts a real
+                  application. */}
+              <div className="glass-card">
+                <div className="glass-head">
+                  <span className="label">Estimate your loan</span>
+                  <span className="icon">₱</span>
+                </div>
+                <div className="amount-display">{peso(heroAmount)}</div>
+                <div className="amount-sub">
+                  {getLoanProductDisplayLabel('Salary Loan')} &middot; {HERO_ESTIMATE_TERM_MONTHS}-month term
+                </div>
+                <div className="range">
+                  <div className="fill" style={{ inset: `0 ${100 - heroFillPercent}% 0 0` }} />
+                  <input
+                    type="range"
+                    aria-label="Loan amount"
+                    min={HERO_AMOUNT_MIN}
+                    max={HERO_AMOUNT_MAX}
+                    step={HERO_AMOUNT_STEP}
+                    value={heroAmount}
+                    onChange={(e) => setHeroAmount(Number(e.target.value))}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', margin: 0, opacity: 0, cursor: 'pointer' }}
+                  />
+                  <div className="knob" style={{ left: `${heroFillPercent}%`, pointerEvents: 'none' }} />
+                </div>
+                <div className="range-labels">
+                  <span>{peso(HERO_AMOUNT_MIN)}</span>
+                  <span>{peso(HERO_AMOUNT_MAX)}</span>
+                </div>
+                <div className="glass-grid">
+                  <div className="glass-stat">
+                    <span>Est. Monthly</span>
+                    <b>{peso(heroEstimateMonthly)}</b>
+                  </div>
+                  <div className="glass-stat">
+                    <span>Total Interest</span>
+                    <b>{peso(heroEstimateMonthly * HERO_ESTIMATE_TERM_MONTHS - heroAmount)}</b>
+                  </div>
+                </div>
+                <Link to="/signup" className="glass-cta">
+                  Apply for this loan
+                </Link>
+                <p style={{ marginTop: 10, textAlign: 'center', fontSize: '0.66rem', lineHeight: 1.5, color: 'var(--ink-soft)' }}>
+                  Sample computation only, not a loan offer - see full disclaimer below.
+                </p>
+              </div>
+            </motion.div>
           </motion.div>
+          {/* Zero-height sentinel, not a visual element - MobileApplyBar watches this to know when
+              the hero (and its own Apply button) has scrolled out of view. */}
+          <div ref={heroEndRef} aria-hidden="true" />
         </div>
-        {/* Zero-height sentinel, not a visual element - MobileApplyBar watches this to know when
-            the hero (and its own Apply button) has scrolled out of view. */}
-        <div ref={heroEndRef} aria-hidden="true" />
-      </section>
+      </div>
 
       {/* Mission */}
-      <section className="py-16 sm:py-20">
-        <div className="container">
-          <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.missionTitle}</h2>
-            <p className="mt-4 text-base leading-relaxed text-muted-foreground">{t.landing.missionBody}</p>
+      <section className="mission">
+        <div className="wrap">
+          <Reveal>
+            <h2>
+              {locale === 'fil' ? (
+                <>
+                  Mangarap nang Malaki, <em>Bawasan ang Takot</em>
+                </>
+              ) : (
+                <>
+                  Dream Big, <em>Fear Less</em>
+                </>
+              )}
+            </h2>
+            <p>{t.landing.missionBody}</p>
           </Reveal>
         </div>
       </section>
 
       {/* Products */}
-      <section id="products" className="border-t border-border bg-secondary/30 py-20 sm:py-24">
-        <div className="container">
-          <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.productsTitle}</h2>
-            <p className="mt-3 text-muted-foreground">{t.landing.productsSubtitle}</p>
+      <section id="products" className="products">
+        <div className="wrap">
+          <Reveal>
+            <div className="section-head" style={{ alignItems: 'center', textAlign: 'center', flexDirection: 'column' }}>
+              <h2>{t.landing.productsTitle}</h2>
+              <p style={{ margin: '8px auto 0' }}>{t.landing.productsSubtitle}</p>
+            </div>
           </Reveal>
-          <motion.div
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: '-80px' }}
-            variants={stagger}
-            className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
-          >
-            {LOAN_PRODUCTS.map((product) => (
-              <motion.div
+          <div className="product-row" style={{ marginTop: 34 }}>
+            {LOAN_PRODUCTS.map((product, index) => (
+              <Link
                 key={product.category}
-                variants={fadeUp}
-                whileHover={{ y: -6 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                className="group overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+                to="/signup"
+                className={`product-card ${index === 1 ? 'navy' : ''}`}
+                style={{ textDecoration: 'none', color: 'inherit' }}
               >
-                <div className="relative h-44 w-full overflow-hidden">
-                  <ImageWithFallback
-                    src={product.image}
-                    alt={product.displayLabel}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    fallbackIcon={<product.icon className="h-12 w-12" />}
-                  />
-                  <div className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-xl bg-background/90 text-primary shadow-sm backdrop-blur">
-                    <product.icon className="h-5 w-5" />
-                  </div>
-                </div>
-                <div className="p-6">
-                  <h3 className="text-base font-semibold">{product.displayLabel}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{localizedProductText(product.blurb, locale)}</p>
-                  {/* 2026-08-06 (user request, "mas informative, mas descriptive" - competitor
-                      review): what this product specifically asks for, on top of the documents
-                      every applicant provides - real data from loanRequirements.ts (single source
-                      of truth shared with the actual application form and the /requirements
-                      page), never invented copy. */}
-                  {getDocumentsForProduct(product.category).productSpecific.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {getDocumentsForProduct(product.category).productSpecific.map((doc) => (
-                        <span key={doc} className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
-                          {doc}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <Link
-                      to="/signup"
-                      className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition-transform group-hover:translate-x-0.5"
-                    >
-                      {t.landing.applyForThisLoan} <ChevronRight className="h-4 w-4" />
-                    </Link>
-                    <Link
-                      to="/requirements"
-                      className="text-xs font-medium text-muted-foreground hover:text-foreground"
-                    >
-                      {t.landing.seeRequirements}
-                    </Link>
-                  </div>
-                </div>
-              </motion.div>
+                <div className="glow" />
+                <div className="product-tag">{PRODUCT_TAGS[index]}</div>
+                <h3>{product.displayLabel}</h3>
+                <p style={{ marginBottom: 0 }}>{localizedProductText(product.blurb, locale)}</p>
+              </Link>
             ))}
-          </motion.div>
+          </div>
         </div>
       </section>
 
-      {/* Eligibility self-check + Loan Calculator (2026-07-29, widened 2026-07-30) - placed right
-          after Products, once a visitor has picked a loan type they're interested in but before
-          committing to the full application form. Paired side by side (stacked on mobile) - the
-          same "am I eligible" + "how much would I pay" combo near-universal on trusted PH lending
-          sites (Tala, Cashalo, Digido). See each widget's own doc comment for why neither invents
-          a business rule it can't back up. */}
-      <section className="border-t border-border py-20 sm:py-24">
-        <div className="container">
-          <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-2 lg:items-start">
+      {/* Eligibility self-check + Requirements checklist (2026-09-05, mockup-approved) - placed
+          right after Products, once a visitor has picked a loan type they're interested in but
+          before committing to the full application form. The interactive LoanCalculatorWidget
+          used to sit here (2026-07-29) but was replaced per the approved mockup - the hero's own
+          static loan-estimate card now covers that role, so this pairing no longer needed a
+          second calculator. LoanCalculatorWidget itself is untouched and still exported, just not
+          rendered on this page. The checklist content below was confirmed by the business owner
+          (Nomer, 2026-09-05) as accurate for a real Easycash application - not derived from
+          loanRequirements.ts's DOCUMENT_SLOTS, which only models uploadable document categories
+          (it has no slot for a photo or contact-info requirement); the full accurate per-product
+          document list still lives at /requirements. */}
+      <section className="split">
+        <div className="wrap">
+          <div className="split-row">
             <Reveal>
               <EligibilityCheckWidget />
             </Reveal>
             <Reveal>
-              <LoanCalculatorWidget />
+              <div className="widget-card">
+                <div className="widget-head">
+                  <span className="icon-sq">
+                    <ClipboardList className="h-4 w-4" />
+                  </span>
+                  <h3>What you&apos;ll need to apply</h3>
+                </div>
+                <p className="sub">Have these ready and your application moves even faster.</p>
+                {[
+                  '1 valid government-issued ID',
+                  'Proof of income (payslip, COE, or bank statement)',
+                  'Proof of billing, issued within the last 3 months',
+                  '1x1 or 2x2 ID photo',
+                  'Active mobile number and email address',
+                ].map((doc, i) => (
+                  <div key={doc} className="q-row" style={{ justifyContent: 'flex-start', gap: 12, borderTop: i === 0 ? 'none' : undefined }}>
+                    <Check className="h-[15px] w-[15px]" style={{ color: 'var(--brand-green-deep)', flexShrink: 0 }} />
+                    <span>{doc}</span>
+                  </div>
+                ))}
+                <Link to="/requirements" className="glass-cta" style={{ marginTop: 'auto' }}>
+                  See Full Requirements List
+                </Link>
+              </div>
             </Reveal>
           </div>
         </div>
       </section>
 
-      {/* How it works (2026-09-04, "high-end, advance sophisticated design" request, mockup-
-          approved): steps moved off a bare numbered-circle-on-a-line layout into individual cards
-          with a floating number badge and a gradient connecting rail, matching the elevated-card
-          language the Ways-to-Pay section below already established.
-          2026-09-04 (follow-up, mockup-approved): the eyebrow pill above the heading was removed
-          per user request, and the rail/badges now animate in on scroll (rail draws left-to-right,
-          then each card fades up with its badge popping in just after) instead of appearing
-          statically - see `railDraw`/`badgePop` above this component. */}
-      <section id="how-it-works" className="py-20 sm:py-24">
-        <div className="container">
-          <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.howItWorksTitle}</h2>
+      {/* How it works */}
+      <section id="how-it-works" className="steps">
+        <div className="wrap">
+          <Reveal>
+            <div className="section-head" style={{ alignItems: 'center', textAlign: 'center', flexDirection: 'column' }}>
+              <h2 style={{ maxWidth: '36ch' }}>{t.landing.howItWorksTitle}</h2>
+            </div>
           </Reveal>
-          <motion.div
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: '-80px' }}
-            variants={stagger}
-            className="relative mt-16 grid gap-8 sm:grid-cols-3"
-          >
-            <motion.div
-              variants={railDraw}
-              className="pointer-events-none absolute top-[1.375rem] hidden h-px origin-left sm:block sm:left-[16.67%] sm:right-[16.67%]"
-              style={{ background: 'linear-gradient(to right, hsl(var(--primary)), hsl(var(--primary) / 0.15))' }}
-            />
+          <motion.div initial="hidden" whileInView="show" viewport={{ once: true, margin: '-80px' }} variants={stagger} className="steps-row">
+            <motion.div variants={railDraw} className="steps-rail" style={{ transformOrigin: 'left' }} />
             {t.landing.steps.map((step, index) => {
               const Icon = STEP_ICONS[index];
               return (
-                <motion.div
-                  key={step.title}
-                  variants={fadeUp}
-                  className="group relative overflow-hidden rounded-2xl border border-border bg-card p-6 pt-9 text-center shadow-sm transition-[transform,box-shadow,border-color] duration-300 ease-out hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl"
-                >
-                  <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 -z-10 rounded-2xl bg-primary/10 opacity-0 blur-2xl transition-opacity duration-300 ease-out group-hover:opacity-100"
-                  />
-                  <motion.div
-                    variants={badgePop}
-                    className="absolute -top-5 left-1/2 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-sm font-extrabold text-primary-foreground shadow-lg ring-4 ring-background transition-transform duration-300 ease-out group-hover:scale-110"
-                  >
+                <motion.div key={step.title} variants={fadeUp} className="step-card">
+                  <motion.div variants={badgePop} className="step-badge">
                     {index + 1}
                   </motion.div>
-                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 ease-out group-hover:-rotate-6 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground">
+                  <div className="step-icon">
                     <Icon className="h-5 w-5" />
                   </div>
-                  <h3 className="mt-4 text-base font-bold tracking-tight">{step.title}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{step.body}</p>
+                  <h4>{step.title}</h4>
+                  <p>{step.body}</p>
                 </motion.div>
               );
             })}
@@ -577,98 +728,49 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* Features - upgraded alongside How it works above: elevated cards with a stronger icon
-          treatment and a faint numeral watermark, instead of a bare icon+text row. */}
-      <section className="border-t border-border bg-secondary/30 py-20 sm:py-24">
-        <motion.div
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, margin: '-80px' }}
-          variants={stagger}
-          className="container grid gap-6 sm:grid-cols-3"
-        >
-          {t.landing.features.map((feature, index) => {
-            const Icon = FEATURE_ICONS[index];
-            return (
-              <motion.div
-                key={feature.title}
-                variants={fadeUp}
-                className="group relative overflow-hidden rounded-2xl border border-border bg-card p-7 text-center transition-[transform,box-shadow,border-color] duration-300 ease-out hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl"
-              >
-                <span
-                  aria-hidden="true"
-                  className="absolute right-5 top-5 text-4xl font-extrabold leading-none text-primary/[0.08] tabular-nums transition-colors duration-300 ease-out group-hover:text-primary/[0.16]"
-                >
-                  {String(index + 1).padStart(2, '0')}
-                </span>
-                <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/[0.06] transition-transform duration-500 ease-out group-hover:scale-125" />
-                <div className="relative mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md transition-transform duration-300 ease-out group-hover:rotate-6 group-hover:scale-110">
-                  <Icon className="h-5 w-5" />
-                </div>
-                <h3 className="relative mt-4 text-base font-bold tracking-tight">{feature.title}</h3>
-                <p className="relative mt-1.5 text-sm leading-relaxed text-muted-foreground">{feature.body}</p>
-              </motion.div>
-            );
-          })}
-        </motion.div>
+      {/* Features */}
+      <section className="features">
+        <div className="wrap">
+          <motion.div initial="hidden" whileInView="show" viewport={{ once: true, margin: '-80px' }} variants={stagger} className="feature-row">
+            {t.landing.features.map((feature, index) => {
+              const Icon = FEATURE_ICONS[index];
+              return (
+                <motion.div key={feature.title} variants={fadeUp} className="feature-card">
+                  <span className="num">{String(index + 1).padStart(2, '0')}</span>
+                  <div className="fi">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h4>{feature.title}</h4>
+                  <p>{feature.body}</p>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        </div>
       </section>
 
       {/* Ways to Pay (2026-08-06 user request, competitor site review) */}
-      <section className="border-t border-border bg-secondary/30 py-20 sm:py-24">
-        <div className="container">
-          <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.waysToPayTitle}</h2>
-            <p className="mt-3 text-muted-foreground">{t.landing.waysToPaySubtitle}</p>
+      <section className="ways">
+        <div className="wrap">
+          <Reveal>
+            <div className="section-head" style={{ alignItems: 'center', textAlign: 'center', flexDirection: 'column' }}>
+              <h2>{t.landing.waysToPayTitle}</h2>
+              <p style={{ margin: '8px auto 0' }}>{t.landing.waysToPaySubtitle}</p>
+            </div>
           </Reveal>
-          <motion.div
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: '-80px' }}
-            variants={stagger}
-            className="mx-auto mt-10 grid max-w-3xl gap-6 sm:grid-cols-2"
-          >
+          <motion.div initial="hidden" whileInView="show" viewport={{ once: true, margin: '-80px' }} variants={stagger} className="ways-row" style={{ marginTop: 34 }}>
             {t.landing.waysToPay.map((way, index) => {
               const Icon = WAYS_TO_PAY_ICONS[index];
               const tag = WAYS_TO_PAY_TAGS[index];
-              // Only the Bank Transfer card gets a real-data chip - Easycash has exactly one
-              // official collection account (see OFFICIAL_BANK_ACCOUNT), not several banks to
-              // choose from. No equivalent chip for PDC: a real per-loan payment-frequency list
-              // isn't confirmed anywhere in this codebase, and inventing one would fabricate a
-              // business rule (see CLAUDE.md / EligibilityCheckWidget's own doc comment).
-              const chip = index === 0 ? `${OFFICIAL_BANK_ACCOUNT.bankName} · ${OFFICIAL_BANK_ACCOUNT.branch}` : null;
               return (
-                <motion.div
-                  key={way.title}
-                  variants={fadeUp}
-                  className="group relative overflow-hidden rounded-[22px] border border-border bg-card p-7 shadow-sm transition-[transform,box-shadow,border-color] duration-300 ease-out hover:-translate-y-1 hover:border-primary/40 hover:shadow-xl"
-                >
-                  <div
-                    aria-hidden="true"
-                    className="absolute -right-14 -top-14 h-40 w-40 rounded-full opacity-30 blur-3xl transition-transform duration-500 ease-out group-hover:scale-125"
-                    style={{ background: index === 0 ? 'hsl(var(--brand-green))' : 'hsl(var(--primary))' }}
-                  />
-                  {tag && (
-                    <span className="glass-panel absolute right-6 top-6 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-primary">
-                      {tag}
-                    </span>
-                  )}
-                  <div
-                    className="relative flex h-12 w-12 items-center justify-center rounded-2xl text-white shadow-md"
-                    style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--brand-green)))' }}
-                  >
+                <motion.div key={way.title} variants={fadeUp} className={`way-card ${index === 1 ? 'navy' : ''}`}>
+                  <div className="glow" />
+                  <span className="way-tag">{tag}</span>
+                  <div className="icon-sq">
                     <Icon className="h-5 w-5" />
                   </div>
-                  <div className="relative mt-5">
-                    <h3 className="font-display text-lg font-medium">{way.title}</h3>
-                    <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{way.body}</p>
-                    {chip && (
-                      <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
-                        <span className="rounded-full border border-border bg-background px-3 py-1 text-xs font-bold text-muted-foreground">
-                          {chip}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                  <h4>{way.title}</h4>
+                  <p className="desc">{way.body}</p>
                 </motion.div>
               );
             })}
@@ -677,28 +779,24 @@ export function LandingPage() {
       </section>
 
       {/* Testimonials */}
-      <section className="py-20 sm:py-24">
-        <div className="container">
-          <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.testimonialsTitle}</h2>
-            <p className="mt-3 text-muted-foreground">{t.landing.testimonialsSubtitle}</p>
-            {/* Testimonials themselves are never translated - see TESTIMONIALS' doc comment. */}
-            {locale === 'fil' && (
-              <p className="mt-2 text-xs italic text-muted-foreground">{t.landing.testimonialsNote}</p>
-            )}
+      <section className="testimonials">
+        <div className="wrap">
+          <Reveal>
+            <div className="section-head" style={{ alignItems: 'center', textAlign: 'center', flexDirection: 'column' }}>
+              <h2>{t.landing.testimonialsTitle}</h2>
+              <p style={{ margin: '8px auto 0' }}>{t.landing.testimonialsSubtitle}</p>
+              {/* Testimonials themselves are never translated - see TESTIMONIALS' doc comment. */}
+              {locale === 'fil' && (
+                <p style={{ marginTop: 8, fontSize: '0.76rem', fontStyle: 'italic', color: 'var(--ink-soft)' }}>{t.landing.testimonialsNote}</p>
+              )}
+            </div>
           </Reveal>
-          <motion.div
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: '-80px' }}
-            variants={stagger}
-            className="mt-10 grid gap-6 sm:grid-cols-3"
-          >
+          <motion.div initial="hidden" whileInView="show" viewport={{ once: true, margin: '-80px' }} variants={stagger} className="testi-row" style={{ marginTop: 34 }}>
             {TESTIMONIALS.map((testimonial, index) => (
-              <motion.div key={index} variants={fadeUp} className="flex flex-col rounded-2xl border border-border bg-card p-6 shadow-sm">
-                <Quote className="h-6 w-6 shrink-0 text-primary/40" aria-hidden="true" />
-                <p className="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground">&ldquo;{testimonial.quote}&rdquo;</p>
-                <p className="mt-4 text-sm font-semibold">{testimonial.role}</p>
+              <motion.div key={index} variants={fadeUp} className="testi-card">
+                <Quote className="h-[22px] w-[22px]" aria-hidden="true" />
+                <p>&ldquo;{testimonial.quote}&rdquo;</p>
+                <b>{testimonial.role}</b>
               </motion.div>
             ))}
           </motion.div>
@@ -706,57 +804,41 @@ export function LandingPage() {
       </section>
 
       {/* FAQs */}
-      <section className="border-t border-border bg-secondary/30 py-20 sm:py-24">
-        <div className="container max-w-2xl">
-          <Reveal className="text-center">
-            <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.faqTitle}</h2>
+      <section className="faq">
+        <div className="wrap">
+          <Reveal>
+            <div className="section-head" style={{ alignItems: 'center', textAlign: 'center', flexDirection: 'column' }}>
+              <h2>{t.landing.faqTitle}</h2>
+            </div>
           </Reveal>
-          <motion.div
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: '-80px' }}
-            variants={stagger}
-            className="mt-8 space-y-3"
-          >
+          <div className="faq-list" style={{ marginTop: 34 }}>
             {t.landing.faqs.map((faq) => (
-              <motion.div key={faq.question} variants={fadeUp}>
-                <FaqItem question={faq.question} answer={faq.answer} />
-              </motion.div>
+              <FaqItem key={faq.question} question={faq.question} answer={faq.answer} />
             ))}
-          </motion.div>
+          </div>
         </div>
       </section>
 
       {/* CTA */}
-      <section className="py-20 sm:py-24">
-        <div className="container">
+      <footer className="tease">
+        <div className="wrap">
           <Reveal>
-            <div
-              className="relative overflow-hidden rounded-3xl px-8 py-12 text-center text-primary-foreground sm:px-16"
-              style={{ background: 'linear-gradient(155deg, hsl(var(--primary)), hsl(227 60% 8%) 60%)' }}
-            >
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute -inset-x-[10%] -top-[40%] h-[340px] rounded-full opacity-40 blur-3xl"
-                style={{ background: 'hsl(var(--brand-green))' }}
-              />
-              <h2 className="relative font-display text-2xl font-medium tracking-tight sm:text-3xl">{t.landing.ctaTitle}</h2>
-              <p className="relative mx-auto mt-3 max-w-lg text-primary-foreground/80">{t.landing.ctaBody}</p>
-              <Link to="/signup" className="relative mt-6 inline-block">
-                <Button
-                  size="lg"
-                  className="border-0 text-white shadow-lg hover:brightness-105"
-                  style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--brand-green)) 70%)' }}
-                >
-                  {t.common.createAccount}
-                </Button>
+            <div className="footer-card">
+              <h3 style={{ position: 'relative', zIndex: 1 }}>{t.landing.ctaTitle}</h3>
+              <p style={{ position: 'relative', zIndex: 1 }}>{t.landing.ctaBody}</p>
+              <Link
+                to="/signup"
+                className="btn-solid"
+                style={{ position: 'relative', zIndex: 1, display: 'inline-flex', padding: '14px 30px' }}
+              >
+                {t.common.createAccount}
               </Link>
             </div>
           </Reveal>
         </div>
-      </section>
+      </footer>
 
-      <SiteFooter />
+      <LandingFooter />
     </div>
   );
 }

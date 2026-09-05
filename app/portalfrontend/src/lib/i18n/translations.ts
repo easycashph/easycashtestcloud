@@ -79,8 +79,11 @@ export const en = {
     scamWarning: 'Easycash will never ask for a fee before releasing your loan, or for your OTP or password.',
   },
   landing: {
-    badge: 'Easycash Lending Company Inc.',
-    heroTitle: "We're here to empower your financial voyage",
+    // 2026-09-05 (user-confirmed founding year, replacing the mockup's own unverified "Since
+    // 2011" placeholder guess). The hero's "Years in Business" stat (LandingPage.tsx) was updated
+    // to 16 in the same session to stay consistent (2026-2010 = 16).
+    badge: 'SEC-Registered · Since 2010',
+    heroTitle: 'Financing that moves at the speed of your ambition.',
     heroSubtitle:
       'Apply for a loan online in minutes, track your application status in real time, and manage your account - all from one place.',
     applyToday: 'Apply for a Loan Today',
@@ -112,8 +115,8 @@ export const en = {
     waysToPayTitle: 'Ways to pay',
     waysToPaySubtitle: 'Settle your installments through either of these channels.',
     waysToPay: [
-      { title: 'Bank Transfer', body: 'Pay directly from your bank account.' },
-      { title: 'Post-Dated Check (PDC)', body: 'Set up post-dated checks matched to your payment schedule.' },
+      { title: 'Bank Transfer', body: 'Pay directly from your bank account - funds are matched to your loan the same banking day.' },
+      { title: 'Post-Dated Check (PDC)', body: 'Hand in a set of checks once, dated to your own payment schedule - no need to remember due dates.' },
     ],
     officialBankAccountHeading: 'Payment to Official Bank Account',
     officialBankAccountProofNote: 'Please send proof of payment to',
@@ -957,8 +960,8 @@ export const fil: Translations = {
     scamWarning: 'Hindi kailanman hihingi ang Easycash ng bayad bago ilabas ang loan, o ng iyong OTP o password.',
   },
   landing: {
-    badge: 'Easycash Lending Company Inc.',
-    heroTitle: 'Narito kami para gabayan ang iyong paglalakbay patungo sa magandang kinabukasan',
+    badge: 'Rehistrado sa SEC · Mula 2010',
+    heroTitle: 'Pautang na kasabay ng bilis ng iyong pangarap.',
     heroSubtitle:
       'Mag-apply ng loan online sa loob lamang ng ilang minuto, subaybayan ang status ng iyong aplikasyon anumang oras, at pamahalaan ang iyong account - lahat sa isang lugar lamang.',
     applyToday: 'Mag-apply ng Loan Ngayon',
@@ -990,8 +993,8 @@ export const fil: Translations = {
     waysToPayTitle: 'Mga paraan ng pagbabayad',
     waysToPaySubtitle: 'Bayaran ang iyong mga hulog gamit ang alinman sa mga channel na ito.',
     waysToPay: [
-      { title: 'Bank Transfer', body: 'Magbayad direkta mula sa iyong bank account.' },
-      { title: 'Post-Dated Check (PDC)', body: 'Mag-set up ng post-dated checks na naka-tugma sa iskedyul ng iyong bayad.' },
+      { title: 'Bank Transfer', body: 'Magbayad direkta mula sa iyong bank account - itutugma ang pondo sa iyong loan sa parehong banking day.' },
+      { title: 'Post-Dated Check (PDC)', body: 'Magbigay ng set ng checks nang isang beses, naka-date base sa iyong sariling iskedyul ng bayad - hindi na kailangang tandaan ang due dates.' },
     ],
     officialBankAccountHeading: 'Bayad sa Opisyal na Bank Account',
     officialBankAccountProofNote: 'Ipadala ang proof of payment sa',

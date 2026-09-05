@@ -5,7 +5,11 @@ type ButtonVariant = 'primary' | 'outline' | 'ghost';
 type ButtonSize = 'default' | 'lg' | 'sm';
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm',
+  // 2026-09-05 redesign (mockup-approved): navy->lime gradient on every primary CTA, matching the
+  // single consistent `.btn-solid`/`.glass-cta` treatment the mockup used everywhere - not just
+  // the nav. hover:brightness-105 rather than the old bg-primary/90, since a gradient can't be
+  // darkened with an opacity trick the same way a flat fill can.
+  primary: 'bg-gradient-to-br from-primary to-brand-green text-white shadow-md hover:brightness-105',
   outline: 'border border-input bg-background hover:bg-secondary',
   ghost: 'hover:bg-secondary',
 };

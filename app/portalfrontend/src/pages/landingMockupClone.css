@@ -1,0 +1,1104 @@
+/**
+ * 2026-09-05 (user request, "gayahin ang font at color at style... buong mockup ang gayahin"):
+ * a near-verbatim port of the approved Portal design-mockup Artifact's own CSS
+ * (https://claude.ai/code/artifact/d89050ce-e1af-45c3-b883-fa0b5ba3e1b9), scoped under
+ * `.landing-mockup` so it only ever applies inside the landing page - it must never leak onto
+ * Dashboard, the LMS, or any other route that shares this same `<body>`.
+ *
+ * Deliberately light-only, same as the mockup itself commits to (see its own comment below) -
+ * this page does not follow the app's dark-mode toggle. Every other route keeps dark mode working
+ * normally; nothing here touches the global :root/.dark tokens in index.css.
+ *
+ * Values (hex colors, rem sizes, blur amounts, shadow offsets) are copied as-is from the mockup,
+ * not remapped to the app's own --primary/--brand-green tokens - an exact clone was the explicit
+ * ask, not an approximation, and any drift here means the CSS should be re-diffed against the
+ * mockup, not "fixed" by an unrelated redesign.
+ */
+
+.landing-mockup {
+  /* Sampled directly from public/logo-easycash.png: navy #22316A ("easy"), lime green #7CC142
+     ("cash") - this concept commits to exactly those two, no invented third hue. */
+  --ink: #0f1b2e;
+  --ink-soft: #4a5468;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --line: #e2e5f0;
+  --brand-green: #7cc142;
+  --brand-green-deep: #4b8f1f;
+  --brand-navy: #22316a;
+  --brand-navy-deep: #141d40;
+  --bg: #f3f5fb;
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-line: rgba(34, 49, 106, 0.1);
+  --shadow-color: 230 45% 24%;
+
+  /* Deliberately light-only: a single committed look rather than following the viewer's system
+     theme, so it always renders the same regardless of the browser/OS dark-mode setting. */
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.landing-mockup,
+.landing-mockup * {
+  box-sizing: border-box;
+}
+.landing-mockup .page {
+  position: relative;
+  overflow: hidden;
+}
+
+/* ambient gradient mesh */
+.landing-mockup .mesh {
+  position: absolute;
+  inset: -10% -10% auto -10%;
+  height: 900px;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(700px 480px at 15% 10%, color-mix(in srgb, var(--brand-green) 32%, transparent), transparent 65%),
+    radial-gradient(600px 420px at 85% 0%, color-mix(in srgb, var(--brand-navy) 20%, transparent), transparent 60%),
+    radial-gradient(900px 600px at 50% 40%, color-mix(in srgb, var(--brand-green-deep) 45%, transparent), transparent 70%);
+  filter: blur(10px);
+  opacity: 0.9;
+}
+
+.landing-mockup .wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+/* nav */
+.landing-mockup nav.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 0 0;
+}
+.landing-mockup .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+.landing-mockup .brand .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--brand-navy), var(--brand-green));
+}
+.landing-mockup .navlinks {
+  display: flex;
+  gap: 30px;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.landing-mockup .navlinks a:hover {
+  color: var(--ink);
+}
+.landing-mockup .navcta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.landing-mockup .btn-ghost {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 10px 18px;
+  border: 1px solid var(--glass-line);
+  border-radius: 999px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(14px);
+  display: inline-flex;
+}
+.landing-mockup .btn-solid {
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 11px 20px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--brand-navy), var(--brand-green) 65%);
+  box-shadow: 0 12px 24px -10px hsl(var(--shadow-color) / 0.55);
+  display: inline-flex;
+  align-items: center;
+  border: none;
+}
+
+/* hero */
+.landing-mockup .hero {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 56px;
+  align-items: center;
+  padding: 88px 0 60px;
+}
+.landing-mockup .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand-navy);
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-line);
+  background: var(--glass-bg);
+}
+.landing-mockup .eyebrow::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--brand-navy);
+}
+.landing-mockup h1.display {
+  font-family: 'Fraunces', ui-serif, Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(2.6rem, 4.4vw, 3.7rem);
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  margin: 22px 0 20px;
+  text-wrap: balance;
+}
+.landing-mockup h1.display em {
+  font-style: italic;
+  font-weight: 500;
+  color: var(--brand-green);
+}
+.landing-mockup .lede {
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--ink-soft);
+  max-width: 46ch;
+  margin: 0 0 32px;
+}
+.landing-mockup .hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.landing-mockup .link-inline {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.landing-mockup .trust-row {
+  display: flex;
+  gap: 34px;
+  margin-top: 48px;
+  padding-top: 28px;
+  border-top: 1px solid var(--glass-line);
+}
+.landing-mockup .trust-row div b {
+  display: block;
+  font-family: 'Fraunces', serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.landing-mockup .trust-row div span {
+  font-size: 0.74rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+/* glass calculator card */
+.landing-mockup .glass-card {
+  position: relative;
+  border-radius: 24px;
+  padding: 30px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid var(--glass-line);
+  box-shadow: 0 30px 60px -24px hsl(var(--shadow-color) / 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.landing-mockup .glass-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+.landing-mockup .glass-head .label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.landing-mockup .glass-head .icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--brand-green), var(--brand-green-deep));
+  color: #eafff4;
+  font-size: 1rem;
+}
+.landing-mockup .amount-display {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 2.6rem;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.landing-mockup .amount-sub {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+.landing-mockup .range {
+  margin: 22px 0 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  position: relative;
+}
+.landing-mockup .range .fill {
+  position: absolute;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand-green-deep), var(--brand-green));
+}
+.landing-mockup .range .knob {
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  background: var(--brand-navy);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35), 0 0 0 4px var(--surface-raised);
+}
+.landing-mockup .range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.landing-mockup .glass-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 22px;
+}
+.landing-mockup .glass-stat {
+  padding: 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  border: 1px solid var(--glass-line);
+}
+.landing-mockup .glass-stat span {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+.landing-mockup .glass-stat b {
+  display: block;
+  margin-top: 4px;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+.landing-mockup .glass-cta {
+  margin-top: 22px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--brand-navy), var(--brand-green) 70%);
+  cursor: pointer;
+  display: block;
+  text-align: center;
+  text-decoration: none;
+}
+
+/* products */
+.landing-mockup section.products {
+  padding: 20px 0 90px;
+}
+.landing-mockup .section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 34px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.landing-mockup .section-head h2 {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 2rem;
+  margin: 0;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.landing-mockup .section-head p {
+  color: var(--ink-soft);
+  margin: 8px 0 0;
+  max-width: 46ch;
+  font-size: 0.95rem;
+}
+
+.landing-mockup .product-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.landing-mockup .product-card {
+  position: relative;
+  border-radius: 22px;
+  padding: 26px;
+  overflow: hidden;
+  background: var(--glass-bg);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--glass-line);
+  box-shadow: 0 20px 40px -28px hsl(var(--shadow-color) / 0.7);
+}
+.landing-mockup .product-card .glow {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  border-radius: 999px;
+  right: -60px;
+  top: -60px;
+  filter: blur(30px);
+  opacity: 0.35;
+  background: var(--brand-green);
+}
+.landing-mockup .product-card.navy .glow {
+  background: var(--brand-navy);
+}
+.landing-mockup .product-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--brand-navy);
+}
+.landing-mockup .product-card h3 {
+  font-family: 'Fraunces', serif;
+  font-size: 1.32rem;
+  font-weight: 600;
+  margin: 10px 0 8px;
+}
+.landing-mockup .product-card p {
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+  line-height: 1.55;
+  margin: 0 0 20px;
+}
+.landing-mockup .product-rate {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  border-top: 1px solid var(--glass-line);
+  padding-top: 16px;
+}
+.landing-mockup .product-rate b {
+  font-family: 'Fraunces', serif;
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.landing-mockup .product-rate span {
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+}
+
+/* mission */
+.landing-mockup section.mission {
+  padding: 10px 0 80px;
+  text-align: center;
+}
+.landing-mockup section.mission h2 {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 1.9rem;
+  margin: 0 auto 16px;
+  max-width: 30ch;
+  text-wrap: balance;
+}
+.landing-mockup section.mission h2 em {
+  color: var(--brand-green);
+  font-style: italic;
+}
+.landing-mockup section.mission p {
+  max-width: 62ch;
+  margin: 0 auto;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+/* split widgets (eligibility + calculator) */
+.landing-mockup section.split {
+  padding: 0 0 90px;
+}
+.landing-mockup .split-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+  align-items: stretch;
+}
+/* Both split-section cards stretch to the row's full height and lay out as a column so their
+ * CTA buttons line up at the same bottom edge regardless of which card has more content
+ * (2026-09-05 user request - the eligibility card's extra disclaimer paragraph was making it
+ * visibly taller than the requirements checklist next to it). */
+.landing-mockup .split-row > .reveal {
+  display: flex;
+}
+.landing-mockup .split-row .widget-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.landing-mockup .widget-card {
+  border-radius: 22px;
+  padding: 28px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--glass-line);
+  box-shadow: 0 20px 40px -30px hsl(var(--shadow-color) / 0.7);
+}
+.landing-mockup .widget-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.landing-mockup .widget-head .icon-sq {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--brand-navy) 12%, transparent);
+  color: var(--brand-navy);
+  flex-shrink: 0;
+}
+.landing-mockup .widget-card h3 {
+  font-family: 'Fraunces', serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0;
+}
+.landing-mockup .widget-card > p.sub {
+  font-size: 0.84rem;
+  color: var(--ink-soft);
+  margin: 4px 0 20px;
+}
+.landing-mockup .q-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-top: 1px solid var(--glass-line);
+  font-size: 0.86rem;
+}
+.landing-mockup .q-row:first-of-type {
+  border-top: none;
+}
+.landing-mockup .yn {
+  display: flex;
+  gap: 8px;
+}
+.landing-mockup .yn button {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-line);
+  color: var(--ink-soft);
+  background: transparent;
+  cursor: pointer;
+}
+.landing-mockup .yn button.active {
+  background: var(--brand-green);
+  border-color: var(--brand-green);
+  color: #fff;
+}
+
+/* steps */
+.landing-mockup section.steps {
+  padding: 0 0 90px;
+}
+.landing-mockup .steps-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 26px;
+  margin-top: 20px;
+}
+.landing-mockup .steps-rail {
+  position: absolute;
+  top: 22px;
+  left: 16.6%;
+  right: 16.6%;
+  height: 1px;
+  background: linear-gradient(90deg, var(--brand-navy), color-mix(in srgb, var(--brand-green) 40%, transparent));
+}
+.landing-mockup .step-card {
+  position: relative;
+  border-radius: 20px;
+  padding: 24px 20px 22px;
+  padding-top: 34px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 16px 30px -26px hsl(var(--shadow-color) / 0.6);
+}
+.landing-mockup .step-badge {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--brand-navy), var(--brand-green));
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  box-shadow: 0 8px 16px -6px hsl(var(--shadow-color) / 0.6);
+  border: 3px solid var(--bg);
+}
+.landing-mockup .step-card .step-icon {
+  margin: 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--brand-navy), var(--brand-green));
+  color: #fff;
+}
+.landing-mockup .step-card h4 {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin: 8px 0 6px;
+}
+.landing-mockup .step-card p {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* features */
+.landing-mockup section.features {
+  padding: 0 0 90px;
+}
+.landing-mockup .feature-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.landing-mockup .feature-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  padding: 26px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 16px 30px -26px hsl(var(--shadow-color) / 0.6);
+}
+.landing-mockup .feature-card .num {
+  position: absolute;
+  right: 16px;
+  top: 12px;
+  font-family: 'Fraunces', serif;
+  font-weight: 700;
+  font-size: 2.4rem;
+  color: color-mix(in srgb, var(--brand-navy) 8%, transparent);
+}
+.landing-mockup .feature-card .fi {
+  margin: 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--brand-navy), var(--brand-green));
+  color: #fff;
+}
+.landing-mockup .feature-card h4 {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 1.02rem;
+  margin: 14px 0 6px;
+}
+.landing-mockup .feature-card p {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ways to pay */
+.landing-mockup section.ways {
+  padding: 0 0 90px;
+}
+.landing-mockup .ways-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  max-width: 820px;
+  margin: 0 auto;
+}
+.landing-mockup .way-card {
+  position: relative;
+  overflow: hidden;
+  display: block;
+  padding: 28px;
+  border-radius: 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 20px 40px -28px hsl(var(--shadow-color) / 0.7);
+}
+.landing-mockup .way-card .glow {
+  position: absolute;
+  width: 170px;
+  height: 170px;
+  border-radius: 999px;
+  right: -60px;
+  top: -60px;
+  filter: blur(30px);
+  opacity: 0.3;
+  background: var(--brand-green);
+}
+.landing-mockup .way-card.navy .glow {
+  background: var(--brand-navy);
+}
+.landing-mockup .way-card .way-tag {
+  position: absolute;
+  top: 26px;
+  right: 26px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brand-navy);
+  background: color-mix(in srgb, var(--brand-navy) 9%, transparent);
+  padding: 5px 11px;
+  border-radius: 999px;
+}
+.landing-mockup .way-card .icon-sq {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--brand-navy), var(--brand-green));
+  color: #fff;
+  flex-shrink: 0;
+}
+.landing-mockup .way-card h4 {
+  font-family: 'Fraunces', serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 18px 0 8px;
+  position: relative;
+}
+.landing-mockup .way-card p.desc {
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  margin: 0 0 18px;
+  line-height: 1.55;
+  position: relative;
+}
+.landing-mockup .way-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--glass-line);
+  position: relative;
+}
+.landing-mockup .way-chip {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 5px 11px;
+  border-radius: 999px;
+}
+
+/* testimonials */
+.landing-mockup section.testimonials {
+  padding: 0 0 90px;
+}
+.landing-mockup .testi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.landing-mockup .testi-card {
+  border-radius: 20px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+}
+.landing-mockup .testi-card svg {
+  color: color-mix(in srgb, var(--brand-navy) 35%, transparent);
+}
+.landing-mockup .testi-card p {
+  flex: 1;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin: 12px 0 16px;
+}
+.landing-mockup .testi-card b {
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+/* faq */
+.landing-mockup section.faq {
+  padding: 0 0 90px;
+}
+.landing-mockup .faq-list {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.landing-mockup .faq-item {
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 4px 20px;
+  transition: border-color 0.25s ease-out, box-shadow 0.25s ease-out;
+}
+.landing-mockup .faq-item:hover {
+  border-color: color-mix(in srgb, var(--brand-green) 40%, var(--line));
+}
+.landing-mockup .faq-item button.faq-summary {
+  width: 100%;
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  color: var(--ink);
+  text-align: left;
+}
+.landing-mockup .faq-item .faq-plus {
+  font-size: 1.2rem;
+  color: var(--brand-navy);
+  font-weight: 400;
+  transition: transform 0.2s ease;
+}
+.landing-mockup .faq-item.open .faq-plus {
+  transform: rotate(45deg);
+}
+.landing-mockup .faq-item p {
+  margin: 0 0 16px;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+/* hover polish, shared across every card type */
+.landing-mockup .product-card,
+.landing-mockup .widget-card,
+.landing-mockup .step-card,
+.landing-mockup .feature-card,
+.landing-mockup .way-card,
+.landing-mockup .testi-card {
+  transition: transform 0.3s ease-out, box-shadow 0.3s ease-out, border-color 0.3s ease-out;
+}
+.landing-mockup .product-card:hover,
+.landing-mockup .widget-card:hover,
+.landing-mockup .step-card:hover,
+.landing-mockup .feature-card:hover,
+.landing-mockup .way-card:hover,
+.landing-mockup .testi-card:hover {
+  transform: translateY(-5px);
+  border-color: color-mix(in srgb, var(--brand-green) 45%, var(--line));
+  box-shadow: 0 22px 40px -26px hsl(var(--shadow-color) / 0.55);
+}
+.landing-mockup .product-card .glow {
+  transition: transform 0.5s ease-out;
+}
+.landing-mockup .product-card:hover .glow {
+  transform: scale(1.3);
+}
+.landing-mockup .step-badge {
+  transition: transform 0.3s ease-out;
+}
+.landing-mockup .step-card:hover .step-badge {
+  transform: translateX(-50%) scale(1.12);
+}
+.landing-mockup .step-card .step-icon {
+  transition: transform 0.3s ease-out;
+}
+.landing-mockup .step-card:hover .step-icon {
+  transform: rotate(-6deg) scale(1.1);
+}
+.landing-mockup .feature-card .fi {
+  transition: transform 0.3s ease-out;
+}
+.landing-mockup .feature-card:hover .fi {
+  transform: rotate(6deg) scale(1.1);
+}
+.landing-mockup .feature-card .num {
+  transition: color 0.3s ease-out;
+}
+.landing-mockup .feature-card:hover .num {
+  color: color-mix(in srgb, var(--brand-navy) 16%, transparent);
+}
+.landing-mockup .way-card .icon-sq {
+  transition: transform 0.3s ease-out;
+}
+.landing-mockup .way-card:hover .icon-sq {
+  transform: scale(1.12) rotate(-6deg);
+}
+.landing-mockup .way-card .glow {
+  transition: transform 0.5s ease-out;
+}
+.landing-mockup .way-card:hover .glow {
+  transform: scale(1.3);
+}
+.landing-mockup .widget-card .icon-sq {
+  transition: transform 0.3s ease-out;
+}
+.landing-mockup .widget-card:hover .icon-sq {
+  transform: scale(1.12);
+}
+
+.landing-mockup .btn-solid,
+.landing-mockup .btn-ghost,
+.landing-mockup .glass-cta {
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, filter 0.2s ease-out;
+}
+.landing-mockup .btn-solid:hover,
+.landing-mockup .glass-cta:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.06);
+  box-shadow: 0 16px 28px -10px hsl(var(--shadow-color) / 0.6);
+}
+.landing-mockup .btn-ghost:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--brand-navy) 30%, var(--glass-line));
+}
+
+.landing-mockup footer.tease {
+  padding: 0 0 70px;
+}
+.landing-mockup .footer-card {
+  border-radius: 26px;
+  padding: 52px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(155deg, var(--brand-navy-deep), #060a1c 60%);
+  border: 1px solid var(--glass-line);
+}
+.landing-mockup .footer-card::after {
+  content: '';
+  position: absolute;
+  inset: -40% -10% auto;
+  height: 340px;
+  background: radial-gradient(420px 260px at 70% 0%, color-mix(in srgb, var(--brand-green) 30%, transparent), transparent 70%);
+}
+.landing-mockup .footer-card h3 {
+  position: relative;
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 1.9rem;
+  color: #f6fbf8;
+  margin: 0 0 12px;
+  text-wrap: balance;
+}
+.landing-mockup .footer-card p {
+  position: relative;
+  color: #b7c0ea;
+  margin: 0 0 26px;
+  font-size: 0.95rem;
+}
+
+/* real site footer */
+.landing-mockup .site-footer {
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--brand-navy) 4%, var(--bg));
+  padding: 56px 0 0;
+}
+.landing-mockup .badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 40px;
+}
+.landing-mockup .trust-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 6px 14px 6px 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  box-shadow: 0 4px 10px -8px hsl(var(--shadow-color) / 0.5);
+}
+.landing-mockup .trust-badge .dot-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--brand-green) 16%, transparent);
+  color: var(--brand-green-deep);
+}
+.landing-mockup .footer-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 36px;
+  padding-bottom: 48px;
+}
+.landing-mockup .footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 1rem;
+}
+.landing-mockup .footer-brand .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--brand-navy), var(--brand-green));
+}
+.landing-mockup .footer-col p.addr,
+.landing-mockup .footer-col p.tag {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  max-width: 38ch;
+  margin: 10px 0 0;
+}
+.landing-mockup .footer-col p.reg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin: 10px 0 0;
+}
+.landing-mockup .footer-heading {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  margin: 0 0 14px;
+}
+.landing-mockup .footer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.landing-mockup .footer-list li {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.landing-mockup .footer-list .ico {
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--brand-navy) 10%, transparent);
+  color: var(--brand-navy);
+  flex-shrink: 0;
+}
+.landing-mockup .footer-bottom {
+  border-top: 1px solid var(--line);
+  padding: 20px 0;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+}
+.landing-mockup .footer-bottom .warn {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.landing-mockup .tag-note {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  padding: 30px 0;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 860px) {
+  .landing-mockup .hero {
+    grid-template-columns: 1fr;
+    padding-top: 60px;
+  }
+  .landing-mockup .product-row,
+  .landing-mockup .steps-row,
+  .landing-mockup .feature-row,
+  .landing-mockup .testi-row,
+  .landing-mockup .split-row,
+  .landing-mockup .ways-row,
+  .landing-mockup .footer-grid {
+    grid-template-columns: 1fr;
+  }
+  .landing-mockup .steps-rail {
+    display: none;
+  }
+  .landing-mockup .trust-row {
+    flex-wrap: wrap;
+    row-gap: 18px;
+  }
+  .landing-mockup .navlinks {
+    display: none;
+  }
+}

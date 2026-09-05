@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 import { Calculator } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
 import { estimateMonthlyPayment, estimateTotalRepayment } from '@/lib/loanEstimator';
@@ -35,6 +34,9 @@ function peso(value: number): string {
  * month approximation. That real chart isn't safe to fold into a public marketing widget (it needs
  * a specific product's assigned rate, which a not-yet-applying visitor hasn't chosen), so this
  * stays a simplified estimate - the disclaimer below says so explicitly.
+ *
+ * 2026-09-05: restyled to the approved landing-page mockup's `.widget-card`/`.calc-row`/`.calc-out`
+ * look (only used on LandingPage, inside its `.landing-mockup` scope - see landingMockupClone.css).
  */
 export function LoanCalculatorWidget() {
   const { t } = useLanguage();
@@ -46,27 +48,25 @@ export function LoanCalculatorWidget() {
   const totalRepayment = estimateTotalRepayment(amount, termMonths, category);
 
   return (
-    <div className="mx-auto max-w-xl rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Calculator className="h-5 w-5" />
-        </div>
-        <div>
-          <h3 className="text-base font-semibold">{t.loanCalculator.title}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{t.loanCalculator.subtitle}</p>
-        </div>
+    <div className="widget-card">
+      <div className="widget-head">
+        <span className="icon-sq">
+          <Calculator className="h-4 w-4" />
+        </span>
+        <h3>{t.loanCalculator.title}</h3>
       </div>
+      <p className="sub">{t.loanCalculator.subtitle}</p>
 
-      <div className="mt-6 space-y-5">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div>
-          <label htmlFor="calc-category" className="text-sm font-medium">
+          <label htmlFor="calc-category" style={{ fontSize: '0.86rem', fontWeight: 600 }}>
             {t.loanCalculator.loanType}
           </label>
           <select
             id="calc-category"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            style={{ marginTop: 6, width: '100%', borderRadius: 10, border: '1px solid var(--line)', background: 'var(--surface)', padding: '8px 12px', fontSize: '0.86rem' }}
           >
             {LOAN_PRODUCTS.map((product) => (
               <option key={product.category} value={product.category}>
@@ -77,11 +77,9 @@ export function LoanCalculatorWidget() {
         </div>
 
         <div>
-          <div className="flex items-center justify-between">
-            <label htmlFor="calc-amount" className="text-sm font-medium">
-              {t.loanCalculator.amountLabel}
-            </label>
-            <span className="text-sm font-semibold text-primary">{peso(amount)}</span>
+          <div className="calc-row">
+            <label htmlFor="calc-amount">{t.loanCalculator.amountLabel}</label>
+            <b style={{ color: 'var(--brand-navy)' }}>{peso(amount)}</b>
           </div>
           <input
             id="calc-amount"
@@ -91,20 +89,18 @@ export function LoanCalculatorWidget() {
             step={AMOUNT_STEP}
             value={amount}
             onChange={(e) => setAmount(Number(e.target.value))}
-            className="mt-2 w-full accent-primary"
+            style={{ marginTop: 8, width: '100%', accentColor: 'var(--brand-green)' }}
           />
-          <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--ink-soft)' }}>
             <span>{peso(AMOUNT_MIN)}</span>
             <span>{peso(AMOUNT_MAX)}</span>
           </div>
         </div>
 
         <div>
-          <div className="flex items-center justify-between">
-            <label htmlFor="calc-term" className="text-sm font-medium">
-              {t.loanCalculator.termLabel}
-            </label>
-            <span className="text-sm font-semibold text-primary">{termMonths}</span>
+          <div className="calc-row">
+            <label htmlFor="calc-term">{t.loanCalculator.termLabel}</label>
+            <b style={{ color: 'var(--brand-navy)' }}>{termMonths}</b>
           </div>
           <input
             id="calc-term"
@@ -114,31 +110,31 @@ export function LoanCalculatorWidget() {
             step={1}
             value={termMonths}
             onChange={(e) => setTermMonths(Number(e.target.value))}
-            className="mt-2 w-full accent-primary"
+            style={{ marginTop: 8, width: '100%', accentColor: 'var(--brand-green)' }}
           />
-          <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--ink-soft)' }}>
             <span>{TERM_MIN} month</span>
             <span>{TERM_MAX} months</span>
           </div>
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 rounded-xl bg-secondary/50 p-4">
+      <div className="calc-out">
         <div>
-          <p className="text-xs text-muted-foreground">{t.loanCalculator.monthlyPayment}</p>
-          <p className="mt-1 text-lg font-bold text-primary sm:text-xl">{peso(monthlyPayment)}</p>
+          <span>{t.loanCalculator.monthlyPayment}</span>
+          <b>{peso(monthlyPayment)}</b>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">{t.loanCalculator.totalRepayment}</p>
-          <p className="mt-1 text-lg font-bold sm:text-xl">{peso(totalRepayment)}</p>
+          <span>{t.loanCalculator.totalRepayment}</span>
+          <b>{peso(totalRepayment)}</b>
         </div>
       </div>
 
-      <Link to="/signup" className="mt-5 block">
-        <Button className="w-full">{t.landing.applyForThisLoan}</Button>
+      <Link to="/signup" className="glass-cta" style={{ marginTop: 20, display: 'block' }}>
+        {t.landing.applyForThisLoan}
       </Link>
 
-      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">{t.loanCalculator.disclaimer}</p>
+      <p style={{ marginTop: 16, fontSize: '0.74rem', lineHeight: 1.5, color: 'var(--ink-soft)' }}>{t.loanCalculator.disclaimer}</p>
     </div>
   );
 }

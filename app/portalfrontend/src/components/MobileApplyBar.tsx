@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
-import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/authContext';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
@@ -29,20 +28,28 @@ export function MobileApplyBar({ sentinelRef }: { sentinelRef: React.RefObject<H
     return () => observer.disconnect();
   }, [sentinelRef]);
 
+  // 2026-09-05: fixed light background/border (not Tailwind's dark-mode-aware tokens) - this only
+  // renders on the landing page mockup clone, which is deliberately light-only (see
+  // landingMockupClone.css), and `.btn-solid` for the CTA instead of the shared Button component,
+  // matching that page's own button treatment.
   return (
     <div
-      className={`fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 p-3 backdrop-blur transition-transform duration-300 md:hidden ${
+      className={`fixed inset-x-0 bottom-0 z-40 p-3 backdrop-blur transition-transform duration-300 md:hidden ${
         visible ? 'translate-y-0' : 'translate-y-full'
       }`}
+      style={{ borderTop: '1px solid var(--line, #e2e5f0)', background: 'rgba(243,245,251,0.95)' }}
       // Hidden from screen readers while off-screen, and its own tabIndex below keeps it out of
       // the keyboard tab order too, so it never grabs focus before visible page content when
       // it's translated out of view.
       aria-hidden={!visible}
     >
-      <Link to={isAuthenticated ? '/dashboard' : '/signup'} className="block" tabIndex={visible ? undefined : -1}>
-        <Button className="w-full" size="lg">
-          {isAuthenticated ? t.nav.goToDashboard : t.landing.applyToday}
-        </Button>
+      <Link
+        to={isAuthenticated ? '/dashboard' : '/signup'}
+        className="btn-solid"
+        style={{ display: 'flex', justifyContent: 'center', padding: '14px' }}
+        tabIndex={visible ? undefined : -1}
+      >
+        {isAuthenticated ? t.nav.goToDashboard : t.landing.applyToday}
       </Link>
     </div>
   );

@@ -40,7 +40,7 @@ export function SiteFooter() {
           ].map(({ icon: Icon, label }) => (
             <span
               key={label}
-              className="glass-panel inline-flex items-center gap-2 rounded-full py-1.5 pl-2 pr-3.5 text-xs font-semibold text-foreground"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-2 pr-3.5 text-xs font-semibold text-foreground shadow-sm"
             >
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Icon className="h-3 w-3" />
