@@ -4953,3 +4953,38 @@ re-enable). Confirmed: free RAM recovered to ~3GB, LMS containers (`easycashback
 - Office Server PC's real total RAM is 7.87GB - confirmed too tight to run Docker (postgres + 3
   web containers) and a resident vision-LLM comfortably at the same time. A RAM upgrade is the
   actual fix, not further tuning.
+
+## §103 — 2026-09-05: Ollama abandoned - moondream was inaccurate and slow even on the 16GB Macbook, fully uninstalled here
+
+Follow-up to §102. User set up Ollama on Macbook Nomer (16GB RAM, per the earlier hand-off prompt)
+to test AI Extraction there instead of on this RAM-constrained Office Server PC. After trying it
+for real, user reported `moondream`'s **accuracy and speed were both unsatisfactory even on that
+better machine** - so the RAM shortage on Office Server PC was never the actual blocker; the model
+itself wasn't good enough for reliable ID-field extraction.
+
+Given that, asked to fully uninstall Ollama from Office Server PC rather than keep it stopped-but-
+installed for a future RAM upgrade that would no longer solve the real problem.
+
+Uninstalled via `winget uninstall Ollama.Ollama` (succeeded), then removed the leftover
+`~/.ollama` model data directory (1.66GB - not removed by the uninstaller) and cleared the
+`OLLAMA_HOST`/`OLLAMA_KEEP_ALIVE` User env vars set in §102. Verified: no Ollama/llama-server
+process remains, and all four LMS containers (`easycashbackend`, `lmsfrontend`, `portalfrontend`,
+`postgres`) stayed healthy and unaffected throughout.
+
+### Current state / follow-ups
+
+- **AI Extraction's backend code and frontend UI (camera capture, review-step dialog with
+  confidence badges) are still in the codebase, unmodified** - this session only removed the
+  Ollama *infrastructure*. The feature will surface a clean "Could not process this file" error on
+  any machine without Ollama running, which is now the case everywhere by choice.
+- The `app/docker/docker-compose.yml` `extra_hosts` fix from §102 stays regardless - it's a
+  general Docker/DNS correctness fix unrelated to whether Ollama specifically is used.
+- If AI-based document extraction is revisited later, **don't default to "reinstall Ollama +
+  moondream"** - that exact setup was tried on both a RAM-constrained machine and a comfortable
+  16GB one, and failed on accuracy/speed on the latter too. Evaluating a different model or a
+  different approach entirely is the honest starting point, not a retry of the same config.
+- User is separately considering (not yet approved) a *selfie capture* feature for the customer-
+  facing Loan Application Portal (front camera, no upload option, to preserve some liveness
+  assurance for the applicant's profile photo) - this would reuse the plain `getUserMedia`+canvas
+  capture technique from the LMS's camera-capture work in §101, but does not depend on Ollama or
+  any vision model at all (no extraction involved, just a photo attachment).
