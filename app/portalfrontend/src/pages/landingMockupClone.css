@@ -453,6 +453,80 @@
 .landing-mockup section.split {
   padding: 0 0 90px;
 }
+/* Requirements page (2026-09-05, mockup-approved) */
+.landing-mockup .elig-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.landing-mockup .elig-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 16px 30px -26px hsl(var(--shadow-color) / 0.6);
+}
+.landing-mockup .elig-card .ico {
+  width: 38px;
+  height: 38px;
+  margin: 0 auto 12px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--brand-navy), var(--brand-green));
+  color: #fff;
+}
+.landing-mockup .elig-card p {
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  margin: 0;
+  line-height: 1.4;
+}
+.landing-mockup .doc-list {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border-top: 1px solid var(--glass-line);
+  padding-top: 4px;
+}
+.landing-mockup .doc-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--glass-line);
+  font-size: 0.84rem;
+}
+.landing-mockup .doc-item:last-child {
+  border-bottom: none;
+}
+.landing-mockup .doc-item svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--brand-green-deep);
+}
+.landing-mockup .doc-item.new {
+  color: var(--brand-navy);
+  font-weight: 600;
+}
+.landing-mockup .doc-item .badge {
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: color-mix(in srgb, var(--brand-navy) 10%, transparent);
+  color: var(--brand-navy);
+  padding: 2px 7px;
+  border-radius: 999px;
+  margin-left: 6px;
+}
+@media (max-width: 860px) {
+  .landing-mockup .elig-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .landing-mockup .split-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
