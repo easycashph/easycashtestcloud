@@ -4863,3 +4863,23 @@ resolved by regenerating); rebuilt `portalfrontend` too before pushing. Committe
 - ID-type chips (UMID/Driver's License/PhilID/etc.) from the mockup were deliberately not carried
   into the real implementation - they had no effect on extraction in the mockup either, and adding
   them for decoration only would be scope the user didn't ask for.
+
+**Follow-up same day**: user asked directly whether the mockup's review step (with per-field
+confidence badges) had actually been carried over - it hadn't; the first pass auto-filled directly
+into the form with only a post-hoc summary panel. Added it: extraction results now land in an
+editable review `Dialog` first (`aiReview` state) - image preview for camera/image captures, a
+"X sa 6 field ang na-detect" banner, and a `ReviewField` badge per field (green "na-detect" when the
+model returned a value, amber "i-check" when it returned NONE - an honest signal read from what the
+model actually reported, never a fabricated confidence score). Officer can edit any field or rescan
+before an explicit "Gamitin ang datos na ito, ituloy sa form" click writes the (possibly corrected)
+values into the real form state, still gated by the same "only fill if currently empty" rule.
+Also wired `monthlyIncome` into the review/apply flow - the backend already extracted it but no
+form field had ever consumed it. Type-checked clean, rebuilt `lmsfrontend`, verified healthy.
+Committed (`9a48bedb`) and pushed - nothing new to pull.
+
+Separately, user asked what happens if the *filled-up paper application form itself* (not an ID/
+payslip) is uploaded - confirmed this already works via the same code path (the prompt says "a
+valid ID, payslip, **or other supporting paper**"), with two known caveats worth remembering:
+handwriting is read less reliably than printed ID text, and if the model can't confidently tell a
+printed label from a handwritten answer it should (per the same "never guess" prompt) fall back to
+NONE rather than risk a wrong read - more "i-check" badges, not bad data. No code change needed.
