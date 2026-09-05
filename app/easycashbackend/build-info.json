@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-05T14:07:20+08:00",
-    "commitMessage":  "Extend AI Extraction with gender/nationality/DOB, add camera capture",
-    "commit":  "37a7e0cb",
-    "builtAt":  "2026-09-05T06:08:16.4097232Z"
+    "commitDate":  "2026-09-05T14:19:00+08:00",
+    "commitMessage":  "Update session log: §101 AI Extraction extension (gender/nationality/DOB + camera)",
+    "commit":  "3dacedd8",
+    "builtAt":  "2026-09-05T06:42:42.5890297Z"
 }

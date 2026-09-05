@@ -158,6 +158,27 @@ function Field({
   );
 }
 
+/** A field row inside the AI extraction review dialog - `badgeOn` shows a green "na-detect" pill
+ * when the AI produced a value for this field, or an amber "i-check" pill when it didn't (surfaced
+ * honestly, never a fabricated confidence score - see ExtractLoanApplicationFieldsUseCase.ts). */
+function ReviewField({ label, badgeOn, children }: { label: string; badgeOn: boolean; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs">{label}</Label>
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+            badgeOn ? 'bg-primary/10 text-primary' : 'bg-warning/10 text-warning'
+          }`}
+        >
+          {badgeOn ? 'na-detect' : 'i-check'}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function SectionCard({
   number,
   title,
@@ -505,9 +526,29 @@ export function LoanApplicationForm({
   const aiFileInputRef = React.useRef<HTMLInputElement>(null);
   const [aiError, setAiError] = React.useState<string | null>(null);
   const [aiFilledFieldLabels, setAiFilledFieldLabels] = React.useState<string[]>([]);
+  const [aiApplied, setAiApplied] = React.useState(false);
   // Retained only after a successful extraction, so it can be auto-saved as a real attachment once
   // the application record (and a real ownerId) exists - see createMutation's onSuccess below.
   const [aiExtractedFile, setAiExtractedFile] = React.useState<File | null>(null);
+
+  // Review step: extraction results land here first, editable, before anything is written into the
+  // real form fields - the officer confirms (or corrects) what the AI read before it counts.
+  // `null` means the review dialog is closed / nothing pending review.
+  interface AiReviewState {
+    name: string;
+    dateOfBirth: string;
+    gender: string;
+    nationality: string;
+    employer: string;
+    monthlyIncome: string;
+    address?: string;
+    summary: string;
+    warnings: string[];
+  }
+  const [aiReview, setAiReview] = React.useState<AiReviewState | null>(null);
+  const [aiReviewImageUrl, setAiReviewImageUrl] = React.useState<string | null>(null);
+  const AI_REVIEW_FIELD_COUNT = 6; // name, DOB, gender, nationality, employer, monthly income
+
   const extractMutation = useMutation({
     mutationFn: (file: File) => {
       const formData = new FormData();
@@ -516,44 +557,30 @@ export function LoanApplicationForm({
     },
     onSuccess: (result, file) => {
       setAiExtractedFile(file);
-      const filled: string[] = [];
-      if (result.applicantName && !firstName.trim() && !lastName.trim()) {
-        const parsed = splitFullName(result.applicantName);
-        setFirstName(parsed.firstName);
-        setMiddleName(parsed.middleName);
-        setLastName(parsed.lastName);
-        filled.push('Name');
-      }
-      if (result.address && !presentAddress.trim()) {
-        // Free-text from the AI can't be mapped into the cascading region/province/city/barangay
-        // picker below (no reverse PSGC name lookup - same limitation as `PsgcAddressPicker`'s own
-        // doc comment) - surfaced as a suggestion for the officer to select manually instead.
-        setAiSuggestedAddress(result.address);
-        filled.push('Present address (as a suggestion below - select it manually)');
-      }
-      if (result.employer && !employer.trim()) {
-        setEmployer(result.employer);
-        filled.push('Employer');
-      }
-      if (result.dateOfBirth && !dateOfBirth) {
-        setDateOfBirth(result.dateOfBirth);
-        filled.push('Date of birth');
-      }
-      if (result.gender && GENDER_OPTIONS.includes(result.gender) && !gender) {
-        setGender(result.gender);
-        filled.push('Gender');
-      }
-      if (result.nationality && !nationality.trim()) {
-        setNationality(result.nationality);
-        filled.push('Nationality');
-      }
-      setAiFilledFieldLabels(filled);
       setAiError(null);
+      setAiApplied(false);
+      setAiFilledFieldLabels([]);
+      setAiReviewImageUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+      });
+      setAiReview({
+        name: result.applicantName ?? '',
+        dateOfBirth: result.dateOfBirth ?? '',
+        gender: result.gender && GENDER_OPTIONS.includes(result.gender) ? result.gender : '',
+        nationality: result.nationality ?? '',
+        employer: result.employer ?? '',
+        monthlyIncome: result.monthlyIncome !== undefined ? String(result.monthlyIncome) : '',
+        address: result.address,
+        summary: result.summary,
+        warnings: result.warnings,
+      });
     },
     onError: (error) => {
       setAiExtractedFile(null);
       setAiError(error instanceof Error ? error.message : 'Could not process this file.');
       setAiFilledFieldLabels([]);
+      setAiReview(null);
     },
   });
 
@@ -568,6 +595,57 @@ export function LoanApplicationForm({
       return;
     }
     extractMutation.mutate(file);
+  };
+
+  // Writes the (possibly officer-edited) review values into the real form fields - same "only fill
+  // what's currently empty" convention as before, just moved behind an explicit confirm click.
+  const applyAiReview = () => {
+    if (!aiReview) return;
+    const filled: string[] = [];
+    if (aiReview.name.trim() && !firstName.trim() && !lastName.trim()) {
+      const parsed = splitFullName(aiReview.name.trim());
+      setFirstName(parsed.firstName);
+      setMiddleName(parsed.middleName);
+      setLastName(parsed.lastName);
+      filled.push('Name');
+    }
+    if (aiReview.address && !presentAddress.trim()) {
+      // Free-text from the AI can't be mapped into the cascading region/province/city/barangay
+      // picker below (no reverse PSGC name lookup - same limitation as `PsgcAddressPicker`'s own
+      // doc comment) - surfaced as a suggestion for the officer to select manually instead.
+      setAiSuggestedAddress(aiReview.address);
+      filled.push('Present address (as a suggestion below - select it manually)');
+    }
+    if (aiReview.employer.trim() && !employer.trim()) {
+      setEmployer(aiReview.employer.trim());
+      filled.push('Employer');
+    }
+    if (aiReview.monthlyIncome.trim() && !monthlyIncome.trim()) {
+      setMonthlyIncome(aiReview.monthlyIncome.trim());
+      filled.push('Monthly income');
+    }
+    if (aiReview.dateOfBirth && !dateOfBirth) {
+      setDateOfBirth(aiReview.dateOfBirth);
+      filled.push('Date of birth');
+    }
+    if (aiReview.gender && GENDER_OPTIONS.includes(aiReview.gender) && !gender) {
+      setGender(aiReview.gender);
+      filled.push('Gender');
+    }
+    if (aiReview.nationality.trim() && !nationality.trim()) {
+      setNationality(aiReview.nationality.trim());
+      filled.push('Nationality');
+    }
+    setAiFilledFieldLabels(filled);
+    setAiApplied(true);
+    setAiReview(null);
+  };
+
+  const dismissAiReview = () => {
+    setAiReview(null);
+    setAiExtractedFile(null);
+    if (aiReviewImageUrl) URL.revokeObjectURL(aiReviewImageUrl);
+    setAiReviewImageUrl(null);
   };
 
   // Live camera capture - an alternative to picking a file, for applicants/staff who have the ID
@@ -618,6 +696,7 @@ export function LoanApplicationForm({
   };
 
   React.useEffect(() => stopCameraStream, []);
+  React.useEffect(() => () => { if (aiReviewImageUrl) URL.revokeObjectURL(aiReviewImageUrl); }, [aiReviewImageUrl]);
 
   const handleDocumentFileSelected = (category: AttachmentDocumentCategory, file: File) => {
     if (!ATTACHMENT_ACCEPTED_MIME.has(file.type)) {
@@ -899,15 +978,11 @@ export function LoanApplicationForm({
               <span className="text-muted-foreground">Reading the document and matching fields…</span>
             </div>
           )}
-          {extractMutation.isSuccess && !aiError && (
+          {aiApplied && !aiError && (
             <div className="space-y-2 rounded-md border border-primary/30 bg-background p-3 text-xs">
-              <p className="text-muted-foreground">{extractMutation.data.summary}</p>
-              {extractMutation.data.age !== undefined && !extractMutation.data.dateOfBirth && (
-                <p className="text-muted-foreground">Extracted age: {extractMutation.data.age} (set the exact Date of Birth below manually).</p>
-              )}
               {aiFilledFieldLabels.length > 0 ? (
                 <div className="space-y-1">
-                  <p className="font-medium text-primary">AI-suggested - please verify:</p>
+                  <p className="font-medium text-primary">Applied to the form - please verify:</p>
                   <div className="flex flex-wrap gap-1.5">
                     {aiFilledFieldLabels.map((label) => (
                       <span
@@ -922,11 +997,6 @@ export function LoanApplicationForm({
               ) : (
                 <p className="text-muted-foreground">No empty fields were filled (either nothing was confidently readable, or the fields were already filled in).</p>
               )}
-              {extractMutation.data.warnings.map((w) => (
-                <div key={w} className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
-                  <AlertCircle className="h-3 w-3" /> {w}
-                </div>
-              ))}
               {aiExtractedFile && (
                 <div className="flex items-center justify-between gap-2 pt-1">
                   <p className="text-muted-foreground">
@@ -999,6 +1069,106 @@ export function LoanApplicationForm({
             <Button type="button" onClick={capturePhoto} disabled={!!cameraError}>
               <Camera className="mr-2 h-4 w-4" /> Capture
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!aiReview} onOpenChange={(open) => !open && dismissAiReview()}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" /> Review the detected fields
+            </DialogTitle>
+            <DialogDescription>Edit anything that&apos;s wrong before applying it to the form - nothing is saved yet.</DialogDescription>
+          </DialogHeader>
+          {aiReview && (
+            <div className="space-y-3">
+              {aiReviewImageUrl && (
+                <img src={aiReviewImageUrl} alt="Captured document" className="max-h-40 w-full rounded-md border object-contain" />
+              )}
+              {(() => {
+                const detectedCount = [
+                  aiReview.name,
+                  aiReview.dateOfBirth,
+                  aiReview.gender,
+                  aiReview.nationality,
+                  aiReview.employer,
+                  aiReview.monthlyIncome,
+                ].filter((v) => v.trim() !== '').length;
+                const allDetected = detectedCount === AI_REVIEW_FIELD_COUNT;
+                return (
+                  <div
+                    className={`flex items-center gap-2 rounded-md border p-2.5 text-xs font-medium ${
+                      allDetected ? 'border-primary/30 bg-primary/10 text-primary' : 'border-warning/40 bg-warning/10 text-warning'
+                    }`}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                    {detectedCount} sa {AI_REVIEW_FIELD_COUNT} field ang na-detect nang malinaw.
+                  </div>
+                );
+              })()}
+              <ReviewField label="Name" badgeOn={aiReview.name.trim() !== ''}>
+                <Input value={aiReview.name} onChange={(e) => setAiReview({ ...aiReview, name: e.target.value })} />
+              </ReviewField>
+              <ReviewField label="Date of birth" badgeOn={aiReview.dateOfBirth.trim() !== ''}>
+                <Input type="date" value={aiReview.dateOfBirth} onChange={(e) => setAiReview({ ...aiReview, dateOfBirth: e.target.value })} />
+              </ReviewField>
+              <ReviewField label="Gender" badgeOn={aiReview.gender.trim() !== ''}>
+                <Select value={aiReview.gender || undefined} onValueChange={(v) => setAiReview({ ...aiReview, gender: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Not detected" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GENDER_OPTIONS.map((o) => (
+                      <SelectItem key={o} value={o}>
+                        {o}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </ReviewField>
+              <ReviewField label="Nationality" badgeOn={aiReview.nationality.trim() !== ''}>
+                <Input value={aiReview.nationality} onChange={(e) => setAiReview({ ...aiReview, nationality: e.target.value })} />
+              </ReviewField>
+              <ReviewField label="Employer" badgeOn={aiReview.employer.trim() !== ''}>
+                <Input value={aiReview.employer} onChange={(e) => setAiReview({ ...aiReview, employer: e.target.value })} />
+              </ReviewField>
+              <ReviewField label="Monthly income" badgeOn={aiReview.monthlyIncome.trim() !== ''}>
+                <NumberInput min="0" value={aiReview.monthlyIncome} onChange={(e) => setAiReview({ ...aiReview, monthlyIncome: e.target.value })} placeholder="0.00" />
+              </ReviewField>
+              {aiReview.address && (
+                <ReviewField label="Present address (suggestion only - select it manually below)" badgeOn>
+                  <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{aiReview.address}</p>
+                </ReviewField>
+              )}
+              {aiReview.warnings.map((w) => (
+                <div key={w} className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
+                  <AlertCircle className="h-3 w-3" /> {w}
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground">{aiReview.summary}</p>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                dismissAiReview();
+                aiFileInputRef.current?.click();
+              }}
+            >
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> I-scan ulit
+            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={dismissAiReview}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={applyAiReview}>
+                Gamitin ang datos na ito, ituloy sa form
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
