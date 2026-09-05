@@ -40,6 +40,13 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
+    # 2026-09-05: the public resolvers above have no entry for `host.docker.internal` (it's a
+    # Docker Desktop-only name, not a real DNS record) - once they replaced the embedded resolver,
+    # every call from this container to the host (e.g. OllamaVisionModelClient's default
+    # OLLAMA_BASE_URL) started failing with ENOTFOUND. A static hosts-file entry resolves it without
+    # touching DNS at all, so it survives the override above.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     depends_on:
       postgres:
         condition: service_healthy

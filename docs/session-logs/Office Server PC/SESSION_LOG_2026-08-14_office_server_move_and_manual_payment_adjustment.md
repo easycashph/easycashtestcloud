@@ -4883,3 +4883,73 @@ valid ID, payslip, **or other supporting paper**"), with two known caveats worth
 handwriting is read less reliably than printed ID text, and if the model can't confidently tell a
 printed label from a handwritten answer it should (per the same "never guess" prompt) fall back to
 NONE rather than risk a wrong read - more "i-check" badges, not bad data. No code change needed.
+
+## §102 — 2026-09-05: Ollama was never actually running here - installed it, hit a RAM wall, disabled it again
+
+User tried the AI Extraction feature for real (uploaded an ID) and got "unexpected error." Investigation
+found this was never actually working *on this specific machine* - the feature was built and
+previously exercised elsewhere (Macbook Nomer per earlier session logs), but Office Server PC itself
+had no local Ollama instance running.
+
+**First bug found and fixed**: `docker-compose.yml`'s `easycashbackend` service has an explicit
+`dns: [8.8.8.8, 1.1.1.1]` override (added 2026-07-25 to fix flaky external-hostname resolution for
+the SMS gateway). Public resolvers have no record for `host.docker.internal` (a Docker
+Desktop-only name, not a real DNS entry) - once they replaced the container's embedded resolver,
+every call to `OLLAMA_BASE_URL`'s default (`http://host.docker.internal:11434`) started failing
+with `ENOTFOUND`. Fixed by adding `extra_hosts: ["host.docker.internal:host-gateway"]` to the
+service - a static hosts-file entry that doesn't depend on DNS at all, so it survives the override.
+
+**Second, bigger issue**: Ollama wasn't installed on this machine at all. Installed it via
+`winget install Ollama.Ollama` (hash-verified), pulled `moondream` (1.7GB). Two follow-up fixes
+were needed before it actually worked end-to-end:
+- Default install binds to `127.0.0.1` only - unreachable from Docker containers. Set
+  `OLLAMA_HOST=0.0.0.0` (persisted as a User env var) and restarted the service.
+- First real extraction attempts timed out (one client-observed abort at 125s, logged as
+  `"msg":"request aborted"` in the backend). Root cause: this machine has only 7.87GB total RAM,
+  and free RAM was hovering around 0.86-1.2GB with the full Docker stack running - a cold model
+  load under that pressure is highly variable (measured 17s-50s in controlled tests, but the
+  125s+ real-world case likely coincided with worse contention and probably tripped the ~100s
+  Cloudflare Quick Tunnel timeout on top of it). Confirmed via direct, no-tunnel timing tests
+  (`curl.exe` straight to `localhost:11434`) that this was genuine slowness, not a tunnel-only
+  artifact - cold load breaks down as ~30s weight-load + ~15s image encode + ~2s generation.
+
+**Fix applied**: `OLLAMA_KEEP_ALIVE=-1` (persisted as a User env var) so the model stays resident
+in RAM indefinitely instead of unloading after Ollama's 5-minute default - warm requests dropped
+to ~2.6s. Verified the backend container could reach and use it end-to-end (direct vision-model
+calls from inside `easycash-easycashbackend-1`, real (non-corrupt) test JPEG, correct description
+returned).
+
+**User's decision**: keeping ~2GB permanently resident on a 7.87GB machine only left ~0.86GB free
+system-wide - user judged this too close to the edge for a shared office server (worried that
+other LMS users could see general slowdown/swapping, not just AI Extraction being slow) and asked
+to disable Ollama entirely until the machine's RAM is upgraded, rather than accept the tradeoff.
+Agreed this was the right call, and recommended stopping the service rather than uninstalling it
+(the feature is opt-in - a click on "Take a photo"/"Upload a file" - and fails cleanly with an
+error message when Ollama is down, so it can't affect any other LMS user or workflow; uninstalling
+would just mean re-downloading and re-fixing the same two bugs above later for no benefit).
+
+Stopped `ollama`/`ollama app`/`llama-server` processes, and disabled the auto-start shortcut by
+moving `Ollama.lnk` out of the Startup folder into
+`C:\Users\Admin\AppData\Local\Programs\Ollama\disabled-autostart\` (not deleted - move it back to
+re-enable). Confirmed: free RAM recovered to ~3GB, LMS containers (`easycashbackend`,
+`lmsfrontend`, `portalfrontend`, `postgres`) unaffected and healthy throughout.
+
+### Current state / follow-ups
+
+- **AI Extraction (both the original feature and this session's Gender/Nationality/DOB + camera +
+  review-step extension) is fully implemented and deployed, but Ollama is deliberately stopped on
+  Office Server PC** - clicking "Take a photo"/"Upload a file" will surface a clean error until
+  Ollama is manually restarted. This is an infrastructure/capacity decision, not a code defect.
+- To re-enable once this machine's RAM is upgraded: move
+  `C:\Users\Admin\AppData\Local\Programs\Ollama\disabled-autostart\Ollama.lnk` back to
+  `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\` (or just start Ollama manually) - the
+  `OLLAMA_HOST=0.0.0.0` and `OLLAMA_KEEP_ALIVE=-1` User env vars and the docker-compose
+  `extra_hosts` fix are already in place and don't need to be redone.
+- The `docker-compose.yml` `extra_hosts` fix is a general Docker/DNS correctness fix (not tied to
+  Ollama specifically) and should stay regardless of whether Ollama is running - it's already
+  committed and pushed, so Laptop Nomer/Macbook Nomer will pick it up on their next pull, which is
+  worth doing even on machines where Ollama runs fine, since the same public-DNS-override-breaks-
+  host.docker.internal bug would apply there too the moment they add a similar `dns:` override.
+- Office Server PC's real total RAM is 7.87GB - confirmed too tight to run Docker (postgres + 3
+  web containers) and a resident vision-LLM comfortably at the same time. A RAM upgrade is the
+  actual fix, not further tuning.
