@@ -4752,3 +4752,51 @@ just writes.
   (§ - once during this pull's rebuild) - a plain retry resolved it both times without needing the
   full Windows restart §-level intervention required once earlier this session. Worth trying a
   retry or two before escalating to a restart next time.
+
+## §100 — 2026-09-05: 16 of the 23 remaining coded addresses were actually resolvable - wrote a fallback backfill
+
+User asked to look closer at the 23 addresses §99 left unresolved rather than accept them as
+unfixable. Requested 5 examples first, then a full breakdown before writing anything -
+investigated every one of the 23 directly against the PSGC tables (province/city/barangay joins,
+not guessing) rather than trusting `backfill-numbered-barangay-addresses.ts`'s own "unresolved"
+verdict at face value.
+
+Found two distinct, confirmable root causes, both real bugs in that script's plain
+`Map<cityName, code>` lookup, not genuine PSGC data gaps:
+1. **Duplicate city/district names across provinces** - "SANTA ANA" exists in NCR/Manila and two
+   other provinces, "SANTA CRUZ" in six - a plain name-keyed Map can only hold one code per name,
+   so whichever province's row happened to load last into the array silently won, even when the
+   correct Manila-district barangay genuinely existed (confirmed directly: Barangay 897/772/794
+   really do exist under NCR's Santa Ana, code `133914`; Barangay 336 under NCR's Santa Cruz, code
+   `133905`).
+2. **A stored `cityMunicipality` value with an extra qualifier** the PSGC table's plain name
+   doesn't carry - "Pandacan, City Of Manila" vs PSGC's plain "PANDACAN", "Caloocan City, NCR" vs
+   "CALOOCAN CITY", etc. - confirmed the referenced barangay numbers were within each district's
+   real PSGC range in every case before concluding this was fixable, not confirmation bias.
+
+Wrote a new follow-up script, `backfill-numbered-barangay-addresses-ncr-fallback.ts`: strips a
+trailing ", City Of Manila"/", NCR"/", Metro Manila" qualifier before the exact-match lookup, and
+when a city name still resolves to more than one PSGC row, prefers the one whose province name
+contains "NCR" (Easycash's own borrower base is Metro Manila) - but only writes when that
+narrows it to exactly one candidate, never guessing among still-ambiguous duplicates. Type-checked
+clean. Dry run found 16 of 23 resolvable (2 more than the initial manual estimate of 14 - "Tondo I
+/ Ii" barangays 134/102 turned out to be in range after all, contrary to an earlier hand-check).
+User confirmed applying; ran with `--apply`, verified directly against the DB: 23 -> 7 remaining,
+exactly as predicted. Committed and pushed.
+
+**The remaining 7 are now confirmed, not assumed, to be genuine PSGC data gaps** (barangay number
+out of that district's real range, or a mis-transcribed abbreviation like "Sta Cruz Manila" whose
+intended number is still out of range even once the name is corrected) - Malate 179, Binondo 105,
+"Sta Cruz Manila" 222, Santa Ana 669, Intramuros 123, "Tondo Manila" 101, Paco 769.
+
+### Current state / follow-ups
+
+- **7 addresses still carry a numeric barangay value** - genuinely unresolvable via PSGC lookup
+  (verified, not just left over from caution). These need either a corrected barangay number from
+  the original source data, or a business decision to leave a numeric placeholder for these edge
+  cases - not something a name-matching script can responsibly guess. Flagged, not scheduled.
+- All three backfill scripts in this family
+  (`backfill-psgc-code-addresses-to-names.ts`, `backfill-numbered-barangay-addresses.ts`,
+  `backfill-numbered-barangay-addresses-ncr-fallback.ts`) are idempotent and safe to re-run on any
+  machine (Laptop Nomer, Macbook Nomer) - each only touches rows still matching its own numeric-
+  value filter, so a row already fixed by an earlier script or a prior run is silently skipped.
