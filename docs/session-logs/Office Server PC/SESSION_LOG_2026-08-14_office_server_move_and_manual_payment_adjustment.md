@@ -5773,3 +5773,27 @@ pushed (`325743e4`).
   current origin dynamically - works as-is once a permanent domain replaces the Cloudflare tunnel,
   no follow-up code change needed.
 - No backend changes this session - Portal-frontend-only feature.
+
+**Follow-up same day**: user checked the live site (`easycash-portal.pages.dev`) and reported the
+footer link went unnoticed ("nasa requirement page pala. Hindi kasi pansin ito"). Asked for
+alternative placements; proposed header icon-button, a top banner, a Dashboard-only banner, a
+floating button, and a one-time desktop-only login toast - recommended header + Dashboard banner
+as the combo, user asked to mock up just the header option first. First mockup used an icon-only
+button with a hover tooltip; user then asked "mai lalagay ba natin yung salitang Get the App?"
+(should the words themselves be visible, not just on hover) - agreed and changed the mockup to an
+icon+visible-text pill button (same shape as the existing Log In/Apply Now buttons) before
+implementing. User approved with "Oo, ayos na, gawin mo na sa code at i remove sa footer."
+
+Implemented in `LandingPage.tsx`: added a `Link to="/get-app"` styled `btn-ghost` (icon + "Get the
+App" text) between the nav links and the language toggle in the desktop header, and the same as a
+regular labeled row (after "Security & Anti-Scam", before "Language") in the mobile hamburger menu
+- both using the already-imported `Smartphone` lucide icon. Removed the footer's "Get the App"
+link and its now-unused `footer.getApp` translation keys; added `nav.getApp` (EN: "Get the App",
+FIL: "Kunin ang App") instead. Type-checked clean, rebuilt `portalfrontend` (and `easycashbackend`
+also got recreated by the same `docker compose up -d --build portalfrontend` call - harmless, its
+`/health` endpoint and logs confirmed it came back up fine and kept serving live Portal traffic
+through the Cloudflare tunnel without interruption). Verified in the Browser pane at both a
+1440x900 desktop viewport (button reads "Get the App" on one line, routes to `#/get-app`) and a
+375x812 mobile viewport (hamburger menu lists "Get the App" as its own row). Footer confirmed to
+no longer show the link. Committed (`885f70c4`) and pushed directly (no incoming remote commits
+this time).
