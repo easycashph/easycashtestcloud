@@ -5703,3 +5703,73 @@ entirely "pull other people's work and get this machine caught up," not new feat
   `prisma/migrations/` folder with an explicit `npx prisma migrate deploy` inside the backend
   container (or check `prisma migrate status` first) rather than assuming the rebuild alone
   synced the schema.
+
+## §116 — 2026-09-06: "Get the App" QR-code/shareable-link page for the Portal
+
+User asked (Tagalog): "pwede ba tayo gumawa ng link or i scan ang qrcode na pwede i padala sa iba
+para ma install ang app icon sa mobile phone? ang easycash client portal" - a way to send someone
+a link or QR code so they can add the Portal's icon to their own phone's home screen, without
+walking them through typing a URL by hand. Two options were proposed; user picked option 2 (a
+dedicated page) and asked to see a mockup before implementation ("Install App Mockup" Artifact,
+approved). When asked which URL to encode, user confirmed: "Cloudflare tunnel URL muna, temporary
+lang" - use whatever URL the Portal is currently reachable at, since the tunnel URL isn't
+permanent yet.
+
+**Design decision - dynamic origin, not a hardcoded URL.** The QR code and copyable link both
+encode `window.location.href` (not a literal domain string) via a `useCurrentOrigin()` hook in the
+new `GetAppPage.tsx`. This means the page keeps working with zero code changes regardless of
+whether the Portal is reached through the current Cloudflare Quick Tunnel (which changes on every
+restart), a future ngrok/permanent tunnel, or an eventual real domain - there was nothing to
+hardcode in the first place, so no follow-up work is needed when the URL changes later.
+
+**Implementation:**
+- Installed `qrcode` + `@types/qrcode` (`npm install qrcode` / `--save-dev @types/qrcode`) in
+  `app/portalfrontend` - no QR library existed there before (`grep -i qrcode package.json` came up
+  empty). Chose the plain `qrcode` package (renders to a `<canvas>` via `QRCode.toCanvas()`) over a
+  React-wrapper package - it's the most standard/maintained option and needed no React-specific
+  API, just a `useEffect` + canvas ref.
+- New page `app/portalfrontend/src/pages/GetAppPage.tsx`: a QR code (navy-on-white, matching the
+  brand palette used elsewhere), the copyable link with a Copy button (Clipboard API, falls back
+  silently if denied), a "Share link…" button (Web Share API `navigator.share()` where available,
+  falls back to copy), and tabbed step-by-step "Add to Home Screen" instructions for Android
+  (Chrome) and iPhone (Safari) - content matches the approved mockup. Built on the existing
+  `PublicPageLayout` shell (same one Contact/Complaints/Privacy/Terms use) rather than the
+  landing-page's own glassmorphism treatment RequirementsPage uses - this page didn't need that
+  heavier styling.
+- Registered a new public route `/get-app` in `App.tsx`'s `AppRoutes()` (lazy-loaded, same pattern
+  as every other page) - public because someone without a Portal account yet is exactly who'd be
+  scanning this to install the app before ever logging in.
+- Added a "Get the App" link to `SiteFooter.tsx`'s Quick Links column so the page is discoverable
+  from anywhere on the site, not just a direct link. Added `footer.getApp` and a new `getApp.*`
+  translation namespace (eyebrow/title/intro/scan copy/copy-button/share-button/install
+  instructions/tab labels) to both `en` and `fil` in `translations.ts`, matching this Portal's
+  existing bilingual-toggle architecture (unrelated to the earlier, feature-scoped "translate AI
+  Extraction/review-card to English" request from §102-ish - the Portal's EN/FIL toggle is a
+  deliberate, pre-existing system, not something being undone).
+
+**Verification:** `npx tsc --noEmit` clean. Rebuilt `portalfrontend` via
+`docker compose up -d --build portalfrontend` - built and started healthy. Checked for the
+recurring stale-WSL2-listener bug (`wsl -e sh -c "netstat -tlnp | grep 5199"`) - only one listener,
+clean this time. Hit the now-familiar **browser HTTP cache bug** on first load after the rebuild
+(`docs/session-logs/.../§...` - see the dedicated `project_stale_docker_wsl_port_forward` memory):
+the tab still had the previous build's `index-*.js` cached, which tried to dynamically import a
+chunk hash (`NotFoundPage-*.js`) that no longer existed on the freshly-built server, producing a
+"Failed to fetch dynamically imported module" error and the app's error boundary. A cache-busting
+reload (`?cb=1`) forced a genuine fresh fetch and the page loaded correctly on the next navigation
+- not a bug in the new code, just the same known browser-cache quirk recurring, confirmed via
+console errors that named a stale chunk hash from a prior build. Verified in the Browser pane:
+`/#/get-app` renders the QR code, copy button, share button, and both instruction tabs
+(Android/iPhone tab-switch confirmed working); the footer's new "Get the App" link on
+`/#/requirements` correctly points to `#/get-app`.
+
+Committed (`4958335`) and pushed. Remote had two unrelated Macbook-Nomer sync commits
+(`798b4b9b`/`061e5ca9`, docs + build-info only) - pulled and merged cleanly (no conflicts), then
+pushed (`325743e4`).
+
+### Current state after §116
+
+- Portal now has a public `/get-app` page, linked from the footer, that any visitor (logged in or
+  not) can use to get a QR code/link to install the Portal on a phone's home screen. Encodes the
+  current origin dynamically - works as-is once a permanent domain replaces the Cloudflare tunnel,
+  no follow-up code change needed.
+- No backend changes this session - Portal-frontend-only feature.
