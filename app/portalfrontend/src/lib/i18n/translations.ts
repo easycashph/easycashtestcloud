@@ -61,6 +61,7 @@ export const en = {
     theme: 'Theme',
     language: 'Language',
     seeAllProducts: 'See all products',
+    getApp: 'Get the App',
   },
   footer: {
     tagline:
@@ -75,7 +76,6 @@ export const en = {
     complaints: 'File a Complaint',
     privacy: 'Data Privacy Statement',
     terms: 'Terms and Conditions',
-    getApp: 'Get the App',
     rightsReserved: 'All rights reserved.',
     scamWarning: 'Easycash will never ask for a fee before releasing your loan, or for your OTP or password.',
   },
@@ -958,6 +958,7 @@ export const fil: Translations = {
     theme: 'Tema',
     language: 'Wika',
     seeAllProducts: 'Tingnan lahat ng produkto',
+    getApp: 'Kunin ang App',
   },
   footer: {
     tagline:
@@ -972,7 +973,6 @@ export const fil: Translations = {
     complaints: 'Magsampa ng Reklamo',
     privacy: 'Pahayag ng Data Privacy',
     terms: 'Mga Tuntunin at Kundisyon',
-    getApp: 'Kunin ang App',
     rightsReserved: 'Nakalaan ang lahat ng karapatan.',
     scamWarning: 'Hindi kailanman hihingi ang Easycash ng bayad bago ilabas ang loan, o ng iyong OTP o password.',
   },

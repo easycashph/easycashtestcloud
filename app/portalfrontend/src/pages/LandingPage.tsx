@@ -244,6 +244,13 @@ function Navbar() {
             <Phone className="h-3.5 w-3.5" />
             {COMPANY.contact.landline}
           </a>
+          {/* 2026-09-06 (user request, mockup-approved): icon + visible text, not an icon-only
+              button - a plain icon with only a hover tooltip went unnoticed when this same link
+              lived in the footer, so the label stays on-screen at all times here instead. */}
+          <Link to="/get-app" className="btn-ghost">
+            <Smartphone className="h-3.5 w-3.5" />
+            {t.nav.getApp}
+          </Link>
           <LanguageToggle />
           {isAuthenticated ? (
             <Link to="/dashboard" className="btn-solid">
@@ -294,6 +301,14 @@ function Navbar() {
             </Link>
             <Link to="/security-tips" onClick={() => setOpen(false)} style={{ fontSize: 14, fontWeight: 600, color: 'inherit', textDecoration: 'none' }}>
               {t.nav.securityFull}
+            </Link>
+            <Link
+              to="/get-app"
+              onClick={() => setOpen(false)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: 'inherit', textDecoration: 'none' }}
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+              {t.nav.getApp}
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-soft)' }}>{t.nav.language}</span>

@@ -159,11 +159,6 @@ export function SiteFooter() {
                   {t.footer.terms}
                 </Link>
               </li>
-              <li>
-                <Link to="/get-app" className="hover:text-foreground hover:underline">
-                  {t.footer.getApp}
-                </Link>
-              </li>
             </ul>
           </div>
         </div>
