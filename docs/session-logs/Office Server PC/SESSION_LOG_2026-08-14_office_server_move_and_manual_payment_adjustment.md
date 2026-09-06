@@ -5435,18 +5435,59 @@ Salary/Seafarer's own additions). Committed (`a878bb8f`) and pushed - nothing ne
 
 ### Current state / follow-ups
 
-- The Portal's Requirements page is the only place these 4 new SME items are surfaced -
-  `AttachmentDocumentCategory` and the LMS's own `DOCUMENT_SLOTS`/Applicant Documents section were
-  deliberately not touched (matches the existing precedent for Salary/Seafarer's extras, which are
-  also Portal-only notes, not real upload slots, pending a future migration).
 - **New operational knowledge worth remembering**: after repeated `docker compose up -d --build`
   cycles on a given service within one Docker Desktop session, a stale WSL2 port-forward can cause
   the host port to serve an already-destroyed container's content instead of the current one - a
   full Docker Desktop restart (not just a container recreate) is the fix, and it's worth checking
   for a duplicate `wsl-bootstrap`/`wslrelay` listener via `netstat` before assuming a code or
   browser-cache problem when a rebuilt page doesn't reflect its own changes.
-- Loan-category renaming (Business Loan→SME Loan, Salary Loan→Personal Loan) at the *data* level
-  remains explicitly not done and, per this session's investigation, should stay that way absent a
-  much larger, deliberately-scoped migration effort - the existing Portal-only `displayLabel`
-  pattern is the safe way to show the new names anywhere else they're wanted (e.g. LMS staff UI),
-  should that be requested later.
+
+## §111 — 2026-09-06: Wired loan-category display labels into the LMS; added Applicant Documents notes
+
+User noticed the LMS's own "Type of loan" dropdown still showed "Business Loan"/"Salary Loan"
+after §110's Portal-only display rename, and asked to fix it there too - also asked to mirror the
+new SME requirement notes into the LMS's own Applicant Documents section.
+
+**Found a better mechanism than replicating the Portal's approach**: rather than hardcoding a
+parallel `displayLabel` map in the LMS, `LoanApplicationDetailPage.tsx` already used
+`productTypeLabel()`/`useProductTypeLabels()` - a DB-backed, admin-editable renaming system
+(`ProductTypeLabel` table, `/product-type-labels` API) built 2026-07-20 for exactly this purpose,
+with its own management UI at System > Loan Products > Product Types. Wired the same
+`productTypeLabel()` call into every remaining raw-text display of the category that didn't
+already use it: `LoanApplicationCreatePage.tsx`'s "Type of loan" `Select` options,
+`LoanApplicationsPage.tsx`'s category filter dropdown and the applications table's Category
+column, and `LoanApplicationDetailPage.tsx`'s two read-only Category displays. Falls back to the
+canonical name (unchanged behavior) when no override row exists.
+
+**Went to actually rename "Business Loan" -> "SME Loan" via that admin UI and found a real naming
+collision first**: the Loan Products catalog already has a genuinely distinct
+**"Small and Medium-sized Enterprises Loan"** Product Type (the real `SME-` prefix product line,
+`productTypeClassification.ts`) - renaming "Business Loan" to also say "SME Loan" would put two
+different categories on screen with the same or near-identical name. Flagged this before renaming
+anything. User chose to leave the rename undone entirely rather than pick a compromise name - the
+display-label wiring stays in place either way, so it's a one-click change later if/when a
+non-colliding name is settled on.
+
+Mirrored the Portal's `ADDITIONAL_REQUIREMENTS_NOTES` (Business/Salary/Seafarer Loan extra
+documents) into a same-named constant in `LoanApplicationCreatePage.tsx`, rendered as a small note
+under the Applicant Documents upload slots ("Also have ready for this loan type (no upload slot
+here yet)") - manually kept in sync with the Portal's copy since the two apps share no code, noted
+inline in both files' doc comments.
+
+Type-checked clean, rebuilt `lmsfrontend`, verified healthy (checked for the §110 stale-WSL-
+forward issue too this time - only one `wsl-bootstrap` listener on port 5173, clean). Verified in
+the browser: category dropdowns/table cells still show the canonical names (correct - no rename
+was applied), and the new Applicant Documents note correctly lists all 4 SME items when "Business
+Loan" is selected as the type. Committed (`3d68599a`) and pushed - nothing new to pull.
+
+### Current state / follow-ups
+
+- Loan-category renaming (Business Loan/Salary Loan) remains undone by deliberate choice, not an
+  oversight - see the naming-collision note above. If revisited, the display-label wiring already
+  everywhere it needs to be; only the actual `ProductTypeLabel` rows need editing via System > Loan
+  Products > Product Types, picking a name that doesn't collide with the existing "Small and
+  Medium-sized Enterprises Loan" entry.
+- The Applicant Documents "additional requirements" note is LMS-only content, hand-copied from the
+  Portal's `loanRequirements.ts` - if that file's `ADDITIONAL_REQUIREMENTS_NOTES` changes again in
+  the future, remember to update `LoanApplicationCreatePage.tsx`'s copy too (no shared code path
+  between the two apps enforces this automatically).
