@@ -5797,3 +5797,115 @@ through the Cloudflare tunnel without interruption). Verified in the Browser pan
 375x812 mobile viewport (hamburger menu lists "Get the App" as its own row). Footer confirmed to
 no longer show the link. Committed (`885f70c4`) and pushed directly (no incoming remote commits
 this time).
+
+## §117 — 2026-09-06: Built a real installable APK for the Easycash Client Portal (Android TWA)
+
+User asked "kaya mo ba gawing apk installer?" - can the Portal be turned into an installable
+`.apk`, not just a "get the app" QR/link page. Recommended a **Trusted Web Activity (TWA)** over a
+React Native rewrite: a TWA is a thin native Android wrapper around the *existing* live website
+(`easycash-portal.pages.dev`) - no duplicate codebase, reuses the PWA manifest/icons already in
+place since 2026-08-23.
+
+**Safety/compliance discussion first** (per this project's "never guess, explain significant
+decisions" standard): raised that sideloading a raw APK is the exact distribution pattern PH
+lending scammers use (SMS/Messenger links to fake loan apps), and this Portal's own Security &
+Anti-Scam page warns against exactly that. User's counter-point, accepted as correct: the concern
+only applies to a link pushed via SMS/Messenger/ads - a client who navigates to the Portal's own
+known, SEC-disclosed, HTTPS domain themselves and downloads the APK there is a materially different
+and legitimate situation, same as many companies distributing installers from their own site.
+Agreed to proceed on that basis: build the APK now (for testing first), and it's fine to offer it
+for direct download from `/get-app` on the Portal itself later - the "install unknown apps" Android
+warning will still appear regardless of source (normal for any non-Play-Store install, not a scam
+signal on its own), and Play Store publication remains a good future option for auto-updates/Play
+Protect trust but is not a blocker.
+
+**Toolchain setup**: installed `@bubblewrap/cli` (Google's official TWA generator) globally via
+npm. Its first run offered to auto-download a JDK 17 and Android SDK into
+`C:\Users\Admin\.bubblewrap\` (~46GB free on C: at the time, plenty of room) - accepted both,
+downloaded cleanly. Had to accept the Android SDK Build-Tools license once (`android-sdk-license`,
+standard Google terms) before builds could proceed.
+
+**Project setup** (`app/portalfrontend-twa/`): rather than fight Bubblewrap's many interactive
+`init` prompts via piped stdin, hand-authored `twa-manifest.json` directly (its documented,
+officially-supported alternative to `bubblewrap init`) using values pulled from the Portal's live
+`site.webmanifest` (`https://easycash-portal.pages.dev/site.webmanifest`): package ID
+`ph.easycash.portal`, host `easycash-portal.pages.dev`, theme color `#186d4e`, icons from the
+existing `icon-512.png`. Generated the signing keystore separately and non-interactively via
+`keytool -genkeypair` (bundled with the downloaded JDK) with an explicit `-dname`, rather than
+letting Bubblewrap's own interactive keystore-creation prompt run - same reasoning, more reliable
+than fighting piped multi-step interactive prompts. Ran `bubblewrap update` once to generate the
+actual Android project scaffold (gradlew, build.gradle, AndroidManifest.xml, res/) from the
+manifest.
+
+**Bugs hit and fixed, all in this one session**:
+1. A `printf` call meant to answer an unrelated "regenerate project?" prompt got its Windows-style
+   backslash path (`C:\Users\Admin\...`) mangled by bash's `printf` (`\U` is not a valid escape,
+   corrupting the string) and the garbled text landed in the `appVersionName`/`appVersion` fields
+   of `twa-manifest.json`, which cascaded into `app/build.gradle`'s `versionName` field once the
+   project was regenerated - this produced a literal Groovy syntax error
+   (`versionName "C:\Users\Admin\.bubblewrapndroid_sdk"`, an unterminated-looking string with raw
+   backslashes) that failed the Gradle build with a clear parse error pointing at the exact line.
+   Fixed by correcting both `twa-manifest.json` and the already-generated `app/build.gradle`
+   directly to `"1.0.0"` / versionCode `1`.
+2. Bubblewrap's own interactive "Password for the Key Store" prompt (an `inquirer` masked-input
+   prompt) does not read piped/non-TTY stdin reliably - it silently exited with code 0 after
+   printing the prompt without consuming further piped input. Fixed by using Bubblewrap's
+   documented `BUBBLEWRAP_KEYSTORE_PASSWORD`/`BUBBLEWRAP_KEY_PASSWORD` environment variables
+   instead (confirmed present in `@bubblewrap/cli`'s own `build.js` source) - this bypasses the
+   interactive prompt entirely and is the more reliable path for any future non-interactive build.
+3. **The real blocker**: `bubblewrap build`'s Gradle step invokes the bare command `gradlew.bat`
+   (no `./` prefix, from `GradleWrapper.js`) via `child_process.execFile(..., {shell: true})`.
+   Reproduced directly with `cmd /c "gradlew.bat --version"` from inside the project directory -
+   despite `gradlew.bat` existing right there, cmd.exe's bare-command resolution did not find it
+   (`'gradlew.bat' is not recognized...`), while the explicit `.\gradlew.bat` form worked
+   immediately. This reproduced identically under both Git Bash and native PowerShell, ruling out
+   a Git-Bash-specific path-translation quirk - something about this machine's cmd.exe/PATH
+   resolution does not search the current directory for bare commands the way it normally would.
+   Root-caused and fixed by prepending the project's own absolute path to the `PATH` environment
+   variable before invoking `bubblewrap build` (`$env:Path = "$dir;$env:Path"`) - once the
+   directory was in `PATH` explicitly, bare `gradlew.bat` resolved correctly. **Note for next
+   time**: this PATH workaround will be needed again for any future `bubblewrap build` on this
+   machine unless the underlying cmd.exe cwd-search behavior is fixed at the OS level.
+
+**Result**: `bubblewrap build --skipPwaValidation` produced `app-release-signed.apk` (~1.5MB) -
+the AAB (Play Store bundle) signing step separately failed with `'jarsigner' is not recognized`
+(same bare-command PATH issue, for the JDK's `jarsigner.exe` this time) but was not chased down
+since the AAB isn't needed for direct/sideload distribution, only for a future Play Store
+submission. Sent the signed APK directly to the user via SendUserFile for on-device testing.
+
+**Digital Asset Links**: extracted the keystore's SHA256 certificate fingerprint via
+`keytool -list -v` and published it as
+`app/portalfrontend/public/.well-known/assetlinks.json` (package `ph.easycash.portal`) - this lets
+Android verify the APK and the `easycash-portal.pages.dev` domain are controlled by the same
+party, which drops the visible browser address bar inside the TWA once verified (falls back to a
+normal Chrome Custom Tab with an address bar if verification isn't in place, per the
+`fallbackType: "customtabs"` setting - not broken, just less "app-like" until then). Rebuilt and
+verified locally (`docker compose up -d --build portalfrontend`, hit the known transient
+"frontend grpc server closed unexpectedly" Buildkit error twice, third attempt succeeded per
+established precedent) and confirmed the live Cloudflare Pages deployment picked it up within
+seconds of the git push (`curl https://easycash-portal.pages.dev/.well-known/assetlinks.json`).
+
+**Secrets handling**: the keystore (`app/portalfrontend-twa/android.keystore`) and its password are
+excluded from git (`.gitignore` updated) and saved instead to
+`local/portal-apk-keystore-notes.md` (gitignored, machine-local) with an explicit warning that this
+exact key must be reused for every future APK update or Android will refuse to install the update
+over the existing app - flagged to the user that this file/keystore needs an external backup
+(password manager or secure drive), since losing it would mean starting the app's identity over
+from scratch. The rest of the generated Android project (build.gradle, gradlew, res/, java sources,
+twa-manifest.json) IS committed - it's the buildable source needed to regenerate future versions.
+
+Committed (`746e4f2a`) and pushed.
+
+### Current state after §117
+
+- A real, working, signed `app-release-signed.apk` exists and was sent to the user for on-device
+  install testing - not yet confirmed working on a real phone as of this writing.
+- `/.well-known/assetlinks.json` is live on the Portal, so once the user installs the APK,
+  Android should recognize the domain ownership and run the app "chromeless" (no address bar).
+- Both apps' Docker containers rebuilt and healthy locally; the git push already reached the live
+  Cloudflare Pages deployment.
+- **Follow-up not yet done**: offering the APK for direct download from the Portal itself (e.g., a
+  "Download APK" button on `/get-app`) - discussed and agreed in principle, not yet implemented.
+  Also not yet done: fixing the AAB/jarsigner PATH issue (only matters if/when a Play Store
+  submission is pursued later) and any future version-bump workflow should remember the `PATH`
+  workaround from bug #3 above.
