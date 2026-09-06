@@ -5599,11 +5599,11 @@ access itself errors in this headless test environment, as expected - not a defe
 
 - Every document upload slot in both the LMS and the Portal now offers a live camera-capture
   option, not just file selection.
-- **Test data left in the live database**: the `test.applicant@easycash.ph` `PortalAccount` and its
-  one submitted SME Loan application (₱50,000, Pre-declined - flagged for missing documents at
-  submission time since no files were actually attached) - user has not yet said whether to clean
-  these up or leave them for further testing. Ask before deleting anything, since a decision either
-  way hasn't been made yet.
+- **Test data deliberately left in the live database**: the `test.applicant@easycash.ph`
+  `PortalAccount` and its one submitted SME Loan application (₱50,000, Pre-declined - flagged for
+  missing documents at submission time since no files were actually attached) - user explicitly
+  asked to keep these for further testing rather than clean them up now. Don't delete without
+  asking again.
 - The `replace_all` indentation-miss bug is a good reminder: a byte-for-byte JSX search string can
   silently skip a structurally-identical block at a different nesting depth - worth grepping for
   the pattern *after* a "fixed everywhere" edit, not just trusting a clean type-check, especially
