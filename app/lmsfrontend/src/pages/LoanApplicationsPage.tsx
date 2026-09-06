@@ -23,7 +23,7 @@ import { STATUS_DISPLAY_LABEL } from '@/lib/loanApplicationStatusLabels';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAllPages } from '@/lib/apiClient';
 import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicationApiTypes';
-import { LoanApplicationForm } from '@/pages/LoanApplicationCreatePage';
+import { LoanApplicationEntry } from '@/pages/LoanApplicationCreatePage';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 const PAGE_SIZE = 25;
@@ -219,7 +219,7 @@ export function LoanApplicationsPage() {
             </DialogDescription>
           </DialogHeader>
           {createOpen && (
-            <LoanApplicationForm
+            <LoanApplicationEntry
               showChrome={false}
               onCreated={(application, failedDocumentLabels) => {
                 setCreateOpen(false);

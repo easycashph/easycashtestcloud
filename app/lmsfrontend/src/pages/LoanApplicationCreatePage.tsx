@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, Camera, CheckCircle2, FilePlus2, Lock, Plus, RotateCcw, Sparkles, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Camera, CheckCircle2, FilePlus2, Lock, Plus, RotateCcw, Search, Sparkles, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -25,9 +25,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { apiClient, fetchAllPages, uploadFile } from '@/lib/apiClient';
 import type { CreateLoanApplicationRequest, LoanApplication } from '@/lib/loanApplicationApiTypes';
 import type { ExtractedLoanApplicationFields } from '@/lib/aiExtractionApiTypes';
+import type { Borrower, PaginatedResponse } from '@/lib/loanApiTypes';
 import {
   ATTACHMENT_ACCEPTED_MIME,
   ATTACHMENT_ACCEPTED_TYPES,
@@ -35,7 +37,7 @@ import {
   DOCUMENT_CATEGORY_LABELS,
   type AttachmentDocumentCategory,
 } from '@/lib/documentApiTypes';
-import { formatPeso, toProperCase } from '@/lib/utils';
+import { formatDate, formatPeso, toProperCase } from '@/lib/utils';
 
 const AI_EXTRACTION_ACCEPTED_TYPES = '.pdf,.jpg,.jpeg,.png,.docx';
 const AI_EXTRACTION_ACCEPTED_MIME = new Set([
@@ -270,7 +272,7 @@ function computeAge(dateOfBirth: string): number | null {
 export function LoanApplicationCreatePage() {
   const navigate = useNavigate();
   return (
-    <LoanApplicationForm
+    <LoanApplicationEntry
       onCreated={(application, failedDocumentLabels) =>
         navigate(`/applications/${application.id}`, {
           replace: true,
@@ -336,6 +338,241 @@ export function LoanApplicationEditPage() {
         onCreated={(updated) => navigate(`/applications/${updated.id}`, { replace: true })}
         onCancel={() => navigate(`/applications/${application.id}`)}
       />
+    </div>
+  );
+}
+
+/** Field names on `LoanApplication` treated as "likely to have gone stale" since the client's last
+ * application - shown with an amber "i-verify" badge in `LoanApplicationEntry`'s review step,
+ * versus a green "same as dati" badge for everything else. Personal-identity fields (name, birth
+ * date, gender, nationality) essentially never change; contact/financial fields plausibly do. */
+const STALE_PRONE_APPLICATION_FIELDS = new Set(['address', 'employer', 'monthlyIncome', 'mobilePhone']);
+
+/**
+ * Gate in front of `LoanApplicationForm` for the two entry points that don't already know which
+ * client is applying (the standalone `/applications/new` page and `LoanApplicationsPage`'s "New
+ * Application" dialog) - `ClientProfilePage`'s own "Create Loan Application" flow already knows
+ * the client and skips straight to `LoanApplicationForm` with `prefillFrom`/`lockedBorrowerId` set
+ * directly, bypassing this gate entirely.
+ *
+ * 2026-09-06 (user request): lets a walk-in officer search for an existing client instead of
+ * re-typing everything from scratch on every renewal - reuses the same `/borrowers?search=`
+ * endpoint and result-card pattern as `LoanAccountCreatePage`'s "Find Client" step. Once a client
+ * is picked, their most recent application (if any) is offered as a prefill, field-by-field, with
+ * an honest badge per field (see `STALE_PRONE_APPLICATION_FIELDS`) rather than silently trusting
+ * old data - the officer can accept it as-is, start blank (still linked to the found client), or
+ * search for someone else.
+ */
+export function LoanApplicationEntry({
+  showChrome = true,
+  onCreated,
+  onCancel,
+}: {
+  showChrome?: boolean;
+  onCreated: (application: LoanApplication, failedDocumentLabels?: string[]) => void;
+  onCancel: () => void;
+}) {
+  const [selectedBorrower, setSelectedBorrower] = React.useState<Borrower | null>(null);
+  const [clientSearch, setClientSearch] = React.useState('');
+  const debouncedClientSearch = useDebouncedValue(clientSearch);
+  const [reviewResolved, setReviewResolved] = React.useState<'accepted' | 'blank' | null>(null);
+  // Brand-new applicant, not an existing client at all - skips the search/review gate entirely and
+  // goes straight to the original blank walk-in intake form (no lockedBorrowerId, no prefill).
+  const [skipSearchEntirely, setSkipSearchEntirely] = React.useState(false);
+
+  const clientSearchQuery = useQuery({
+    queryKey: ['borrowers', 'search', debouncedClientSearch],
+    queryFn: () => apiClient.get<PaginatedResponse<Borrower>>(`/borrowers?search=${encodeURIComponent(debouncedClientSearch)}&limit=10`),
+    enabled: !selectedBorrower && debouncedClientSearch.trim().length > 0,
+  });
+  const clientResults = clientSearchQuery.data?.items ?? [];
+
+  // No borrowerId filter exists on GET /loan-applications yet (same limitation LoanApplicationForm
+  // already documents for its own previous-co-borrower lookup) - fetches every application and
+  // filters client-side, matching ClientProfilePage's own `myApplications` derivation exactly.
+  const applicationsQuery = useQuery({
+    queryKey: ['loan-applications', 'all', 'existingClientLookup'],
+    queryFn: () => fetchAllPages<LoanApplication>('/loan-applications'),
+    enabled: Boolean(selectedBorrower),
+  });
+  const latestApplication = selectedBorrower
+    ? (applicationsQuery.data ?? [])
+        .filter((a) => a.createdBorrowerId === selectedBorrower.id || a.borrowerId === selectedBorrower.id)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+    : undefined;
+
+  const reset = () => {
+    setSelectedBorrower(null);
+    setClientSearch('');
+    setReviewResolved(null);
+  };
+
+  // Once a client is picked and their history has loaded, resolve straight through if there's
+  // nothing to review (no past application to offer as a prefill) - the review step only earns its
+  // place when there's an actual choice to make.
+  React.useEffect(() => {
+    if (selectedBorrower && !applicationsQuery.isLoading && !latestApplication && reviewResolved === null) {
+      setReviewResolved('blank');
+    }
+  }, [selectedBorrower, applicationsQuery.isLoading, latestApplication, reviewResolved]);
+
+  if (skipSearchEntirely) {
+    return <LoanApplicationForm showChrome={showChrome} onCreated={onCreated} onCancel={onCancel} />;
+  }
+
+  if (selectedBorrower && reviewResolved) {
+    return (
+      <LoanApplicationForm
+        prefillFrom={reviewResolved === 'accepted' ? latestApplication : undefined}
+        lockedBorrowerId={selectedBorrower.id}
+        showChrome={showChrome}
+        onCreated={onCreated}
+        onCancel={onCancel}
+      />
+    );
+  }
+
+  if (!selectedBorrower) {
+    return (
+      <div className={showChrome ? 'mx-auto max-w-3xl space-y-4' : 'space-y-4'}>
+        {showChrome && (
+          <div>
+            <Button variant="ghost" size="sm" className="-ml-2 mb-1" onClick={onCancel}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back
+            </Button>
+            <div className="flex items-center gap-2">
+              <FilePlus2 className="h-5 w-5 text-primary" />
+              <h2 className="text-2xl font-semibold tracking-tight">Loan Application Form</h2>
+            </div>
+          </div>
+        )}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Search className="h-4 w-4 text-primary" /> Existing client ba ang umaapply?
+            </CardTitle>
+            <CardDescription>
+              Hanapin muna bago mag-encode - kung existing client, mapupunan ang form mula sa nakaraan nilang application, hindi na
+              kailangang i-type ulit lahat. Hindi pa client (walang record)? Ituloy na lang sa ibaba nang blangko.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                autoFocus
+                placeholder="Pangalan, legacy ID, o mobile number..."
+                className="pl-8"
+                value={clientSearch}
+                onChange={(e) => setClientSearch(e.target.value)}
+              />
+            </div>
+            {clientSearchQuery.isLoading && <p className="py-4 text-center text-sm text-muted-foreground">Naghahanap…</p>}
+            {!clientSearchQuery.isLoading && debouncedClientSearch.trim().length > 0 && clientResults.length === 0 && (
+              <p className="py-4 text-center text-sm text-muted-foreground">Walang nahanap na tumutugma sa "{debouncedClientSearch}".</p>
+            )}
+            {clientResults.length > 0 && (
+              <div className="max-h-72 space-y-1.5 overflow-y-auto">
+                {clientResults.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setSelectedBorrower(b)}
+                    className="w-full rounded-md border p-2.5 text-left text-sm hover:bg-secondary/60"
+                  >
+                    <p className="font-medium">{b.fullName}</p>
+                    {b.mobilePhone1 && <p className="text-xs text-muted-foreground">{b.mobilePhone1}</p>}
+                  </button>
+                ))}
+              </div>
+            )}
+            <Separator />
+            <div className="flex items-center justify-between gap-2 rounded-md border bg-secondary/40 p-2.5">
+              <p className="text-xs text-muted-foreground">Hindi pa client (walang record)?</p>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setSkipSearchEntirely(true)}>
+                Ituloy nang blangko
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // selectedBorrower is set, awaiting applicationsQuery / review decision
+  return (
+    <div className={showChrome ? 'mx-auto max-w-3xl space-y-4' : 'space-y-4'}>
+      {showChrome && (
+        <Button variant="ghost" size="sm" className="-ml-2" onClick={reset}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
+        </Button>
+      )}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{selectedBorrower.fullName}</CardTitle>
+          <CardDescription>
+            {applicationsQuery.isLoading || !latestApplication
+              ? 'Kinukuha ang nakaraang application…'
+              : `Naka-prefill mula sa nakaraang application (${formatDate(latestApplication.createdAt)}, ${latestApplication.requestedCategory}).`}
+          </CardDescription>
+        </CardHeader>
+        {!applicationsQuery.isLoading && latestApplication && (
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Personal details lang ang direktang kinopya - i-verify pa rin ang mga field na may amber badge bago i-submit, dahil
+              posibleng nagbago na ito mula noon.
+            </p>
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              {(
+                [
+                  ['applicantName', 'Buong pangalan', latestApplication.applicantName],
+                  ['birthDate', 'Petsa ng kapanganakan', latestApplication.birthDate ? formatDate(latestApplication.birthDate) : '—'],
+                  ['gender', 'Kasarian / Civil status', [latestApplication.gender, latestApplication.civilStatus].filter(Boolean).join(' · ') || '—'],
+                  ['nationality', 'Nasyonalidad', latestApplication.nationality ?? '—'],
+                  ['address', 'Kasalukuyang address', latestApplication.address ?? '—'],
+                  ['employer', 'Employer', latestApplication.employer ?? '—'],
+                  ['monthlyIncome', 'Buwanang kita', latestApplication.monthlyIncome ? formatPeso(latestApplication.monthlyIncome) : '—'],
+                  ['mobilePhone', 'Contact number', latestApplication.mobilePhone ?? '—'],
+                ] as const
+              ).map(([field, label, value]) => {
+                const stale = STALE_PRONE_APPLICATION_FIELDS.has(field);
+                return (
+                  <div key={field} className="rounded-md border bg-secondary/30 p-2.5">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          stale ? 'bg-warning/10 text-warning' : 'bg-primary/10 text-primary'
+                        }`}
+                      >
+                        {stale ? 'i-verify' : 'same as dati'}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium">{value}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        )}
+        <CardContent className={applicationsQuery.isLoading || !latestApplication ? '' : 'pt-0'}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={reset}>
+              Maghanap ng iba
+            </Button>
+            <div className="flex gap-2">
+              {latestApplication && (
+                <Button type="button" variant="outline" onClick={() => setReviewResolved('blank')}>
+                  Simulan sa blangkong form
+                </Button>
+              )}
+              <Button type="button" onClick={() => setReviewResolved('accepted')} disabled={applicationsQuery.isLoading}>
+                {latestApplication ? 'Tanggapin at ituloy sa form' : 'Ituloy sa form'}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
