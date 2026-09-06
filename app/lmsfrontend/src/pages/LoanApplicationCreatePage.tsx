@@ -160,8 +160,8 @@ function Field({
   );
 }
 
-/** A field row inside the AI extraction review dialog - `badgeOn` shows a green "na-detect" pill
- * when the AI produced a value for this field, or an amber "i-check" pill when it didn't (surfaced
+/** A field row inside the AI extraction review dialog - `badgeOn` shows a green "detected" pill
+ * when the AI produced a value for this field, or an amber "verify" pill when it didn't (surfaced
  * honestly, never a fabricated confidence score - see ExtractLoanApplicationFieldsUseCase.ts). */
 function ReviewField({ label, badgeOn, children }: { label: string; badgeOn: boolean; children: React.ReactNode }) {
   return (
@@ -173,7 +173,7 @@ function ReviewField({ label, badgeOn, children }: { label: string; badgeOn: boo
             badgeOn ? 'bg-primary/10 text-primary' : 'bg-warning/10 text-warning'
           }`}
         >
-          {badgeOn ? 'na-detect' : 'i-check'}
+          {badgeOn ? 'detected' : 'verify'}
         </span>
       </div>
       {children}
@@ -343,8 +343,8 @@ export function LoanApplicationEditPage() {
 }
 
 /** Field names on `LoanApplication` treated as "likely to have gone stale" since the client's last
- * application - shown with an amber "i-verify" badge in `LoanApplicationEntry`'s review step,
- * versus a green "same as dati" badge for everything else. Personal-identity fields (name, birth
+ * application - shown with an amber "verify" badge in `LoanApplicationEntry`'s review step,
+ * versus a green "same as before" badge for everything else. Personal-identity fields (name, birth
  * date, gender, nationality) essentially never change; contact/financial fields plausibly do. */
 const STALE_PRONE_APPLICATION_FIELDS = new Set(['address', 'employer', 'monthlyIncome', 'mobilePhone']);
 
@@ -449,11 +449,11 @@ export function LoanApplicationEntry({
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Search className="h-4 w-4 text-primary" /> Existing client ba ang umaapply?
+              <Search className="h-4 w-4 text-primary" /> Is the applicant an existing client?
             </CardTitle>
             <CardDescription>
-              Hanapin muna bago mag-encode - kung existing client, mapupunan ang form mula sa nakaraan nilang application, hindi na
-              kailangang i-type ulit lahat. Hindi pa client (walang record)? Ituloy na lang sa ibaba nang blangko.
+              Search first before encoding - if they're an existing client, the form fills in from their last application, so you
+              won't have to re-type everything. Not a client yet (no record)? Continue with a blank form below.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -461,15 +461,15 @@ export function LoanApplicationEntry({
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 autoFocus
-                placeholder="Pangalan, legacy ID, o mobile number..."
+                placeholder="Name, legacy ID, or mobile number..."
                 className="pl-8"
                 value={clientSearch}
                 onChange={(e) => setClientSearch(e.target.value)}
               />
             </div>
-            {clientSearchQuery.isLoading && <p className="py-4 text-center text-sm text-muted-foreground">Naghahanap…</p>}
+            {clientSearchQuery.isLoading && <p className="py-4 text-center text-sm text-muted-foreground">Searching…</p>}
             {!clientSearchQuery.isLoading && debouncedClientSearch.trim().length > 0 && clientResults.length === 0 && (
-              <p className="py-4 text-center text-sm text-muted-foreground">Walang nahanap na tumutugma sa "{debouncedClientSearch}".</p>
+              <p className="py-4 text-center text-sm text-muted-foreground">No matches for "{debouncedClientSearch}".</p>
             )}
             {clientResults.length > 0 && (
               <div className="max-h-72 space-y-1.5 overflow-y-auto">
@@ -488,9 +488,9 @@ export function LoanApplicationEntry({
             )}
             <Separator />
             <div className="flex items-center justify-between gap-2 rounded-md border bg-secondary/40 p-2.5">
-              <p className="text-xs text-muted-foreground">Hindi pa client (walang record)?</p>
+              <p className="text-xs text-muted-foreground">Not a client yet (no record)?</p>
               <Button type="button" variant="ghost" size="sm" onClick={() => setSkipSearchEntirely(true)}>
-                Ituloy nang blangko
+                Continue with a blank form
               </Button>
             </div>
           </CardContent>
@@ -512,26 +512,26 @@ export function LoanApplicationEntry({
           <CardTitle className="text-base">{selectedBorrower.fullName}</CardTitle>
           <CardDescription>
             {applicationsQuery.isLoading || !latestApplication
-              ? 'Kinukuha ang nakaraang application…'
-              : `Naka-prefill mula sa nakaraang application (${formatDate(latestApplication.createdAt)}, ${latestApplication.requestedCategory}).`}
+              ? 'Fetching their most recent application…'
+              : `Prefilled from their most recent application (${formatDate(latestApplication.createdAt)}, ${latestApplication.requestedCategory}).`}
           </CardDescription>
         </CardHeader>
         {!applicationsQuery.isLoading && latestApplication && (
           <CardContent className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Personal details lang ang direktang kinopya - i-verify pa rin ang mga field na may amber badge bago i-submit, dahil
-              posibleng nagbago na ito mula noon.
+              Only personal details are copied directly - still verify the fields with an amber badge before submitting, since these
+              may have changed since then.
             </p>
             <div className="grid gap-2.5 sm:grid-cols-2">
               {(
                 [
-                  ['applicantName', 'Buong pangalan', latestApplication.applicantName],
-                  ['birthDate', 'Petsa ng kapanganakan', latestApplication.birthDate ? formatDate(latestApplication.birthDate) : '—'],
-                  ['gender', 'Kasarian / Civil status', [latestApplication.gender, latestApplication.civilStatus].filter(Boolean).join(' · ') || '—'],
-                  ['nationality', 'Nasyonalidad', latestApplication.nationality ?? '—'],
-                  ['address', 'Kasalukuyang address', latestApplication.address ?? '—'],
+                  ['applicantName', 'Full name', latestApplication.applicantName],
+                  ['birthDate', 'Date of birth', latestApplication.birthDate ? formatDate(latestApplication.birthDate) : '—'],
+                  ['gender', 'Gender / Civil status', [latestApplication.gender, latestApplication.civilStatus].filter(Boolean).join(' · ') || '—'],
+                  ['nationality', 'Nationality', latestApplication.nationality ?? '—'],
+                  ['address', 'Present address', latestApplication.address ?? '—'],
                   ['employer', 'Employer', latestApplication.employer ?? '—'],
-                  ['monthlyIncome', 'Buwanang kita', latestApplication.monthlyIncome ? formatPeso(latestApplication.monthlyIncome) : '—'],
+                  ['monthlyIncome', 'Monthly income', latestApplication.monthlyIncome ? formatPeso(latestApplication.monthlyIncome) : '—'],
                   ['mobilePhone', 'Contact number', latestApplication.mobilePhone ?? '—'],
                 ] as const
               ).map(([field, label, value]) => {
@@ -545,7 +545,7 @@ export function LoanApplicationEntry({
                           stale ? 'bg-warning/10 text-warning' : 'bg-primary/10 text-primary'
                         }`}
                       >
-                        {stale ? 'i-verify' : 'same as dati'}
+                        {stale ? 'verify' : 'same as before'}
                       </span>
                     </div>
                     <p className="text-sm font-medium">{value}</p>
@@ -558,16 +558,16 @@ export function LoanApplicationEntry({
         <CardContent className={applicationsQuery.isLoading || !latestApplication ? '' : 'pt-0'}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={reset}>
-              Maghanap ng iba
+              Search someone else
             </Button>
             <div className="flex gap-2">
               {latestApplication && (
                 <Button type="button" variant="outline" onClick={() => setReviewResolved('blank')}>
-                  Simulan sa blangkong form
+                  Start with a blank form
                 </Button>
               )}
               <Button type="button" onClick={() => setReviewResolved('accepted')} disabled={applicationsQuery.isLoading}>
-                {latestApplication ? 'Tanggapin at ituloy sa form' : 'Ituloy sa form'}
+                {latestApplication ? 'Accept and continue to form' : 'Continue to form'}
               </Button>
             </div>
           </div>
@@ -1340,7 +1340,7 @@ export function LoanApplicationForm({
                     }`}
                   >
                     <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                    {detectedCount} sa {AI_REVIEW_FIELD_COUNT} field ang na-detect nang malinaw.
+                    {detectedCount} of {AI_REVIEW_FIELD_COUNT} fields clearly detected.
                   </div>
                 );
               })()}
@@ -1396,14 +1396,14 @@ export function LoanApplicationForm({
                 aiFileInputRef.current?.click();
               }}
             >
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> I-scan ulit
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Scan again
             </Button>
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={dismissAiReview}>
                 Cancel
               </Button>
               <Button type="button" onClick={applyAiReview}>
-                Gamitin ang datos na ito, ituloy sa form
+                Use this data, continue to form
               </Button>
             </div>
           </DialogFooter>
