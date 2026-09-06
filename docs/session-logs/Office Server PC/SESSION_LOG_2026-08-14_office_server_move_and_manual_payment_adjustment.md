@@ -5172,3 +5172,44 @@ process remains, and all four LMS containers (`easycashbackend`, `lmsfrontend`, 
   assurance for the applicant's profile photo) - this would reuse the plain `getUserMedia`+canvas
   capture technique from the LMS's camera-capture work in §101, but does not depend on Ollama or
   any vision model at all (no extraction involved, just a photo attachment).
+
+## §107 — 2026-09-05: Uninstalled Ollama from Macbook Nomer too - team wants to test extraction
+a different way
+
+Right after §105 confirmed real-world extraction working (3-4 min/scan on this CPU-only hardware),
+the user asked to fully uninstall Ollama from this machine - not because anything broke, just
+"i-test na muna namin ito sa ibang paraan" (the team wants to try a different testing approach
+first). No specific alternative was named this session.
+
+Removed everything installed/configured in §103-§105:
+- Unloaded and deleted the `com.ollama.serve` LaunchAgent
+  (`~/Library/LaunchAgents/com.ollama.serve.plist`).
+- Killed any lingering `ollama`/`llama-server` processes.
+- Deleted the standalone binary (`/usr/local/bin/ollama` symlink, `/usr/local/lib/ollama`).
+- Deleted `~/.ollama` (recovered **5.1GB** - the `minicpm-v` model plus Ollama's own generated SSH
+  key/config).
+- Verified clean via `command -v ollama` (not found) and confirmed no leftover directories.
+
+**Deliberately left in place** (harmless while Ollama is absent, and exactly what's needed if
+Ollama comes back later on this or another machine):
+- `OLLAMA_VISION_MODEL=minicpm-v` in `app/easycashbackend/.env` (machine-local, not committed).
+- The `sharp` image-downscaling code from §105 (`app/easycashbackend/src/modules/ai-extraction/
+  infrastructure/OllamaVisionModelClient.ts`) - already committed/pushed, has no dependency on
+  Ollama actually running, and benefits whichever vision backend ends up used next.
+- The `extra_hosts: host.docker.internal:host-gateway` Docker DNS fix - a general correctness fix,
+  unrelated to Ollama specifically (see §103's own note on this).
+
+### Current state after §107
+
+- **No machine currently has a working AI Extraction backend.** Office Server PC's Ollama is fully
+  uninstalled (§106), and Macbook Nomer's is now fully uninstalled too (this entry) - clicking
+  "Take a photo"/"Upload a file" on either machine surfaces a clean connection error.
+- The `minicpm-v` real-world accuracy/latency findings from §104-§105 remain valid reference data
+  if/when Ollama comes back (on this machine or elsewhere) - re-pulling `minicpm-v` and re-running
+  `write-build-info.sh` + `docker compose up -d --build easycashbackend` is all that's needed to
+  restore the exact same working state, since the `.env` override and code fix survived this
+  uninstall.
+- The user's team is planning to validate AI Extraction "sa ibang paraan" (a different approach) -
+  not yet specified what that is. Whoever picks this up next should ask before assuming it means
+  a different vision model, a hosted/cloud API (note: CLAUDE.md prefers avoiding paid cloud
+  services), or a different machine entirely.
