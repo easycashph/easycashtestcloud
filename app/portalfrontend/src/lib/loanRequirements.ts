@@ -90,6 +90,12 @@ export function getDocumentsForProduct(loanCategory: string): {
  * through the Portal.
  */
 export const ADDITIONAL_REQUIREMENTS_NOTES: Record<string, string[]> = {
+  'Business Loan': [
+    'DTI/SEC Registration Certificate',
+    "Mayor's/Business Permit (current year)",
+    'Latest Income Tax Return (ITR) or Financial Statements',
+    'Bank Statement (last 3-6 months)',
+  ],
   'Salary Loan': ['Latest Certificate of Employment (COE)'],
   'Seafarer Loan': [
     'Latest POEA Contract of Employment',
