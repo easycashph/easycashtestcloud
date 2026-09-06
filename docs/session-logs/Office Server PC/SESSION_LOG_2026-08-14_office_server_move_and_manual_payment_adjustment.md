@@ -5543,3 +5543,68 @@ Committed (`dd32a2ea`) and pushed - nothing new to pull.
 - The loan-category naming collision from §111 (Business Loan vs. the real "Small and
   Medium-sized Enterprises Loan" product type) is unrelated to this change and remains unresolved
   by deliberate choice.
+
+## §113 — 2026-09-06: Camera capture rounded out on the LMS, then added to the Portal for the first time
+
+User asked which document slots on the LMS still lacked the "Camera" button from §109 - sent the
+list (Employee ID, Business Clearance, Seaman's Book, Overseas Employment Certificate, all missed
+because §109 only covered the 5 categories explicitly named that day). User asked to add it to
+those four too, then separately asked whether the Portal's own upload flow (verified live in §112's
+test submission) should get a camera option as well - agreed it made sense for a mobile-first
+audience, and built a mockup (approved) before touching code, per this session's established
+pattern.
+
+**LMS**: trivial - added `cameraFacingMode: 'environment'` to the four remaining `DOCUMENT_SLOTS`
+entries. Updated the stale doc comment above the type that used to list those four as deliberately
+camera-less.
+
+**Portal** (`LoanApplicationFormPage.tsx`, first camera capture ever added there): mirrored the
+LMS's generic `openCamera(onCapture)`/`capturePhoto()` pattern - same getUserMedia/canvas
+plumbing, same capture-produces-a-File-then-calls-the-existing-upload-callback shape
+(`handleUpload(category, file)` already existed and took a plain `File`, so the camera path needed
+no new upload logic). Factored the previously-duplicated slot-row JSX (one render site for
+right-after-a-NEW-submission, one for revisiting an editable application in edit mode) into a
+shared `DocumentSlotRow` component, adding the "Take Photo" button once instead of twice.
+
+**Bug caught by testing in the browser, not by type-checking**: the first `replace_all` edit only
+converted one of the two `visibleDocumentSlots.map(...)` blocks to `DocumentSlotRow` - the second
+(inside the `isEditMode &&` gated SectionCard) had one extra level of indentation, so its JSX
+text didn't match the search string byte-for-byte and was silently skipped. Both versions
+type-checked clean, since the untouched block was still perfectly valid old code - only opening
+the actual Edit dialog in the browser and searching for "Take Photo" (found 0 results where 8 were
+expected) surfaced the gap. Fixed by editing that block directly with its real indentation.
+
+**Verified with a real test submission**: since the Portal's `/apply` route requires a logged-in
+account and signup/login isn't live yet, created a one-off test `PortalAccount` directly via a
+throwaway Node script (`bcrypt.hash` + `prisma.portalAccount.upsert`, `status: ACTIVE`,
+`twoFactorEnabled: false` so it logs in without an OTP step) - deleted the script immediately
+after running it, never committed. User logged into this test account themselves (same
+never-type-the-user's-password-into-a-form policy applied even to a throwaway test credential,
+consistent with how the LMS login was handled earlier this session) and confirmed once in. Filled
+and submitted a real test SME Loan application through the actual `/apply` form (a genuinely
+useful side effect: this is what first revealed, in §112, that document uploads only appear
+*after* submission, not during the initial form). Also hit and fixed two unrelated real UI
+friction points while filling the test form: the native date input needed an ISO-string
+`form_input` fill rather than typed digits, and a stray click briefly filled 50000 into the wrong
+field (loan term instead of amount) - both just automation/testing artifacts, not app bugs.
+
+Type-checked clean both times (before and after the indentation-miss fix). Rebuilt `lmsfrontend` +
+`portalfrontend` together, re-verified no stale-WSL2-listener regression (§110/§112's recurring
+gotcha). Confirmed in the browser via the test application's Edit dialog: all 8 document slots show
+a working "Take Photo" button that opens the capture dialog with the correct title/copy (camera
+access itself errors in this headless test environment, as expected - not a defect). Committed
+(`171b8990`) and pushed - nothing new to pull.
+
+### Current state / follow-ups
+
+- Every document upload slot in both the LMS and the Portal now offers a live camera-capture
+  option, not just file selection.
+- **Test data left in the live database**: the `test.applicant@easycash.ph` `PortalAccount` and its
+  one submitted SME Loan application (₱50,000, Pre-declined - flagged for missing documents at
+  submission time since no files were actually attached) - user has not yet said whether to clean
+  these up or leave them for further testing. Ask before deleting anything, since a decision either
+  way hasn't been made yet.
+- The `replace_all` indentation-miss bug is a good reminder: a byte-for-byte JSX search string can
+  silently skip a structurally-identical block at a different nesting depth - worth grepping for
+  the pattern *after* a "fixed everywhere" edit, not just trusting a clean type-check, especially
+  when duplicated JSX is involved.
