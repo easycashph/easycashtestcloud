@@ -5374,3 +5374,79 @@ nothing new to pull.
   Business Clearance, Seaman's Book, and OEC remain upload-only.
 - Not yet tested against a real phone/tablet camera in the field (same caveat noted back in §101
   for the AI-extraction camera) - worth a live test with an actual applicant-facing device.
+
+## §110 — 2026-09-06: Added 4 SME Loan requirements to the Portal; found and fixed a stale Docker/WSL2 port-forward bug
+
+User asked what else an SME/business loan typically requires beyond the existing 3 (Valid ID,
+Proof of Billing, Business Clearance). Suggested DTI/SEC Registration Certificate, Mayor's/Business
+Permit, Latest ITR/Financial Statements, and a 3-6 month Bank Statement - the standard set a lender
+actually needs to assess a business's creditworthiness, not just its identity. User approved all
+four and asked to add them to the Portal's public Requirements page.
+
+Before touching code, went to the live Portal (`localhost:5199/requirements`) to read the actual
+published checklist rather than assume - confirmed the business product's real display name is
+**"SME Loan"** (not "MSE Loan" as the user first said - likely a typo, confirmed against the
+Portal's own text) and captured Personal Loan's and Seafarer Loan's full real requirement lists
+too, which the user had separately asked about renaming loan types for. Found `loanProducts.ts`
+already has a `displayLabel` field (`'Business Loan'`→"SME Loan", `'Salary Loan'`→"Personal Loan")
+added by CEO request on 2026-08-12 specifically so the underlying `category`/`requestedCategory`
+value never has to change - confirmed via a dedicated Explore agent that renaming the actual string
+would touch 15+ production files (dropdowns, `classifyProductType`, flat-rate lookup tables, CIC
+reporting codes, Dashboard portfolio grouping) plus a dozen backend unit tests. Decided **not** to
+rename anything underneath - the display-only pattern already solves the naming need safely.
+
+Added the 4 new items to `ADDITIONAL_REQUIREMENTS_NOTES['Business Loan']` in
+`app/portalfrontend/src/lib/loanRequirements.ts` - the exact mechanism already established for
+Salary/Seafarer Loan's own "informational, not yet a real upload slot" extras (see that constant's
+doc comment, 2026-09-05). Type-checked clean.
+
+**Rebuild produced a stale/cached page that took real investigation to run down** - after
+rebuilding and recreating `portalfrontend`, the Requirements page kept showing the OLD 3-item list
+even in a brand-new browser tab. Root-caused step by step rather than guessing:
+1. Confirmed the NEW code was actually in the built image (`docker exec ... grep 'DTI/SEC'` found
+   it inside the container's `dist/assets`).
+2. Confirmed the browser was requesting a JS chunk hash (`loanRequirements-DYdPM5kw.js`) that
+   didn't exist in the current image at all (`ls` inside the container showed only
+   `loanRequirements-BBBLJQyP.js`) - so something was intercepting requests before they reached
+   this container.
+3. `netstat -ano` on the host found **two listeners on port 5199**: Docker Desktop's normal
+   forwarder, and a separate `wslrelay.exe` bound only to `[::1]:5199`. Inside the `docker-desktop`
+   WSL distro, `netstat` showed a `wsl-bootstrap` process independently listening on `:::5199` -
+   Docker Desktop's own internal WSL2 port-forwarding had gotten into a stale state after repeated
+   container recreates this session, still routing some requests to the old container's already-
+   destroyed backing process instead of the new one.
+4. A request for the old chunk still returned `200 OK`, which briefly looked like proof the file
+   still existed - it didn't; nginx's SPA fallback (`try_files ... /index.html`) was serving
+   `index.html` disguised with a 200 for any unmatched `/assets/*` path, confirmed by checking the
+   response's actual `Content-Type`/`Content-Length` (matched `index.html` exactly, not real JS).
+5. Fixed by fully restarting Docker Desktop (`Stop-Process` + `wsl --shutdown` + relaunch) - the
+   same remedy already used earlier this session for the Ollama RAM issue, which resets Docker
+   Desktop's internal WSL2 networking state. Verified only one `wsl-bootstrap` listener remained on
+   port 5199 afterward.
+6. Even after that, the browser still showed old content once more - traced to the **browser's own
+   HTTP cache**, not the server: `caches.delete()` (Cache Storage API) and even a brand-new tab
+   didn't force a refetch of `index.html` itself. A cache-busting query string
+   (`?cb=<timestamp>`) on the navigated URL finally forced a genuine fresh document fetch, after
+   which the new SME items rendered correctly.
+
+Verified in the browser (post-fix): SME Loan's card now lists all 7 items (3 original + 4 new,
+these last four in the existing navy/bold "new requirement" visual style already built for
+Salary/Seafarer's own additions). Committed (`a878bb8f`) and pushed - nothing new to pull.
+
+### Current state / follow-ups
+
+- The Portal's Requirements page is the only place these 4 new SME items are surfaced -
+  `AttachmentDocumentCategory` and the LMS's own `DOCUMENT_SLOTS`/Applicant Documents section were
+  deliberately not touched (matches the existing precedent for Salary/Seafarer's extras, which are
+  also Portal-only notes, not real upload slots, pending a future migration).
+- **New operational knowledge worth remembering**: after repeated `docker compose up -d --build`
+  cycles on a given service within one Docker Desktop session, a stale WSL2 port-forward can cause
+  the host port to serve an already-destroyed container's content instead of the current one - a
+  full Docker Desktop restart (not just a container recreate) is the fix, and it's worth checking
+  for a duplicate `wsl-bootstrap`/`wslrelay` listener via `netstat` before assuming a code or
+  browser-cache problem when a rebuilt page doesn't reflect its own changes.
+- Loan-category renaming (Business Loan→SME Loan, Salary Loan→Personal Loan) at the *data* level
+  remains explicitly not done and, per this session's investigation, should stay that way absent a
+  much larger, deliberately-scoped migration effort - the existing Portal-only `displayLabel`
+  pattern is the safe way to show the new names anywhere else they're wanted (e.g. LMS staff UI),
+  should that be requested later.
