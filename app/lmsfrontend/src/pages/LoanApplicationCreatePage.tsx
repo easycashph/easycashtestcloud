@@ -59,25 +59,24 @@ const DOCUMENT_SLOTS: {
   showWhen?: (ctx: { loanCategory: string; hasCoBorrower: boolean }) => boolean;
   /** Adds a "Camera" button alongside "Upload" for slots where a live photo is a realistic
    * substitute for a scanned file (2026-09-06 user request) - 'user' (front camera) for the
-   * applicant's own selfie, 'environment' (rear camera) for a physical document/ID held up to the
-   * camera. Omitted for slots not requested (Employee ID, Business Clearance, Seaman's Book, OEC)
-   * rather than assumed. */
+   * applicant's own selfie, 'environment' (rear camera) for every physical document/ID held up to
+   * the camera - every slot below has one now. */
   cameraFacingMode?: 'environment' | 'user';
 }[] = [
   { category: 'PROFILE_PICTURE', cameraFacingMode: 'user' },
   { category: 'VALID_ID_BORROWER', cameraFacingMode: 'environment' },
   { category: 'VALID_ID_CO_BORROWER', showWhen: (ctx) => ctx.hasCoBorrower, cameraFacingMode: 'environment' },
   { category: 'PROOF_OF_BILLING', cameraFacingMode: 'environment' },
-  { category: 'EMPLOYEE_ID', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan' },
+  { category: 'EMPLOYEE_ID', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan', cameraFacingMode: 'environment' },
   { category: 'CORPORATE_PAYSLIP', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan', cameraFacingMode: 'environment' },
   { category: 'CERTIFICATE_OF_EMPLOYMENT', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan', cameraFacingMode: 'environment' },
-  { category: 'BUSINESS_CLEARANCE', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
+  { category: 'BUSINESS_CLEARANCE', showWhen: (ctx) => ctx.loanCategory === 'Business Loan', cameraFacingMode: 'environment' },
   { category: 'DTI_SEC_REGISTRATION', showWhen: (ctx) => ctx.loanCategory === 'Business Loan', cameraFacingMode: 'environment' },
   { category: 'BUSINESS_PERMIT', showWhen: (ctx) => ctx.loanCategory === 'Business Loan', cameraFacingMode: 'environment' },
   { category: 'INCOME_TAX_RETURN', showWhen: (ctx) => ctx.loanCategory === 'Business Loan', cameraFacingMode: 'environment' },
   { category: 'BANK_STATEMENT', showWhen: (ctx) => ctx.loanCategory === 'Business Loan', cameraFacingMode: 'environment' },
-  { category: 'SEAMANS_BOOK', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
-  { category: 'OVERSEAS_EMPLOYMENT_CERTIFICATE', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
+  { category: 'SEAMANS_BOOK', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan', cameraFacingMode: 'environment' },
+  { category: 'OVERSEAS_EMPLOYMENT_CERTIFICATE', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan', cameraFacingMode: 'environment' },
   { category: 'POEA_CONTRACT', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan', cameraFacingMode: 'environment' },
   { category: 'ALLOTMENT_SLIP', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan', cameraFacingMode: 'environment' },
   { category: 'PASSPORT_ID', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan', cameraFacingMode: 'environment' },
