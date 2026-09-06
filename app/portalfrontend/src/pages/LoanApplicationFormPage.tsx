@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Camera, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -350,20 +350,18 @@ function documentSlotHint(
   return t.loanApplicationForm.documentFileNote;
 }
 
-/** One document upload row - shared by the two `visibleDocumentSlots.map(...)` render sites
- * (right after a NEW submission, and revisiting an editable application later) so the "Take Photo"
- * addition below only needs to exist once. 2026-09-06 (user request, mockup-approved): a phone/
- * laptop applicant can now snap a photo directly instead of finding a saved file first - reuses
- * the same `onCapture` callback shape as a plain file input's `onChange`. */
+/** One document upload row - shared by the two `visibleDocumentSlots.map(...)` render sites (right
+ * after a NEW submission, and revisiting an editable application later). A custom camera-capture
+ * button was tried here and on the LMS's own upload slots (2026-09-06) but removed the same day -
+ * a plain file input's native picker on mobile already offers a camera option (no getUserMedia
+ * permission/HTTPS-context edge cases to debug), making the custom dialog redundant. */
 function DocumentSlotRow({
   category,
   status,
-  onCapture,
   onFileSelected,
 }: {
   category: UploadableDocumentCategory;
   status: 'idle' | 'uploading' | 'done' | 'error' | undefined;
-  onCapture: () => void;
   onFileSelected: (file: File | undefined) => void;
 }) {
   const { t } = useLanguage();
@@ -375,9 +373,6 @@ function DocumentSlotRow({
         <p className="text-xs text-muted-foreground">{documentSlotHint(category, status, t)}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onCapture}>
-          <Camera className="mr-1.5 h-3.5 w-3.5" /> Take Photo
-        </Button>
         <Input
           type="file"
           accept="application/pdf,image/jpeg,image/png"
@@ -523,14 +518,6 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
   const [showPrivacy, setShowPrivacy] = React.useState(false);
   const [submitted, setSubmitted] = React.useState<PortalLoanApplicationSummary | null>(null);
   const [uploadState, setUploadState] = React.useState<Partial<Record<PortalDocumentCategory, 'idle' | 'uploading' | 'done' | 'error'>>>({});
-  // Camera capture for document slots (2026-09-06 user request) - generic, same shape as the
-  // internal LMS's own camera dialog: `openCamera(onCapture)` stores the callback, so every slot's
-  // "Take Photo" button can request one without duplicating the getUserMedia/canvas plumbing.
-  const [cameraOpen, setCameraOpen] = React.useState(false);
-  const [cameraError, setCameraError] = React.useState<string | null>(null);
-  const videoRef = React.useRef<HTMLVideoElement>(null);
-  const cameraStreamRef = React.useRef<MediaStream | null>(null);
-  const cameraCaptureCallbackRef = React.useRef<((file: File) => void) | null>(null);
   // Edit mode only: null while loading, 'not-editable' once loaded but status has moved past
   // PREAPPROVED/PREDECLINED (mirrors the backend's own updateSelfServiceIntake() guard), 'ready'
   // once the fetched record has been mapped into `form`.
@@ -748,61 +735,6 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
     }
   };
 
-  const stopCameraStream = () => {
-    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
-    cameraStreamRef.current = null;
-  };
-
-  const openCamera = async (onCapture: (file: File) => void) => {
-    cameraCaptureCallbackRef.current = onCapture;
-    setCameraError(null);
-    setCameraOpen(true);
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraError('This browser does not support camera capture here (navigator.mediaDevices.getUserMedia is unavailable). Please choose a file instead.');
-        return;
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      cameraStreamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-    } catch (err) {
-      // 2026-09-06 (user-reported real-device failure): the previous generic message gave no way
-      // to tell a denied-permission error apart from a hardware/constraint error like
-      // NotFoundError or NotReadableError - surfacing the actual DOMException name/message so the
-      // next report says exactly what's wrong instead of re-guessing.
-      const name = err instanceof DOMException ? err.name : 'Error';
-      const detail = err instanceof Error ? err.message : String(err);
-      setCameraError(`Could not access the camera (${name}: ${detail}). Check your browser/device camera permission, or choose a file instead.`);
-    }
-  };
-
-  const closeCamera = () => {
-    stopCameraStream();
-    setCameraOpen(false);
-  };
-
-  const capturePhoto = () => {
-    const video = videoRef.current;
-    if (!video || !video.videoWidth) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d')?.drawImage(video, 0, 0);
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) return;
-        const file = new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
-        const onCapture = cameraCaptureCallbackRef.current;
-        closeCamera();
-        onCapture?.(file);
-      },
-      'image/jpeg',
-      0.92,
-    );
-  };
-
-  React.useEffect(() => stopCameraStream, []);
-
   if (isEditMode && editState === 'loading') {
     return (
       <PageShell embedded={isEmbedded}>
@@ -863,7 +795,6 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                 key={slot.category}
                 category={slot.category}
                 status={uploadState[slot.category]}
-                onCapture={() => openCamera((file) => handleUpload(slot.category, file))}
                 onFileSelected={(file) => handleUpload(slot.category, file)}
               />
             ))}
@@ -1199,7 +1130,6 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                       key={slot.category}
                       category={slot.category}
                       status={uploadState[slot.category]}
-                      onCapture={() => openCamera((file) => handleUpload(slot.category, file))}
                       onFileSelected={(file) => handleUpload(slot.category, file)}
                     />
                   ))}
@@ -1262,25 +1192,6 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
         </Dialog>
         <Dialog open={showPrivacy} onClose={() => setShowPrivacy(false)} title="Data Privacy Statement and Consent Form">
           <PrivacyContent />
-        </Dialog>
-        <Dialog open={cameraOpen} onClose={closeCamera} title="Take a photo of the document">
-          {cameraError ? (
-            <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{cameraError}</p>
-          ) : (
-            <div className="relative overflow-hidden rounded-md bg-black">
-              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-              <video ref={videoRef} autoPlay playsInline muted className="aspect-[4/3] w-full object-cover" />
-              <div className="pointer-events-none absolute inset-4 rounded-md border-2 border-dashed border-white/70" />
-            </div>
-          )}
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={closeCamera}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={capturePhoto} disabled={!!cameraError}>
-              <Camera className="mr-2 h-4 w-4" /> Capture
-            </Button>
-          </div>
         </Dialog>
       </>
     </PageShell>

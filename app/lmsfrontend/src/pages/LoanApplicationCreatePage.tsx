@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, Camera, CheckCircle2, FilePlus2, Lock, Plus, RotateCcw, Search, Sparkles, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, FilePlus2, Lock, Plus, RotateCcw, Search, Sparkles, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -57,32 +57,27 @@ const AI_EXTRACTION_ACCEPTED_MIME = new Set([
 const DOCUMENT_SLOTS: {
   category: AttachmentDocumentCategory;
   showWhen?: (ctx: { loanCategory: string; hasCoBorrower: boolean }) => boolean;
-  /** Adds a "Camera" button alongside "Upload" for slots where a live photo is a realistic
-   * substitute for a scanned file (2026-09-06 user request) - 'user' (front camera) for the
-   * applicant's own selfie, 'environment' (rear camera) for every physical document/ID held up to
-   * the camera - every slot below has one now. */
-  cameraFacingMode?: 'environment' | 'user';
 }[] = [
-  { category: 'PROFILE_PICTURE', cameraFacingMode: 'user' },
-  { category: 'VALID_ID_BORROWER', cameraFacingMode: 'environment' },
-  { category: 'VALID_ID_CO_BORROWER', showWhen: (ctx) => ctx.hasCoBorrower, cameraFacingMode: 'environment' },
-  { category: 'PROOF_OF_BILLING', cameraFacingMode: 'environment' },
-  { category: 'EMPLOYEE_ID', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan', cameraFacingMode: 'environment' },
-  { category: 'CORPORATE_PAYSLIP', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan', cameraFacingMode: 'environment' },
-  { category: 'CERTIFICATE_OF_EMPLOYMENT', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan', cameraFacingMode: 'environment' },
-  { category: 'BUSINESS_CLEARANCE', showWhen: (ctx) => ctx.loanCategory === 'Business Loan', cameraFacingMode: 'environment' },
-  { category: 'DTI_SEC_REGISTRATION', showWhen: (ctx) => ctx.loanCategory === 'Business Loan', cameraFacingMode: 'environment' },
-  { category: 'BUSINESS_PERMIT', showWhen: (ctx) => ctx.loanCategory === 'Business Loan', cameraFacingMode: 'environment' },
-  { category: 'INCOME_TAX_RETURN', showWhen: (ctx) => ctx.loanCategory === 'Business Loan', cameraFacingMode: 'environment' },
-  { category: 'BANK_STATEMENT', showWhen: (ctx) => ctx.loanCategory === 'Business Loan', cameraFacingMode: 'environment' },
-  { category: 'SEAMANS_BOOK', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan', cameraFacingMode: 'environment' },
-  { category: 'OVERSEAS_EMPLOYMENT_CERTIFICATE', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan', cameraFacingMode: 'environment' },
-  { category: 'POEA_CONTRACT', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan', cameraFacingMode: 'environment' },
-  { category: 'ALLOTMENT_SLIP', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan', cameraFacingMode: 'environment' },
-  { category: 'PASSPORT_ID', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan', cameraFacingMode: 'environment' },
+  { category: 'PROFILE_PICTURE' },
+  { category: 'VALID_ID_BORROWER' },
+  { category: 'VALID_ID_CO_BORROWER', showWhen: (ctx) => ctx.hasCoBorrower },
+  { category: 'PROOF_OF_BILLING' },
+  { category: 'EMPLOYEE_ID', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan' },
+  { category: 'CORPORATE_PAYSLIP', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan' },
+  { category: 'CERTIFICATE_OF_EMPLOYMENT', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan' },
+  { category: 'BUSINESS_CLEARANCE', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
+  { category: 'DTI_SEC_REGISTRATION', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
+  { category: 'BUSINESS_PERMIT', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
+  { category: 'INCOME_TAX_RETURN', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
+  { category: 'BANK_STATEMENT', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
+  { category: 'SEAMANS_BOOK', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
+  { category: 'OVERSEAS_EMPLOYMENT_CERTIFICATE', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
+  { category: 'POEA_CONTRACT', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
+  { category: 'ALLOTMENT_SLIP', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
+  { category: 'PASSPORT_ID', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
   // Optional ("if available") on the Portal's own published checklist - not in
   // getRequiredDocumentCategories() on the backend, matching that.
-  { category: 'FLIGHT_DETAILS', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan', cameraFacingMode: 'environment' },
+  { category: 'FLIGHT_DETAILS', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
 ];
 
 /** Uppercases the free-text parts of an address patch (house/unit number, street) - matches the
@@ -229,16 +224,12 @@ function DocumentUploadSlot({
   error,
   onSelect,
   onRemove,
-  onTakePhoto,
 }: {
   label: string;
   file: File | null;
   error?: string;
   onSelect: (file: File) => void;
   onRemove: () => void;
-  /** Opens the shared camera-capture dialog for this slot, if the device has a camera - omitted
-   * entirely (no button shown) for slots where a live photo doesn't make sense. */
-  onTakePhoto?: () => void;
 }) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   return (
@@ -267,11 +258,6 @@ function DocumentUploadSlot({
           {file && (
             <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={onRemove}>
               Remove
-            </Button>
-          )}
-          {onTakePhoto && (
-            <Button type="button" variant="outline" size="sm" className="h-7 px-2" onClick={onTakePhoto}>
-              <Camera className="mr-1.5 h-3 w-3" /> Camera
             </Button>
           )}
           <Button type="button" variant="outline" size="sm" className="h-7 px-2" onClick={() => inputRef.current?.click()}>
@@ -956,76 +942,6 @@ export function LoanApplicationForm({
     setAiReviewImageUrl(null);
   };
 
-  // Live camera capture - an alternative to picking a file, for applicants/staff who have the ID
-  // in hand but no scanned copy. Generic - `openCamera(onCapture)` stores the callback and any
-  // consumer in the form (AI extraction, or a categorized document slot below) can request a
-  // capture without duplicating the getUserMedia/canvas plumbing; the dialog itself doesn't know
-  // or care who asked.
-  const [cameraOpen, setCameraOpen] = React.useState(false);
-  const [cameraError, setCameraError] = React.useState<string | null>(null);
-  const [cameraFacingMode, setCameraFacingMode] = React.useState<'environment' | 'user'>('environment');
-  const videoRef = React.useRef<HTMLVideoElement>(null);
-  const cameraStreamRef = React.useRef<MediaStream | null>(null);
-  const cameraCaptureCallbackRef = React.useRef<((file: File) => void) | null>(null);
-
-  const stopCameraStream = () => {
-    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
-    cameraStreamRef.current = null;
-  };
-
-  const openCamera = async (onCapture: (file: File) => void, facingMode: 'environment' | 'user' = 'environment') => {
-    cameraCaptureCallbackRef.current = onCapture;
-    setCameraError(null);
-    setCameraFacingMode(facingMode);
-    setCameraOpen(true);
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraError('This browser does not support camera capture here (navigator.mediaDevices.getUserMedia is unavailable). Please upload a file instead.');
-        return;
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
-      cameraStreamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-    } catch (err) {
-      // 2026-09-06 (user-reported real-device failure on the Portal's copy of this same dialog): a
-      // generic message can't distinguish a denied permission from a hardware/constraint error
-      // (NotFoundError, NotReadableError, OverconstrainedError, etc.) - show the real DOMException
-      // name/message so a future report says exactly what's wrong instead of re-guessing.
-      const name = err instanceof DOMException ? err.name : 'Error';
-      const detail = err instanceof Error ? err.message : String(err);
-      setCameraError(`Could not access the camera (${name}: ${detail}). Check your browser/device camera permission, or upload a file instead.`);
-    }
-  };
-
-  const closeCamera = () => {
-    stopCameraStream();
-    setCameraOpen(false);
-  };
-
-  const capturePhoto = () => {
-    const video = videoRef.current;
-    if (!video || !video.videoWidth) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    if (cameraFacingMode === 'user') {
-      // Mirror the capture to match the mirrored live preview - otherwise a selfie comes out
-      // flipped left-right from what the applicant just saw themselves centering.
-      ctx?.translate(canvas.width, 0);
-      ctx?.scale(-1, 1);
-    }
-    ctx?.drawImage(video, 0, 0);
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const file = new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      const onCapture = cameraCaptureCallbackRef.current;
-      closeCamera();
-      onCapture?.(file);
-    }, 'image/jpeg', 0.92);
-  };
-
-  React.useEffect(() => stopCameraStream, []);
   React.useEffect(() => () => { if (aiReviewImageUrl) URL.revokeObjectURL(aiReviewImageUrl); }, [aiReviewImageUrl]);
 
   const handleDocumentFileSelected = (category: AttachmentDocumentCategory, file: File) => {
@@ -1356,72 +1272,17 @@ export function LoanApplicationForm({
             onChange={handleAiFileSelected}
             disabled={extractMutation.isPending}
           />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={extractMutation.isPending}
-              onClick={() => {
-                setAiError(null);
-                openCamera((file) => {
-                  setAiExtractedFile(null);
-                  extractMutation.mutate(file);
-                });
-              }}
-            >
-              <Camera className="mr-2 h-3.5 w-3.5" /> Take a photo
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={extractMutation.isPending}
-              onClick={() => aiFileInputRef.current?.click()}
-            >
-              <Upload className="mr-2 h-3.5 w-3.5" /> Upload a file
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={extractMutation.isPending}
+            onClick={() => aiFileInputRef.current?.click()}
+          >
+            <Upload className="mr-2 h-3.5 w-3.5" /> Upload a file
+          </Button>
         </CardContent>
       </Card>
-
-      <Dialog open={cameraOpen} onOpenChange={(open) => (open ? setCameraOpen(true) : closeCamera())}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Camera className="h-4 w-4 text-primary" /> {cameraFacingMode === 'user' ? 'Take a selfie' : 'Take a photo of the document'}
-            </DialogTitle>
-            <DialogDescription>
-              {cameraFacingMode === 'user' ? 'Center your face in the frame, then capture.' : 'Center the ID or document in the frame, then capture.'}
-            </DialogDescription>
-          </DialogHeader>
-          {cameraError ? (
-            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
-              <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {cameraError}
-            </div>
-          ) : (
-            <div className="relative overflow-hidden rounded-md bg-black">
-              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className={`aspect-[4/3] w-full object-cover ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`}
-              />
-              <div className="pointer-events-none absolute inset-4 rounded-md border-2 border-dashed border-white/70" />
-            </div>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeCamera}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={capturePhoto} disabled={!!cameraError}>
-              <Camera className="mr-2 h-4 w-4" /> Capture
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={!!aiReview} onOpenChange={(open) => !open && dismissAiReview()}>
         <DialogContent className="sm:max-w-lg">
@@ -1903,7 +1764,7 @@ export function LoanApplicationForm({
           description="Upload the applicant's actual supporting documents - PDF, JPEG, or PNG, up to 10 MB each. Saved as attachments on this application once it's created; slots shown depend on the selected loan type and whether there's a co-borrower."
         >
           <div className="grid gap-2 sm:grid-cols-2">
-            {visibleDocumentSlots.map(({ category, cameraFacingMode }) => (
+            {visibleDocumentSlots.map(({ category }) => (
               <DocumentUploadSlot
                 key={category}
                 label={DOCUMENT_CATEGORY_LABELS[category]}
@@ -1911,11 +1772,6 @@ export function LoanApplicationForm({
                 error={documentFileErrors[category]}
                 onSelect={(file) => handleDocumentFileSelected(category, file)}
                 onRemove={() => handleRemoveDocumentFile(category)}
-                onTakePhoto={
-                  cameraFacingMode
-                    ? () => openCamera((file) => handleDocumentFileSelected(category, file), cameraFacingMode)
-                    : undefined
-                }
               />
             ))}
           </div>

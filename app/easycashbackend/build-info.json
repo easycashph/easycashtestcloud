@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-06T12:55:41+08:00",
-    "commitMessage":  "Note: keep test Portal account/application for further testing",
-    "commit":  "31e2599f",
-    "builtAt":  "2026-09-06T05:30:42.7818796Z"
+    "commitDate":  "2026-09-06T13:44:13+08:00",
+    "commitMessage":  "Surface the real camera error instead of a generic message",
+    "commit":  "a3f4da1b",
+    "builtAt":  "2026-09-06T06:09:40.9046907Z"
 }
