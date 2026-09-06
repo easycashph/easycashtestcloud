@@ -5608,3 +5608,55 @@ access itself errors in this headless test environment, as expected - not a defe
   silently skip a structurally-identical block at a different nesting depth - worth grepping for
   the pattern *after* a "fixed everywhere" edit, not just trusting a clean type-check, especially
   when duplicated JSX is involved.
+
+## §114 — 2026-09-06: Diagnosed, then removed, the custom camera-capture feature entirely
+
+User tested the Portal's new "Take Photo" button on a real Android Chrome phone and got "Could not
+access the camera." Investigated step by step rather than guessing:
+1. Confirmed the tunnel URL was genuinely `https://` with a padlock - ruled out the insecure-context
+   theory (`getUserMedia` requires a secure context, and a non-HTTPS origin fails exactly this way).
+2. Confirmed Chrome's site settings already had Camera set to Allow, not Block - ruled out the
+   denied-permission theory, the other leading suspect for "no permission prompt ever appeared."
+3. With both common causes eliminated, the real blocker was that `catch {}` swallowed the actual
+   `DOMException` and always showed the same generic message - there was no way to tell a
+   `NotFoundError`/`NotReadableError`/`OverconstrainedError`/other hardware-level failure apart from
+   a permission issue. Fixed both dialogs (LMS and Portal) to surface the real
+   `error.name`/`error.message`, plus an explicit check for `navigator.mediaDevices.getUserMedia`
+   being unavailable at all - shipped this diagnostic improvement first (commit `a3f4da1b`) so the
+   next report would say exactly what's wrong.
+
+Before that improved diagnostic came back with an answer, user made a simpler observation: **on
+mobile, tapping the plain "Choose File" input already offers a native Camera option** (alongside
+Files/Gallery) - the OS's own camera intent, not a web `getUserMedia()` call, so it has none of the
+permission/secure-context/hardware-constraint edge cases a custom implementation has to handle
+itself. Decided the custom camera dialog was solving an already-solved problem while being the
+actual source of the bug - asked to remove it entirely rather than keep debugging it.
+
+Removed from both apps completely: `DOCUMENT_SLOTS`' `cameraFacingMode` field and every `Camera`
+button (LMS), the Portal's `DocumentSlotRow` `onCapture` prop/button, the AI Extraction section's
+"Take a photo" button (back to a single "Upload a file" button, its original pre-§101 shape), and
+every camera state variable/handler (`openCamera`/`closeCamera`/`capturePhoto`/`stopCameraStream`/
+`cameraOpen`/`cameraError`/`videoRef`/`cameraStreamRef`/`cameraCaptureCallbackRef`) plus both
+capture Dialogs. Verified via `grep -i camera` on both files - zero matches outside code comments
+explaining why it was removed.
+
+Type-checked both packages clean, rebuilt `lmsfrontend` + `portalfrontend` (one buildkit grpc crash,
+fixed by the usual plain retry), verified healthy with no stale-WSL2-listener regression. Confirmed
+in the browser: no "Take Photo" button anywhere, plain "Choose File" inputs remain and correctly
+reflect already-uploaded documents (three slots on the test application showed "Uploaded" -
+apparently successfully attached via the always-fine native file picker during the user's own
+phone testing). Committed (`c3622c81`) and pushed - nothing new to pull.
+
+### Current state / follow-ups
+
+- Every document upload slot in both apps (LMS and Portal) is back to a single, plain file input -
+  no custom camera button anywhere. This is now the final, settled shape - not a temporary rollback
+  pending a fix.
+- **Lesson for future work on this codebase**: don't reach for a custom `getUserMedia()` capture UI
+  for a plain "upload a document photo" need on a form meant to be used on mobile - a bare
+  `<input type="file" accept="image/*,application/pdf">` already gets a native Camera option from
+  the OS's own file picker on both Android and iOS, with none of the secure-context/permission-
+  prompt/hardware-constraint failure modes a hand-rolled dialog has to handle itself. Reach for a
+  custom camera UI only when something the native picker can't do is actually needed (e.g. a
+  guided multi-step capture flow, live overlay/framing guidance, or enforcing "must be a live photo,
+  not a gallery pick" - none of which applied here).
