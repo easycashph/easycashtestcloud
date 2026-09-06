@@ -342,11 +342,35 @@ export function LoanApplicationEditPage() {
   );
 }
 
-/** Field names on `LoanApplication` treated as "likely to have gone stale" since the client's last
- * application - shown with an amber "verify" badge in `LoanApplicationEntry`'s review step,
- * versus a green "same as before" badge for everything else. Personal-identity fields (name, birth
- * date, gender, nationality) essentially never change; contact/financial fields plausibly do. */
-const STALE_PRONE_APPLICATION_FIELDS = new Set(['address', 'employer', 'monthlyIncome', 'mobilePhone']);
+/** How each field on `LoanApplication` is badged in `LoanApplicationEntry`'s review step:
+ * - `same` (green "same as before") - personal-identity fields that essentially never change.
+ * - `verify` (amber "verify") - contact/financial/reference details that plausibly went stale.
+ * - `starting` (neutral "starting point") - the loan request itself (type/amount/term/purpose).
+ *   Not "stale data to double-check" - it's the most likely thing to be deliberately different
+ *   this time (a bigger loan, a different product), so it gets its own honest, non-judgmental
+ *   label rather than implying it's expected to match the previous request. */
+const APPLICATION_FIELD_BADGE_KIND: Record<string, 'same' | 'verify' | 'starting'> = {
+  applicantName: 'same',
+  birthDate: 'same',
+  gender: 'same',
+  nationality: 'same',
+  address: 'verify',
+  employer: 'verify',
+  monthlyIncome: 'verify',
+  mobilePhone: 'verify',
+  reference1: 'verify',
+  reference2: 'verify',
+  requestedCategory: 'starting',
+  requestedAmount: 'starting',
+  requestedTermMonths: 'starting',
+  loanPurpose: 'starting',
+};
+
+const BADGE_STYLE: Record<'same' | 'verify' | 'starting', { className: string; label: string }> = {
+  same: { className: 'bg-primary/10 text-primary', label: 'same as before' },
+  verify: { className: 'bg-warning/10 text-warning', label: 'verify' },
+  starting: { className: 'bg-secondary text-muted-foreground', label: 'starting point' },
+};
 
 /**
  * Gate in front of `LoanApplicationForm` for the two entry points that don't already know which
@@ -517,42 +541,62 @@ export function LoanApplicationEntry({
           </CardDescription>
         </CardHeader>
         {!applicationsQuery.isLoading && latestApplication && (
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Only personal details are copied directly - still verify the fields with an amber badge before submitting, since these
-              may have changed since then.
+              Personal details are copied directly - still verify the fields tagged "verify" before submitting, since these may have
+              changed since then. Loan details are only a starting point for this new request, not something to leave unchanged.
             </p>
-            <div className="grid gap-2.5 sm:grid-cols-2">
-              {(
+            {(
+              [
                 [
-                  ['applicantName', 'Full name', latestApplication.applicantName],
-                  ['birthDate', 'Date of birth', latestApplication.birthDate ? formatDate(latestApplication.birthDate) : '—'],
-                  ['gender', 'Gender / Civil status', [latestApplication.gender, latestApplication.civilStatus].filter(Boolean).join(' · ') || '—'],
-                  ['nationality', 'Nationality', latestApplication.nationality ?? '—'],
-                  ['address', 'Present address', latestApplication.address ?? '—'],
-                  ['employer', 'Employer', latestApplication.employer ?? '—'],
-                  ['monthlyIncome', 'Monthly income', latestApplication.monthlyIncome ? formatPeso(latestApplication.monthlyIncome) : '—'],
-                  ['mobilePhone', 'Contact number', latestApplication.mobilePhone ?? '—'],
-                ] as const
-              ).map(([field, label, value]) => {
-                const stale = STALE_PRONE_APPLICATION_FIELDS.has(field);
-                return (
-                  <div key={field} className="rounded-md border bg-secondary/30 p-2.5">
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
-                      <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          stale ? 'bg-warning/10 text-warning' : 'bg-primary/10 text-primary'
-                        }`}
-                      >
-                        {stale ? 'verify' : 'same as before'}
-                      </span>
-                    </div>
-                    <p className="text-sm font-medium">{value}</p>
-                  </div>
-                );
-              })}
-            </div>
+                  'Personal & contact details',
+                  [
+                    ['applicantName', 'Full name', latestApplication.applicantName],
+                    ['birthDate', 'Date of birth', latestApplication.birthDate ? formatDate(latestApplication.birthDate) : '—'],
+                    ['gender', 'Gender / Civil status', [latestApplication.gender, latestApplication.civilStatus].filter(Boolean).join(' · ') || '—'],
+                    ['nationality', 'Nationality', latestApplication.nationality ?? '—'],
+                    ['address', 'Present address', latestApplication.address ?? '—'],
+                    ['employer', 'Employer', latestApplication.employer ?? '—'],
+                    ['monthlyIncome', 'Monthly income', latestApplication.monthlyIncome ? formatPeso(latestApplication.monthlyIncome) : '—'],
+                    ['mobilePhone', 'Contact number', latestApplication.mobilePhone ?? '—'],
+                  ],
+                ],
+                [
+                  'Loan details (previous request)',
+                  [
+                    ['requestedCategory', 'Type of loan', latestApplication.requestedCategory || '—'],
+                    ['requestedAmount', 'Requested amount', latestApplication.requestedAmount ? formatPeso(latestApplication.requestedAmount) : '—'],
+                    ['requestedTermMonths', 'Term', latestApplication.requestedTermMonths ? `${latestApplication.requestedTermMonths} months` : '—'],
+                    ['loanPurpose', 'Loan purpose', latestApplication.loanPurpose ?? '—'],
+                  ],
+                ],
+                [
+                  'References',
+                  [
+                    ['reference1', 'Reference 1', [latestApplication.reference1Name, latestApplication.reference1Mobile].filter(Boolean).join(' · ') || '—'],
+                    ['reference2', 'Reference 2', [latestApplication.reference2Name, latestApplication.reference2Mobile].filter(Boolean).join(' · ') || '—'],
+                  ],
+                ],
+              ] as const
+            ).map(([section, fields]) => (
+              <div key={section} className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{section}</p>
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  {fields.map(([field, label, value]) => {
+                    const badge = BADGE_STYLE[APPLICATION_FIELD_BADGE_KIND[field] ?? 'verify'];
+                    return (
+                      <div key={field} className="rounded-md border bg-secondary/30 p-2.5">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}>{badge.label}</span>
+                        </div>
+                        <p className="text-sm font-medium">{value}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </CardContent>
         )}
         <CardContent className={applicationsQuery.isLoading || !latestApplication ? '' : 'pt-0'}>
