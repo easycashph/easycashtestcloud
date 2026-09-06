@@ -5329,3 +5329,48 @@ Type-checked clean, rebuilt `lmsfrontend`, verified in the browser against the s
   worth knowing if asked to expand further.
 - Co-borrower reuse remains solely the form's own "Use a previous co-borrower" picker - not
   duplicated in the review card, by design.
+
+## §109 — 2026-09-06: Camera capture added to Applicant Documents upload slots
+
+User listed the five document slots they wanted a "Take a photo" option on: Selfie Photo, Latest
+Proof of billing, Valid ID (Borrower), Valid ID (Co-borrower), Latest Payslip - all five already
+existed as `DOCUMENT_SLOTS` categories (`PROFILE_PICTURE`, `PROOF_OF_BILLING`,
+`VALID_ID_BORROWER`, `VALID_ID_CO_BORROWER`, `CORPORATE_PAYSLIP`), so this was purely a UI capture
+addition, no new category needed.
+
+Refactored the camera dialog originally built for AI Extraction (§101) from a one-off hardcoded to
+`extractMutation` into a generic `openCamera(onCapture, facingMode)`: a ref
+(`cameraCaptureCallbackRef`) holds whichever callback the current caller passed in, so
+`capturePhoto` doesn't need to know who asked - it just resolves the callback and hands back the
+captured `File`. AI Extraction's own "Take a photo" button now passes its existing fill logic as
+that callback instead of it being baked into `capturePhoto` directly; behavior there is unchanged.
+
+Added a second parameter, `facingMode: 'environment' | 'user'`, since a selfie needs the front
+camera while a document/ID needs the rear one - previously hardcoded to `'environment'` for the
+single AI-extraction use case. `DOCUMENT_SLOTS` gained an optional `cameraFacingMode` field (only
+set on the five requested categories - Employee ID, Business Clearance, Seaman's Book, and OEC
+were deliberately left camera-less, matching exactly what was asked rather than assumed). A
+`'user'`-mode capture mirrors both the live preview (`scale-x-[-1]`) and the saved file itself (via
+a canvas `translate`+`scale(-1,1)` at capture time) - otherwise a selfie would come out flipped
+left-right from what the applicant just saw themselves centering in frame.
+
+`DocumentUploadSlot` gained an optional `onTakePhoto` prop - a "Camera" button appears next to
+"Upload"/"Replace" only when a slot has `cameraFacingMode` set, calling
+`openCamera((file) => handleDocumentFileSelected(category, file), cameraFacingMode)`.
+
+Type-checked clean, rebuilt `lmsfrontend`, verified in the browser: the existing AI-extraction
+camera dialog still opens correctly ("Take a photo of the document" / rear-camera framing text) -
+confirming the refactor didn't regress it - and the new Profile picture slot's Camera button opens
+the selfie-specific variant ("Take a selfie" / "Center your face in the frame"). Actual camera
+access itself errors in this headless Browser-pane test environment ("Could not access the
+camera") - expected (no real camera hardware there), not a code defect; the dialog opening with the
+correct mode-specific title/copy is what was being verified. Committed (`bd305936`) and pushed -
+nothing new to pull.
+
+### Current state / follow-ups
+
+- Camera capture is now available on: Profile picture (selfie/front camera), Valid ID Borrower,
+  Valid ID Co-Borrower, Proof of billing, and Corporate payslip (all rear camera). Employee ID,
+  Business Clearance, Seaman's Book, and OEC remain upload-only.
+- Not yet tested against a real phone/tablet camera in the field (same caveat noted back in §101
+  for the AI-extraction camera) - worth a live test with an actual applicant-facing device.
