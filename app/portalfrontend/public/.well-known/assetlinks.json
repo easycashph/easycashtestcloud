@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ph.easycash.portal",
+      "sha256_cert_fingerprints": [
+        "8A:2B:87:C4:A5:57:91:5B:A0:63:59:B5:A6:64:95:11:C6:B3:15:62:80:D3:57:90:37:4F:62:D6:78:A4:0E:24"
+      ]
+    }
+  }
+]

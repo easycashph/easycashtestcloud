@@ -8,6 +8,20 @@
 node_modules/
 npm-debug.log
 
+# Portal APK (TWA) signing keystore and Bubblewrap/Gradle build output - the keystore's private key
+# must never leave this machine except via a secure backup (see local/portal-apk-keystore-notes.md);
+# committing it to git would let anyone with repo access sign updates as the real app. The rest of
+# this project (build.gradle, gradlew, res/, twa-manifest.json) IS committed - it's the buildable
+# source needed to regenerate the APK for a future version bump.
+app/portalfrontend-twa/android.keystore
+app/portalfrontend-twa/*.keystore
+app/portalfrontend-twa/*.jks
+app/portalfrontend-twa/.gradle/
+app/portalfrontend-twa/app/build/
+app/portalfrontend-twa/*.apk
+app/portalfrontend-twa/*.apk.idsig
+app/portalfrontend-twa/*.aab
+
 # Environment
 .env
 .env.*
