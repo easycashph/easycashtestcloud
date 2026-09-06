@@ -77,6 +77,20 @@ enum AttachmentDocumentCategory {
   CORPORATE_PAYSLIP
   SEAMANS_BOOK
   OVERSEAS_EMPLOYMENT_CERTIFICATE
+  /// 2026-09-06 (user request): real upload slots for documents previously listed only as
+  /// informational "have ready" notes on the Portal/LMS Requirements pages - Business Loan.
+  DTI_SEC_REGISTRATION
+  BUSINESS_PERMIT
+  INCOME_TAX_RETURN
+  BANK_STATEMENT
+  /// 2026-09-06 (user request): same as above - Salary Loan.
+  CERTIFICATE_OF_EMPLOYMENT
+  /// 2026-09-06 (user request): same as above - Seafarer Loan. FLIGHT_DETAILS stays optional
+  /// ("if available") in getRequiredDocumentCategories(), matching the Portal's own copy.
+  POEA_CONTRACT
+  ALLOTMENT_SLIP
+  FLIGHT_DETAILS
+  PASSPORT_ID
   /// 2026-07-31 (user request): a catch-all "Other" upload slot offered per loan product on the
   /// Portal application form (Business/Salary/Seafarer each get one) - always optional/
   /// supplementary, never counted toward the "documents complete" check.

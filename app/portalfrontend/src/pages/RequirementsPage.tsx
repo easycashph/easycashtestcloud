@@ -4,7 +4,7 @@ import { SiteFooter } from '@/components/SiteFooter';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePageMeta } from '@/lib/usePageMeta';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
-import { ADDITIONAL_REQUIREMENTS_NOTES, ELIGIBILITY_CRITERIA, getDocumentsForProduct } from '@/lib/loanRequirements';
+import { ELIGIBILITY_CRITERIA, getDocumentsForProduct } from '@/lib/loanRequirements';
 import '@/pages/landingMockupClone.css';
 
 /** Decorative category labels, same pattern/reasoning as LandingPage's own PRODUCT_TAGS - paired
@@ -19,8 +19,7 @@ const PRODUCT_TAGS = ['Business', 'Everyday', 'Overseas'];
  * before they start, which raises completion rates and cuts support calls.
  *
  * Everything shown here is derived from `@/lib/loanRequirements` — the same definitions the
- * application form uses — so the two can never drift apart (except `ADDITIONAL_REQUIREMENTS_NOTES`,
- * deliberately kept separate - see that constant's own doc comment). See
+ * application form uses — so the two can never drift apart. See
  * `docs/PORTAL_WEBSITE_STRATEGY.md` §3.2.
  *
  * Page chrome (headings, notes, buttons) is translated; `ELIGIBILITY_CRITERIA`, loan product
@@ -99,7 +98,6 @@ export function RequirementsPage() {
           <div className="product-row" style={{ marginTop: 34 }}>
             {LOAN_PRODUCTS.map((product, index) => {
               const { always, productSpecific } = getDocumentsForProduct(product.category);
-              const additionalNotes = ADDITIONAL_REQUIREMENTS_NOTES[product.category] ?? [];
               return (
                 <div key={product.category} className={`product-card ${index === 1 ? 'navy' : ''}`}>
                   <div className="glow" />
@@ -117,12 +115,6 @@ export function RequirementsPage() {
                     ))}
                     {productSpecific.map((doc) => (
                       <div key={doc} className="doc-item">
-                        <Check className="h-[15px] w-[15px]" />
-                        <span>{doc}</span>
-                      </div>
-                    ))}
-                    {additionalNotes.map((doc) => (
-                      <div key={doc} className="doc-item new">
                         <Check className="h-[15px] w-[15px]" />
                         <span>{doc}</span>
                       </div>

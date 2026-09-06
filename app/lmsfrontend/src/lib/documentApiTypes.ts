@@ -12,6 +12,15 @@ export type AttachmentDocumentCategory =
   | 'CORPORATE_PAYSLIP'
   | 'SEAMANS_BOOK'
   | 'OVERSEAS_EMPLOYMENT_CERTIFICATE'
+  | 'DTI_SEC_REGISTRATION'
+  | 'BUSINESS_PERMIT'
+  | 'INCOME_TAX_RETURN'
+  | 'BANK_STATEMENT'
+  | 'CERTIFICATE_OF_EMPLOYMENT'
+  | 'POEA_CONTRACT'
+  | 'ALLOTMENT_SLIP'
+  | 'FLIGHT_DETAILS'
+  | 'PASSPORT_ID'
   | 'OTHER_SUPPORTING_DOCUMENT'
   | 'PAYMENT_PROOF';
 
@@ -27,6 +36,15 @@ export const DOCUMENT_CATEGORY_LABELS: Record<AttachmentDocumentCategory, string
   CORPORATE_PAYSLIP: 'Corporate payslip',
   SEAMANS_BOOK: "Seaman's book",
   OVERSEAS_EMPLOYMENT_CERTIFICATE: 'Overseas Employment Certificate',
+  DTI_SEC_REGISTRATION: 'DTI/SEC Registration Certificate',
+  BUSINESS_PERMIT: "Mayor's/Business Permit",
+  INCOME_TAX_RETURN: 'Income Tax Return (ITR) / Financial Statements',
+  BANK_STATEMENT: 'Bank Statement',
+  CERTIFICATE_OF_EMPLOYMENT: 'Certificate of Employment (COE)',
+  POEA_CONTRACT: 'POEA Contract of Employment',
+  ALLOTMENT_SLIP: 'Allotment Slip / Certificate of Salary and Allowance (CSA)',
+  FLIGHT_DETAILS: 'Flight Details / Guarantee Letter',
+  PASSPORT_ID: 'Passport ID',
   OTHER_SUPPORTING_DOCUMENT: 'Other',
   PAYMENT_PROOF: 'Payment Proof',
 };

@@ -11,6 +11,12 @@ import type { PortalDocumentCategory } from '@/lib/portalApiTypes';
  * These are the real categories the backend accepts (`PortalDocumentCategory`), mirroring the
  * staff-facing form's own DOCUMENT_SLOTS. Nothing here is invented; do not add an entry unless the
  * backend accepts it and the application form offers a slot for it.
+ *
+ * 2026-09-06: previously had a separate `ADDITIONAL_REQUIREMENTS_NOTES` export for documents
+ * without a real `AttachmentDocumentCategory` value yet (informational-only, no upload slot) -
+ * removed once all of them got real categories via migration. If a genuinely new "have ready but
+ * can't upload yet" document comes up again, that's the pattern to bring back, not to invent a new
+ * one.
  */
 
 export type UploadableDocumentCategory = Exclude<PortalDocumentCategory, 'PROFILE_PICTURE'>;
@@ -26,6 +32,17 @@ export const DOCUMENT_LABELS: Record<UploadableDocumentCategory, string> = {
   CORPORATE_PAYSLIP: 'Payslip',
   SEAMANS_BOOK: "Seaman's Book",
   OVERSEAS_EMPLOYMENT_CERTIFICATE: 'Overseas Employment Certificate',
+  // 2026-09-06 (user request): real upload slots for what were previously ADDITIONAL_REQUIREMENTS_NOTES
+  // informational-only entries - now that AttachmentDocumentCategory has values for them.
+  DTI_SEC_REGISTRATION: 'DTI/SEC Registration Certificate',
+  BUSINESS_PERMIT: "Mayor's/Business Permit",
+  INCOME_TAX_RETURN: 'Latest Income Tax Return (ITR) or Financial Statements',
+  BANK_STATEMENT: 'Bank Statement (last 3-6 months)',
+  CERTIFICATE_OF_EMPLOYMENT: 'Latest Certificate of Employment (COE)',
+  POEA_CONTRACT: 'Latest POEA Contract of Employment',
+  ALLOTMENT_SLIP: 'Latest Allotment Slip or Certificate of Salary and Allowance (CSA)',
+  FLIGHT_DETAILS: 'Flight Details/Guarantee Letter (if available)',
+  PASSPORT_ID: 'Passport ID',
   OTHER_SUPPORTING_DOCUMENT: 'Other',
 };
 
@@ -44,9 +61,18 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
   { category: 'PROOF_OF_BILLING' },
   { category: 'EMPLOYEE_ID', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan' },
   { category: 'CORPORATE_PAYSLIP', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan' },
+  { category: 'CERTIFICATE_OF_EMPLOYMENT', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan' },
   { category: 'BUSINESS_CLEARANCE', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
+  { category: 'DTI_SEC_REGISTRATION', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
+  { category: 'BUSINESS_PERMIT', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
+  { category: 'INCOME_TAX_RETURN', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
+  { category: 'BANK_STATEMENT', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
   { category: 'SEAMANS_BOOK', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
   { category: 'OVERSEAS_EMPLOYMENT_CERTIFICATE', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
+  { category: 'POEA_CONTRACT', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
+  { category: 'ALLOTMENT_SLIP', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
+  { category: 'PASSPORT_ID', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
+  { category: 'FLIGHT_DETAILS', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
   // 2026-07-31 (user request): a per-product "Other" catch-all slot - always optional/
   // supplementary (see requiredDocumentCategories.ts on the backend), never counted as required.
   {
@@ -79,31 +105,6 @@ export function getDocumentsForProduct(loanCategory: string): {
 
   return { always, productSpecific };
 }
-
-/**
- * Informational-only additional requirements (business owner confirmed, 2026-09-05) - listed on
- * the public Requirements page but deliberately NOT added to `DOCUMENT_SLOTS`/`UploadableDocumentCategory`
- * above. Those two are also the real upload-slot config `LoanApplicationFormPage.tsx` renders, and
- * are backed by the `AttachmentDocumentCategory` Prisma enum on the backend - adding a genuinely
- * new upload category there needs a migration plus backend schema updates, not just a content
- * edit. Until that's done, these are things to have ready, not yet something a client can attach
- * through the Portal.
- */
-export const ADDITIONAL_REQUIREMENTS_NOTES: Record<string, string[]> = {
-  'Business Loan': [
-    'DTI/SEC Registration Certificate',
-    "Mayor's/Business Permit (current year)",
-    'Latest Income Tax Return (ITR) or Financial Statements',
-    'Bank Statement (last 3-6 months)',
-  ],
-  'Salary Loan': ['Latest Certificate of Employment (COE)'],
-  'Seafarer Loan': [
-    'Latest POEA Contract of Employment',
-    'Latest Allotment Slip or Certificate of Salary and Allowance (CSA)',
-    'Flight Details/Guarantee Letter (if available)',
-    'Passport ID',
-  ],
-};
 
 /**
  * Basic eligibility criteria.
