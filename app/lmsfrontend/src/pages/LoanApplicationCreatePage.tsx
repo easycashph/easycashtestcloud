@@ -979,11 +979,21 @@ export function LoanApplicationForm({
     setCameraFacingMode(facingMode);
     setCameraOpen(true);
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraError('This browser does not support camera capture here (navigator.mediaDevices.getUserMedia is unavailable). Please upload a file instead.');
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
       cameraStreamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
-    } catch {
-      setCameraError('Could not access the camera. Check your browser/device camera permission, or upload a file instead.');
+    } catch (err) {
+      // 2026-09-06 (user-reported real-device failure on the Portal's copy of this same dialog): a
+      // generic message can't distinguish a denied permission from a hardware/constraint error
+      // (NotFoundError, NotReadableError, OverconstrainedError, etc.) - show the real DOMException
+      // name/message so a future report says exactly what's wrong instead of re-guessing.
+      const name = err instanceof DOMException ? err.name : 'Error';
+      const detail = err instanceof Error ? err.message : String(err);
+      setCameraError(`Could not access the camera (${name}: ${detail}). Check your browser/device camera permission, or upload a file instead.`);
     }
   };
 
