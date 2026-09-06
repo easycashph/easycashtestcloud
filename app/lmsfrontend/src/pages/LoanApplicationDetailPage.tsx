@@ -2014,7 +2014,8 @@ export function LoanApplicationDetailPage() {
                 )}
               </div>
               <p className="font-mono text-xs text-muted-foreground">
-                {application.requestedCategory} · Submitted {formatDate(application.createdAt)}
+                {productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, application.requestedCategory)} · Submitted{' '}
+                {formatDate(application.createdAt)}
                 {encodedByName ? ` · Encoded by ${encodedByName}` : ''}
                 {application.submissionLatitude !== null && application.submissionLongitude !== null && (
                   <>
@@ -2230,7 +2231,7 @@ export function LoanApplicationDetailPage() {
           <CardContent>
             <dl className="grid grid-cols-2 gap-y-3 text-sm">
               <dt className="text-muted-foreground">Category</dt>
-              <dd className="text-right font-medium">{application.requestedCategory}</dd>
+              <dd className="text-right font-medium">{productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, application.requestedCategory)}</dd>
               <dt className="text-muted-foreground">Requested amount</dt>
               <dd className="text-right font-medium">{formatPeso(application.requestedAmount)}</dd>
               <dt className="text-muted-foreground">Requested term</dt>

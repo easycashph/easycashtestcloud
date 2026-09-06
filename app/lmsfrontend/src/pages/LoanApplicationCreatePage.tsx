@@ -26,6 +26,7 @@ import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/compo
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
 import { apiClient, fetchAllPages, uploadFile } from '@/lib/apiClient';
 import type { CreateLoanApplicationRequest, LoanApplication } from '@/lib/loanApplicationApiTypes';
 import type { ExtractedLoanApplicationFields } from '@/lib/aiExtractionApiTypes';
@@ -73,6 +74,29 @@ const DOCUMENT_SLOTS: {
   { category: 'SEAMANS_BOOK', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
   { category: 'OVERSEAS_EMPLOYMENT_CERTIFICATE', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
 ];
+
+/** Documents worth having on hand per loan type that don't have a real upload slot yet (would need
+ * a new `AttachmentDocumentCategory` value plus a Prisma migration - a separate, bigger task). Kept
+ * in sync by hand with the Portal's own `ADDITIONAL_REQUIREMENTS_NOTES`
+ * (app/portalfrontend/src/lib/loanRequirements.ts) - the two apps don't share code, so a change to
+ * one doesn't automatically update the other. 2026-09-06 (user request): staff should see the same
+ * checklist applicants are told to prepare, even for the documents this form can't yet accept a
+ * file for. */
+const ADDITIONAL_REQUIREMENTS_NOTES: Record<string, string[]> = {
+  'Business Loan': [
+    'DTI/SEC Registration Certificate',
+    "Mayor's/Business Permit (current year)",
+    'Latest Income Tax Return (ITR) or Financial Statements',
+    'Bank Statement (last 3-6 months)',
+  ],
+  'Salary Loan': ['Latest Certificate of Employment (COE)'],
+  'Seafarer Loan': [
+    'Latest POEA Contract of Employment',
+    'Latest Allotment Slip or Certificate of Salary and Allowance (CSA)',
+    'Flight Details/Guarantee Letter (if available)',
+    'Passport ID',
+  ],
+};
 
 /** Uppercases the free-text parts of an address patch (house/unit number, street) - matches the
  * printed loan application form convention (ECLC-LOFN01). Region/province/city/barangay come
@@ -667,6 +691,7 @@ export function LoanApplicationForm({
 }) {
   const { canAccessLoanApplications, currentAccount } = useRole();
   useLogPageView('Loan Applications', showChrome ? 'create-application-form' : 'create-application-dialog');
+  const productTypeLabelsQuery = useProductTypeLabels();
 
   const prefillCoBorrower = React.useMemo(
     () => (prefillFrom?.coBorrowerName ? parseCoBorrowerName(prefillFrom.coBorrowerName) : null),
@@ -1549,7 +1574,7 @@ export function LoanApplicationForm({
               <SelectContent>
                 {LOAN_TYPE_OPTIONS.map((o) => (
                   <SelectItem key={o.category} value={o.category}>
-                    {o.category}
+                    {productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, o.category)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1897,6 +1922,17 @@ export function LoanApplicationForm({
               />
             ))}
           </div>
+
+          {(ADDITIONAL_REQUIREMENTS_NOTES[loanCategory] ?? []).length > 0 && (
+            <div className="mt-3 rounded-md border bg-secondary/40 p-3 text-xs">
+              <p className="font-medium">Also have ready for this loan type (no upload slot here yet):</p>
+              <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-muted-foreground">
+                {ADDITIONAL_REQUIREMENTS_NOTES[loanCategory]!.map((doc) => (
+                  <li key={doc}>{doc}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <Separator className="my-4" />
 

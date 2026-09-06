@@ -20,6 +20,7 @@ import { useSortableTable } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { STATUS_DISPLAY_LABEL } from '@/lib/loanApplicationStatusLabels';
+import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAllPages } from '@/lib/apiClient';
 import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicationApiTypes';
@@ -110,6 +111,7 @@ export function LoanApplicationsPage() {
   const [createOpen, setCreateOpen] = React.useState(false);
 
   useLogPageView('List of Loan Applications');
+  const productTypeLabelsQuery = useProductTypeLabels();
 
   const {
     items: applications,
@@ -271,7 +273,7 @@ export function LoanApplicationsPage() {
               <SelectContent>
                 {CATEGORY_OPTIONS.map((c) => (
                   <SelectItem key={c} value={c}>
-                    {c === 'ALL' ? 'All categories' : c}
+                    {c === 'ALL' ? 'All categories' : productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, c)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -316,7 +318,7 @@ export function LoanApplicationsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
-                    {app.requestedCategory}
+                    {productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, app.requestedCategory)}
                   </TableCell>
                   <TableCell className="cursor-pointer text-right" onClick={() => navigate(`/applications/${app.id}`)}>
                     {formatPeso(app.requestedAmount)}
