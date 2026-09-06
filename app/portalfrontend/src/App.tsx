@@ -37,6 +37,7 @@ const ComplaintsPage = React.lazy(() => import('@/pages/ComplaintsPage').then((m
 const NewsPage = React.lazy(() => import('@/pages/NewsPage').then((m) => ({ default: m.NewsPage })));
 const NewsArticlePage = React.lazy(() => import('@/pages/NewsArticlePage').then((m) => ({ default: m.NewsArticlePage })));
 const RequirementsPage = React.lazy(() => import('@/pages/RequirementsPage').then((m) => ({ default: m.RequirementsPage })));
+const GetAppPage = React.lazy(() => import('@/pages/GetAppPage').then((m) => ({ default: m.GetAppPage })));
 const ContactPage = React.lazy(() => import('@/pages/ContactPage').then((m) => ({ default: m.ContactPage })));
 const PortalSigningPage = React.lazy(() => import('@/pages/PortalSigningPage').then((m) => ({ default: m.PortalSigningPage })));
 const NotFoundPage = React.lazy(() => import('@/pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
@@ -91,6 +92,7 @@ function AppRoutes() {
       <Route path="/news" element={<NewsPage />} />
       <Route path="/news/:slug" element={<NewsArticlePage />} />
       <Route path="/requirements" element={<RequirementsPage />} />
+      <Route path="/get-app" element={<GetAppPage />} />
       <Route path="/contact" element={<ContactPage />} />
       <Route
         path="/dashboard"
