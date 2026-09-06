@@ -5276,3 +5276,13 @@ iteration), verified healthy both times. Committed (`e3eaa97b`) and pushed - not
   `ClientProfilePage`'s own prefill fetch all applications and filter client-side. Not addressed
   this session (matches existing precedent, not a new problem introduced here) - worth revisiting
   if/when the applications table grows large enough for this to matter for load time.
+
+**Same-day follow-up**: user pointed out this feature's UI text was in Tagalog, out of step with
+the rest of the app's English UI. On inspection, the AI Extraction review dialog from §101 had the
+same issue (also written in Tagalog). Translated every user-facing string in both -
+`LoanApplicationEntry`'s search prompts, badges ("same as before"/"verify"), and buttons; the AI
+review dialog's `ReviewField` badges ("detected"/"verify"), the "X of Y fields detected" banner, and
+its action buttons ("Scan again", "Use this data, continue to form"). Re-verified in the browser
+against the same real client (Aldwin Jala Maniwang) - review step still renders and functions
+identically, just in English now. Type-checked clean, rebuilt `lmsfrontend`, committed (`dcd80924`)
+and pushed.
