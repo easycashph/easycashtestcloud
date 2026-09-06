@@ -1,1 +1,6 @@
-{"commit":"3e8b9b2","commitDate":"2026-09-05T17:00:34+08:00","commitMessage":"Fix host.docker.internal DNS resolution broken by the SMS-gateway DNS override","builtAt":"2026-09-05T09:08:17.000Z"}
+﻿{
+    "commitDate":  "2026-09-06T07:59:27+08:00",
+    "commitMessage":  "Update session log: Ollama uninstalled - moondream underperformed on 16GB machine too",
+    "commit":  "f3c9f6aa",
+    "builtAt":  "2026-09-06T00:03:13.0151102Z"
+}
