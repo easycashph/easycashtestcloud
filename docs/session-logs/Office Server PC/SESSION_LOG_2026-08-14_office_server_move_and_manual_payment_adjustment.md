@@ -5213,3 +5213,66 @@ Ollama comes back later on this or another machine):
   not yet specified what that is. Whoever picks this up next should ask before assuming it means
   a different vision model, a hosted/cloud API (note: CLAUDE.md prefers avoiding paid cloud
   services), or a different machine entirely.
+
+## §108 — 2026-09-06: Existing-client search & prefill for Create Loan Application
+
+Follow-up to the original manual-encoding-reduction conversation from §101 (which led to AI
+Extraction) - the other option floated then was reusing an existing client's own previous
+application data so a renewal doesn't mean re-typing everything. Asked to see a mockup first
+(`https://claude.ai/code/artifact/2ceb0d11-db89-4296-9269-a2dfccf76f80`) - a search step followed
+by a review step with per-field "same as dati"/"i-verify" badges - approved, then implemented.
+
+**Discovered this was already half-built**: `LoanApplicationForm` already accepts
+`prefillFrom`/`lockedBorrowerId` props, used by `ClientProfilePage`'s own "Create Loan Application"
+button (prefills from `myApplications[0]`). The actual gap was the two *generic* entry points - the
+standalone `/applications/new` route and `LoanApplicationsPage`'s "New Application" dialog - which
+had no way to find an existing client at all, always rendering a blank form.
+
+Added `LoanApplicationEntry` (`LoanApplicationCreatePage.tsx`) as a gate in front of
+`LoanApplicationForm` for exactly those two entry points (`ClientProfilePage`'s flow already knows
+the client and bypasses this gate). Reuses the identical `/borrowers?search=` + result-card pattern
+already used by `LoanAccountCreatePage`'s "Find Client" step - no new backend endpoint needed. Once
+a client is picked, fetches their applications (same all-fetch-then-filter-client-side approach
+`ClientProfilePage`'s `myApplications` already uses - no `borrowerId` filter exists on
+`GET /loan-applications` yet) to find the latest one:
+- **Has a previous application**: shows a review card, one badge per field -
+  `STALE_PRONE_APPLICATION_FIELDS` (address, employer, monthlyIncome, mobilePhone) get amber
+  "i-verify"; everything else (name, birth date, gender, nationality) gets green "same as dati".
+  Officer can accept-and-continue, start blank (still linked to this borrower), or search someone
+  else.
+- **No previous application** (a client added directly without ever applying): resolves straight
+  through to the blank form with `lockedBorrowerId` set - the review step only earns its place when
+  there's an actual choice to make.
+- **Not a client at all**: a visible "Ituloy nang blangko" escape hatch skips the gate entirely,
+  landing on the exact original walk-in intake form (no borrower, no prefill).
+
+**Bug found and fixed during manual browser testing** (logged in as the user, real data): selecting
+a client with no application history crashed the dialog (`Cannot read properties of undefined
+(reading 'createdAt')`) - the review card's header text referenced `latestApplication` via a
+non-null assertion before a `useEffect` had a chance to auto-resolve past the empty-review state,
+so one render slipped through with `latestApplication` still `undefined`. Fixed by checking
+`!latestApplication` directly in the ternary instead of trusting the loading flag alone.
+
+Verified end-to-end in the browser after the fix, against real production data:
+- Searched "dela cruz" - real results returned, including a client with no application history
+  (Eugenio Rafael Dela Cruz) - correctly skipped straight to a blank, borrower-linked "Renewal"
+  form, no crash.
+- Searched "maniwang" - selected Aldwin Jala Maniwang (confirmed via direct DB query to have a real
+  linked application), review card showed correct real values with correct badges, "Tanggapin at
+  ituloy sa form" produced a fully prefilled form - loan type/amount/term, personal details, AND
+  the PSGC-constrained address picker (region/province/city/barangay) all correctly resolved and
+  selected, not just left as free text.
+- Closed without submitting (didn't want to create a real duplicate application as a side effect of
+  testing).
+
+Type-checked clean both before and after the bug fix. Rebuilt `lmsfrontend` twice (once per fix
+iteration), verified healthy both times. Committed (`e3eaa97b`) and pushed - nothing new to pull.
+
+### Current state / follow-ups
+
+- Feature is live on Office Server PC on both generic entry points. `ClientProfilePage`'s own
+  create-application flow is unchanged (never went through this gate).
+- `GET /loan-applications` still has no `borrowerId` filter - both this feature and
+  `ClientProfilePage`'s own prefill fetch all applications and filter client-side. Not addressed
+  this session (matches existing precedent, not a new problem introduced here) - worth revisiting
+  if/when the applications table grows large enough for this to matter for load time.
