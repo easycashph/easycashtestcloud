@@ -5286,3 +5286,46 @@ its action buttons ("Scan again", "Use this data, continue to form"). Re-verifie
 against the same real client (Aldwin Jala Maniwang) - review step still renders and functions
 identically, just in English now. Type-checked clean, rebuilt `lmsfrontend`, committed (`dcd80924`)
 and pushed.
+
+**Second same-day follow-up**: user asked whether the review card showed *all* the previous
+application's details, since it only covered 8 personal/contact fields. Confirmed it didn't, then
+asked to expand it to also show loan details and references so changes there could be verified too
+- specifically raising whether a changed co-borrower would be a problem. Explained the existing
+"Use a previous co-borrower" picker further into the form already handles that case properly (it's
+opt-in, surfaces every co-borrower the client has used across *all* their applications rather than
+just the latest, and stays freely editable regardless of whether one is picked) - recommended
+leaving co-borrower out of the review card rather than duplicating that mechanism, which the user
+agreed with.
+
+Expanded the review card into three labeled sections: **Personal & Contact Details** (unchanged
+from the original 8 fields), **Loan Details (previous request)** - type/amount/term/purpose, and
+**References** - reference 1/2 name+mobile. Loan details deliberately got a third, neutral
+"starting point" badge instead of "same as before"/"verify" - reasoning: the loan request itself is
+the most likely thing to be intentionally different this time (a bigger amount, a different
+product), not stale data the officer should treat as presumptively still correct. Replaced the old
+boolean `STALE_PRONE_APPLICATION_FIELDS` Set with a three-way `APPLICATION_FIELD_BADGE_KIND` map
+(`same`/`verify`/`starting`) and a shared `BADGE_STYLE` lookup for the badge classes/labels.
+
+User then asked a clarifying question: does *everything* end up on the actual submitted
+application, or just what the review card shows? Confirmed the review card is a curated summary,
+not exhaustive - `LoanApplicationForm`'s own `prefillFrom` initializers already cover many more
+fields never shown in the review card (place of birth, home ownership, email, Facebook link,
+occupation, office address, TIN, SSS number, full dependants list, and co-borrower details via the
+separate picker) - all of it was already wired before this session, just not previously
+summarized anywhere. Also clarified nothing is created in the database until the officer reviews,
+edits as needed, and explicitly submits the actual form - prefill only saves re-typing, it doesn't
+auto-submit anything.
+
+Type-checked clean, rebuilt `lmsfrontend`, verified in the browser against the same real client
+(Aldwin Jala Maniwang) - all three sections render with correct real values and badges. Committed
+(`9cbfa231`) and pushed - nothing new to pull.
+
+### Current state after the loan-details/references expansion
+
+- The existing-client review step (`LoanApplicationEntry`) now previews personal/contact details,
+  loan details, and references - still not literally every field the form will prefill (dependants,
+  TIN/SSS, home ownership, etc. remain preview-free, shown only once the officer reaches the actual
+  form) - a deliberate scope choice (curated review vs. exhaustive dump), not an oversight, but
+  worth knowing if asked to expand further.
+- Co-borrower reuse remains solely the form's own "Use a previous co-borrower" picker - not
+  duplicated in the review card, by design.
