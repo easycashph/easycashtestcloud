@@ -5491,3 +5491,55 @@ Loan" is selected as the type. Committed (`3d68599a`) and pushed - nothing new t
   Portal's `loanRequirements.ts` - if that file's `ADDITIONAL_REQUIREMENTS_NOTES` changes again in
   the future, remember to update `LoanApplicationCreatePage.tsx`'s copy too (no shared code path
   between the two apps enforces this automatically).
+
+## §112 — 2026-09-06: The 9 additional-requirements notes became real upload slots
+
+User asked to see the full per-product document list before deciding scope - sent it as a plain
+checked/unchecked table (✅ real slot vs ⚠️ note-only) covering all three loan types, flagging that
+turning the ⚠️ items into real slots needs a Prisma migration. User confirmed: do all 9.
+
+Also asked to see "the mockup" for this change - clarified none was made, since it's the exact same
+already-approved Camera+Upload slot UI (§109) applied to more categories, not a new visual
+treatment - offered to show the live result instead once built.
+
+**Backend**: added 9 values to the `AttachmentDocumentCategory` Prisma enum -
+`DTI_SEC_REGISTRATION`, `BUSINESS_PERMIT`, `INCOME_TAX_RETURN`, `BANK_STATEMENT` (Business Loan),
+`CERTIFICATE_OF_EMPLOYMENT` (Salary Loan), `POEA_CONTRACT`, `ALLOTMENT_SLIP`, `FLIGHT_DETAILS`,
+`PASSPORT_ID` (Seafarer Loan). Ran `npx prisma migrate dev` against the live DB (localhost:5432,
+Docker's published port) - migration `20260906033146_add_additional_document_categories` applied
+cleanly. Updated every hand-maintained mirror of this enum: `IAttachmentRepository.ts`'s type
+union, `documentCategoryLabel.ts` (ZIP-download folder names - TypeScript's `Record<...>` exhaustiveness
+check caught this one at compile time, a useful safety net), `documentSchemas.ts` +
+`portalLoanApplicationSchemas.ts` (upload validation for the LMS and Portal endpoints
+respectively), and `requiredDocumentCategories.ts` (the missing-documents check) - `FLIGHT_DETAILS`
+deliberately excluded from the required list there, matching the Portal's own "(if available)"
+wording for that one document.
+
+**LMS** (`LoanApplicationCreatePage.tsx`): added 9 `DOCUMENT_SLOTS` entries, each with
+`cameraFacingMode: 'environment'` (consistent with §109's existing pattern for scannable documents)
+- then deleted the `ADDITIONAL_REQUIREMENTS_NOTES` constant and its "Also have ready..." UI note
+entirely, since every document it listed now has a real slot instead.
+
+**Portal** (`loanRequirements.ts`/`portalApiTypes.ts`/`RequirementsPage.tsx`): mirrored the same 9
+additions into `DOCUMENT_SLOTS`/`DOCUMENT_LABELS`/`UploadableDocumentCategory`/
+`PortalDocumentCategory` - `LoanApplicationFormPage.tsx` needed no direct changes since it already
+renders slots dynamically from this shared config. Removed `ADDITIONAL_REQUIREMENTS_NOTES` and its
+usage in `RequirementsPage.tsx` (the `doc-item new` navy-badge distinction) - the public checklist
+now shows one unified list per product, no more real-vs-informational split.
+
+Type-checked all three packages clean. Rebuilt `easycashbackend` + `lmsfrontend` +
+`portalfrontend` together, verified healthy and re-checked for §110's stale-WSL2-port-forward bug
+(clean - one `wsl-bootstrap` listener per port). Verified in the browser: LMS's Business Loan now
+shows Camera+Upload slots for all 4 new documents; Portal's public Requirements page lists the
+complete, unified document set for all three products (Personal Loan's COE, Seafarer Loan's POEA
+Contract/Allotment/Passport/Flight Details, SME Loan's DTI-SEC/Permit/ITR/Bank Statement).
+Committed (`dd32a2ea`) and pushed - nothing new to pull.
+
+### Current state / follow-ups
+
+- All documents from the Portal's original published checklist are now real, uploadable categories
+  on both the LMS and the Portal - no more informational-only "have ready" gap for any of the three
+  loan types.
+- The loan-category naming collision from §111 (Business Loan vs. the real "Small and
+  Medium-sized Enterprises Loan" product type) is unrelated to this change and remains unresolved
+  by deliberate choice.
