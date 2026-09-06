@@ -5660,3 +5660,46 @@ phone testing). Committed (`c3622c81`) and pushed - nothing new to pull.
   custom camera UI only when something the native picker can't do is actually needed (e.g. a
   guided multi-step capture flow, live overlay/framing guidance, or enforcing "must be a live photo,
   not a gallery pick" - none of which applied here).
+
+## §115 — 2026-09-06: Synced §108-§114's work onto Macbook Nomer; applied the new document-category
+migration
+
+Pure sync session on Macbook Nomer picking up everything landed on Office Server PC (or another
+machine) since this machine's last pull: existing-client search/prefill (§108), camera capture
+added then fully removed again (§109/§113/§114), the 4 new SME Loan requirements (§110), LMS
+display-label wiring (§111), and the 9 additional-requirements notes becoming real upload slots
+with a schema migration (§112) - `git pull` brought in 25 commits and one new Prisma migration
+(`20260906033146_add_additional_document_categories`, additive `AttachmentDocumentCategory` enum
+values only - `DTI_SEC_REGISTRATION`, `BUSINESS_PERMIT`, `INCOME_TAX_RETURN`, `BANK_STATEMENT`,
+`CERTIFICATE_OF_EMPLOYMENT`, `POEA_CONTRACT`, `ALLOTMENT_SLIP`, `FLIGHT_DETAILS`, `PASSPORT_ID`).
+
+Ran the standard rebuild sequence: `write-build-info.sh`, then `docker compose up -d --build
+easycashbackend lmsfrontend portalfrontend` (all three, since frontend code changed in this batch
+too). All three came back healthy, but `prisma migrate status` showed the new migration **not yet
+applied** - `docker compose up --build` recreates the container and runs the built image's start
+command, it doesn't run migrations by itself. Ran `docker exec easycash-easycashbackend-1 npx
+prisma migrate deploy` explicitly, which applied it cleanly. Re-verified all three containers
+healthy (backend `/health` 200, `lmsfrontend`/`portalfrontend` both 200 via host `curl`) and
+`prisma migrate status` now shows zero pending migrations.
+
+Also separately: the Browser pane rendered the LMS in what looked like a phone/mobile layout after
+being reopened - not an actual device emulation, just the pane's own default width (800px)
+happening to fall under the LMS's responsive breakpoint for the stacked mobile nav. Confirmed by
+explicitly setting the tab's viewport to 1440x900, which brought back the normal sidebar/desktop
+dashboard layout - nothing wrong with the app itself.
+
+Nothing new authored this session beyond `build-info.json` (committed as `061e5ca`) - this was
+entirely "pull other people's work and get this machine caught up," not new feature work.
+
+### Current state after §115
+
+- Macbook Nomer is now current with all of §108-§114's work, migration included. Local DB schema
+  matches what Office Server PC (or wherever these commits originated) already has.
+- Per §107/§106, this machine still has no Ollama installed (deliberately uninstalled) - AI
+  Extraction will surface a clean connection error here until the team's alternative testing
+  approach is decided and Ollama (or whatever replaces it) is set up again.
+- **Reminder for next session on any machine**: `docker compose up -d --build` does NOT run
+  pending Prisma migrations automatically - always follow a pull that includes a new
+  `prisma/migrations/` folder with an explicit `npx prisma migrate deploy` inside the backend
+  container (or check `prisma migrate status` first) rather than assuming the rebuild alone
+  synced the schema.

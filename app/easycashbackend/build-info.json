@@ -1,6 +1,1 @@
-﻿{
-    "commitDate":  "2026-09-06T13:44:13+08:00",
-    "commitMessage":  "Surface the real camera error instead of a generic message",
-    "commit":  "a3f4da1b",
-    "builtAt":  "2026-09-06T06:09:40.9046907Z"
-}
+{"commit":"510af15","commitDate":"2026-09-06T14:18:31+08:00","commitMessage":"Update session log: camera feature diagnosed then removed (§114)","builtAt":"2026-09-06T06:26:04.000Z"}
