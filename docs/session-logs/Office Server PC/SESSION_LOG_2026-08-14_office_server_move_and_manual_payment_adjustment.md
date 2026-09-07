@@ -6355,3 +6355,53 @@ Rebuilt, verified healthy, no stale WSL2 listener. Committed (`5dc3b440`) and pu
 - **Known remaining gap, not a bug**: Gross Income will stay blank in every CIC submission until
   `BorrowerIncomeDetail.monthlyIncome` is actually captured somewhere upstream (no UI currently
   writes to it, as far as this session's investigation went).
+
+## §127 — 2026-09-07: Fixed CIC Address 1/Address 2 mapping and Contract Status (both user-confirmed Non-MFI)
+
+User asked "tama na ba ang buong CIC monthly report natin" - two open questions from §125's audit
+remained. Asked and got confirmed: **Easycash is Non-MFI** (a regular, non-bank lending/financing
+company - not a Microfinance Institution). This unlocked two more fixes:
+
+1. **Address 2 (mandatory for Non-MFI).** The manual's own Individuals summary requires TWO
+   addresses for Non-MFIs (only one for MFIs) - previously never populated at all. Checked the DB
+   directly: `addresses.addressType` DOES carry real "Present"/"Permanent" labels for 344
+   borrowers (most others have only one, unlabeled, address row). Per the manual's own field
+   definitions - Address 1 (ID32, 'MI') = "Main Address (Residence, **Permanent**)", Address 2
+   (ID43, 'AI') = "Additional Address (**Mailing**)" - the natural mapping is Permanent -> Address
+   1, Present -> Address 2. The PREVIOUS code picked "whichever address row came back from the DB
+   first" with no regard to type, which for a borrower with both risked mislabeling their
+   "Present" address as the Permanent one. New `pickAddresses()` helper in
+   `PrismaReportingRepository.ts` explicitly selects by `addressType` (case-insensitive), falling
+   back to the first available row when no type label exists. Added
+   `address2FullAddress`/`address2StreetNo`/`address2PostalCode`/`address2Barangay`/`address2City`/
+   `address2Province` to `CicIndividualRow`, written at ID43-ID50 in the writer.
+2. **Contract Status (CI10, always blank before this).** The manual only gives institution-specific
+   status-mapping tables for Credit Card companies, MFIs, Commercial Banks, and Cooperative Banks -
+   none of which is "plain non-bank lending company." Rather than borrow an inapplicable threshold
+   (e.g. Commercial Banks' 90+ day rule), added `CicContractRow.contractStatus: 'PD' | ''` set to
+   `'PD'` whenever `overdueDays > 0` (this system's own precisely-computed days-late figure),
+   matching the domain's generic "PD = Past Due" description directly.
+
+**Verified with a disposable test script (deleted after use)**: found a real borrower
+(`ELCS000000011`) whose Present/Permanent addresses happened to be identical text - re-checked
+directly against the DB (`SELECT ... WHERE a1.addressType ILIKE 'present' AND a2.addressType ILIKE
+'permanent' AND a1.cityMunicipality IS DISTINCT FROM a2.cityMunicipality`) and confirmed several
+other borrowers genuinely have different Present vs Permanent cities (e.g. Malolos City vs
+Cabuyao) - the selection logic itself is correct, that one sample just happened to have duplicate
+data on file. Also confirmed `BL-REG_N0U6G` (2,376 days overdue) now emits CI10 = `"PD"`.
+
+Rebuilt, verified healthy, no stale WSL2 listener. Committed (`3e535cf3`) and pushed.
+
+### Current state after §127
+
+- The CIC CSDF audit against the manual, prompted across §125-§127, is now complete for every
+  field this system has underlying data for. Six real bugs found and fixed this session: Last
+  Payment Date (schedule vs actual), non-integer amounts, raw-day-count Overdue Days instead of
+  the domain bucket code, unwired Gross Income, "first address wins" Address 1/2 mislabeling, and
+  a never-populated Contract Status.
+- **Two known, confirmed-not-bugs gaps remain, both requiring upstream data capture, not more code
+  changes to this report**: (1) Gross Income stays blank for every borrower until
+  `BorrowerIncomeDetail.monthlyIncome` is actually entered somewhere in the system (no UI currently
+  writes to it), and (2) Address 2 stays blank for any borrower who only has one address on file
+  (no "Present"/"Permanent" type label to distinguish, or only one address captured at all) -
+  currently true for the large majority of migrated borrowers, 344 confirmed exceptions.
