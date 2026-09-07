@@ -6236,3 +6236,46 @@ listener on port 4000, container healthy (`/health` 200).
   raw `Date` value, for any column that will get a date-only `numFmt` applied - the same class of
   bug will recur silently otherwise, since the underlying data is correct and only the display is
   wrong (easy to miss without a side-by-side comparison against the on-screen equivalent).
+
+## §124 — 2026-09-07: Fixed the CIC CSDF export trimming trailing blank fields (should always pad to 92)
+
+Same day, user asked whether `CicCsdfReportWriter.ts` (the actual pipe-delimited regulatory
+submission file, not the Excel companion from §123) followed the real template - specifically,
+whether a blank column still gets its own empty-but-present field between `|` separators, "matching
+how the previous CIC monthly report was."
+
+**Verified directly against real accepted submissions on file**, not from memory or the manual:
+`legacy/CIC/06 2026 June/PF017290_CSDF_20260706134200.txt` (the raw file, not the `.csv` sibling -
+checked both, the `.csv` carries an odd trailing `,,,,,,,,,` artifact the `.txt` also has, so it's
+some quirk from whatever originally generated these files, not a CSV-export side effect - left
+alone, not part of any of our own field mappings). Every line type - HD, ID, CI, and even the
+almost-entirely-blank FT footer - has **exactly 92** pipe-delimited fields in the real file, with
+blanks preserved as empty strings all the way to the end. Confirmed by direct field-count script
+against the raw text, not assumption.
+
+**Found two bugs matching the user's suspicion**:
+1. `buildLine()` computed `lastNonBlank` and sliced the fields array there before joining -
+   trimming a blank tail instead of keeping the full fixed length. This was never verified against
+   a real file when originally written; just assumed "blank tail = omitted" without checking.
+2. The `HD` (header) line was built as a plain 6-element array `.join('|')`, not via `buildLine()`
+   at all - producing 6 fields where the real file has 92 (the same padding pattern as every other
+   line type, confirmed against the same reference file).
+
+**Fix**: `buildLine()` now always joins the full fixed-length array (no trimming). Added an
+`HD_FIELD_COUNT = 92` constant and rebuilt the HD line through `buildLine(HD_FIELD_COUNT, {...})`
+like every other line type, instead of its own ad-hoc array. Verified with a disposable test script
+(deleted after use) instantiating the real `CicCsdfReportWriter` class directly - HD/ID/FT all now
+produce exactly 92 fields each, matching the reference file exactly.
+
+Rebuilt `easycashbackend` cleanly this time (checked no rebuild was already in flight before
+starting, avoiding §123's container-naming-conflict repeat) - healthy, no stale WSL2 listener on
+port 4000. Committed (`051f1cfb`) and pushed.
+
+### Current state after §124
+
+- The CIC CSDF submission file now pads every line (HD/ID/CI/FT) to the full 92 fields the real
+  format requires, blanks included - matching every prior accepted submission on file, not
+  approximating it.
+- `CicExcelReportWriter.ts` (the human-readable companion, fixed in §123) was already unaffected by
+  this particular bug - it's a normal spreadsheet with real columns, not a fixed-width delimited
+  line format, so there was nothing to trim there in the first place.
