@@ -6279,3 +6279,41 @@ port 4000. Committed (`051f1cfb`) and pushed.
 - `CicExcelReportWriter.ts` (the human-readable companion, fixed in §123) was already unaffected by
   this particular bug - it's a normal spreadsheet with real columns, not a fixed-width delimited
   line format, so there was nothing to trim there in the first place.
+
+## §125 — 2026-09-07: Fixed CIC "Last Payment Date" to use the real payment date, not the schedule's due date
+
+User asked why SL-REG_00114's Last Payment Date in the CIC report showed something other than
+Aug 28, 2026 despite a real payment on that date. Verified against the CIC manual's own field
+CI17 definition: "The date refers to the last payment from customer to FI; it should be filled if
+the customer has paid at least once." - explicitly the real payment date, not a schedule date.
+
+`getCicMonthlyReportData` in `PrismaReportingRepository.ts` was reading
+`lastPaid?.dueDate` (the installment's ORIGINAL scheduled due date - Aug 14 for this loan) instead
+of `lastPaid?.lastPaidAt` (the installment's own real-payment-date field - correctly Aug 28 for
+this loan, confirmed directly in the DB). Fixed to use `lastPaidAt`. Rebuilt, verified healthy,
+committed (`86be48f7`) and pushed.
+
+### Current state after §125
+
+- CIC report's Last Payment Date now reflects when the customer actually paid, for every loan, not
+  just SL-REG_00114 (the fix is in the shared repository method, not a per-loan patch).
+- **User then asked for a full field-by-field audit of `CicCsdfReportWriter.ts` +
+  `getCicMonthlyReportData` against the CIC manual, to catch anything else wrong** - found three
+  more issues (not yet fixed as of this log entry, pending user confirmation):
+  1. **Amount fields not integer-formatted.** Manual §2.1.3 requires every numeric/amount field as
+     a plain rounded-down integer, no decimal point, no comma (verified against a real accepted
+     file - values like "6200", "551800", never "6200.00"). `financedAmount`,
+     `monthlyPaymentAmount`, `lastPaymentAmount`, `nextPaymentAmount`, `outstandingBalance`, and
+     `overduePaymentsAmount` are all currently emitted with 2 decimal places (`.toFixed(2)` or a
+     raw `Decimal.toString()`).
+  2. **CI35 "Overdue Days" is a coded bucket, not a raw day count.** Domain values are
+     `N`/`0`-`6` (0=current, 1=1-30 days, 2=31-60, 3=61-90, 4=91-180, 5=181-365, 6=>365) -
+     confirmed against the real reference file, which has literal `"6"` in this position for a
+     >1-year-overdue contract, not a day count like "400". The writer currently passes
+     `contract.overdueDays` (the actual day count number, e.g. 45 or 120) straight through as the
+     field value - wrong for every contract with any overdue days at all.
+  3. **Gross Income (ID86) never populated.** `BorrowerIncomeDetail.monthlyIncome` exists and is
+     real data in the DB, but was never wired into `CicIndividualRow` - meanwhile "Annual/Monthly
+     Indicator" (hardcoded 'M') and "Currency" (hardcoded 'PHP') at ID87/ID88 ARE populated,
+     leaving an inconsistent half-filled dependent field group (a value-less indicator+currency
+     pair with no actual income number).
