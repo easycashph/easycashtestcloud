@@ -1,6 +1,7 @@
 import ExcelJs from 'exceljs';
 import type { CicMonthlyReportData } from '../application/ports/IReportingRepository';
 import { manilaExcelDisplayDate } from '../../../shared/domain/manilaTime';
+import { cicOverdueDaysCode } from './CicCsdfReportWriter';
 
 /** See `manilaExcelDisplayDate`'s own doc comment - ExcelJS reads a JS Date's UTC Y/M/D straight
  * through as the displayed calendar date, so every date cell in this workbook needs this same
@@ -30,12 +31,19 @@ const ID_COLUMNS: { header: string; width: number }[] = [
   { header: 'ID Type Code (photo ID)', width: 16 },
   { header: 'ID Number (photo ID)', width: 20 },
   { header: 'Occupation Status Code', width: 14 },
-  { header: 'Address', width: 40 },
-  { header: 'Street No', width: 20 },
-  { header: 'Barangay', width: 18 },
-  { header: 'City', width: 18 },
-  { header: 'Province', width: 18 },
-  { header: 'Postal Code', width: 12 },
+  { header: 'Gross Income', width: 14 },
+  { header: 'Address 1 (Permanent)', width: 40 },
+  { header: 'Address 1 Street No', width: 20 },
+  { header: 'Address 1 Barangay', width: 18 },
+  { header: 'Address 1 City', width: 18 },
+  { header: 'Address 1 Province', width: 18 },
+  { header: 'Address 1 Postal Code', width: 12 },
+  { header: 'Address 2 (Present/Mailing)', width: 40 },
+  { header: 'Address 2 Street No', width: 20 },
+  { header: 'Address 2 Barangay', width: 18 },
+  { header: 'Address 2 City', width: 18 },
+  { header: 'Address 2 Province', width: 18 },
+  { header: 'Address 2 Postal Code', width: 12 },
 ];
 
 const CI_COLUMNS: { header: string; width: number }[] = [
@@ -45,6 +53,7 @@ const CI_COLUMNS: { header: string; width: number }[] = [
   { header: 'Contract Type Code', width: 12 },
   { header: 'Purpose of Credit Code', width: 12 },
   { header: 'Contract Phase', width: 10 },
+  { header: 'Contract Status', width: 12 },
   { header: 'Contract Start Date', width: 16 },
   { header: 'Contract Request Date', width: 16 },
   { header: 'Contract End Planned Date', width: 18 },
@@ -61,7 +70,8 @@ const CI_COLUMNS: { header: string; width: number }[] = [
   { header: 'Outstanding Balance', width: 16 },
   { header: 'Overdue Payments Number', width: 14 },
   { header: 'Overdue Payments Amount', width: 16 },
-  { header: 'Overdue Days', width: 12 },
+  { header: 'Overdue Days (CIC code)', width: 14 },
+  { header: 'Overdue Days (actual)', width: 14 },
 ];
 
 function styleHeaderRow(sheet: ExcelJs.Worksheet): void {
@@ -108,15 +118,23 @@ export class CicExcelReportWriter {
         person.idTypeCode,
         person.idNumber,
         person.occupationStatusCode,
+        person.grossIncome ? Number(person.grossIncome) : '',
         person.addressFullAddress,
         person.addressStreetNo,
         person.addressBarangay,
         person.addressCity,
         person.addressProvince,
         person.addressPostalCode,
+        person.address2FullAddress,
+        person.address2StreetNo,
+        person.address2Barangay,
+        person.address2City,
+        person.address2Province,
+        person.address2PostalCode,
       ]);
     }
     idSheet.getColumn(8).numFmt = 'mm/dd/yyyy';
+    idSheet.getColumn(19).numFmt = '#,##0';
 
     const ciSheet = workbook.addWorksheet('CI - Installment Contract');
     ciSheet.columns = CI_COLUMNS.map((c) => ({ header: c.header, width: c.width }));
@@ -129,6 +147,7 @@ export class CicExcelReportWriter {
         contract.contractTypeCode,
         contract.purposeOfCreditCode,
         contract.contractPhase,
+        contract.contractStatus,
         d(contract.contractStartDate),
         d(contract.contractRequestDate),
         d(contract.contractEndPlannedDate),
@@ -145,11 +164,18 @@ export class CicExcelReportWriter {
         Number(contract.outstandingBalance),
         contract.overduePaymentsNumber,
         Number(contract.overduePaymentsAmount),
+        // 2026-09-07 (full-audit fix, user request "ayusin mo rin ang Excel para tumugma sa CSV"):
+        // this used to be just the raw day count, which doesn't match what actually goes into the
+        // real CSDF submission (a coded bucket, see `cicOverdueDaysCode`'s own doc comment) - a
+        // staff member reviewing this file before submission would see e.g. "2376" here but "6" in
+        // the real file, with no way to tell from this sheet alone whether that's correct. Now
+        // shows both: the CIC code (what's actually submitted) and the raw days (human context).
+        cicOverdueDaysCode(contract.overdueDays),
         contract.overdueDays,
       ]);
     }
-    for (const col of [7, 8, 9, 10, 14, 15, 17]) ciSheet.getColumn(col).numFmt = 'mm/dd/yyyy';
-    for (const col of [11, 13, 16, 18, 20, 22]) ciSheet.getColumn(col).numFmt = '#,##0.00';
+    for (const col of [8, 9, 10, 11, 15, 16, 18]) ciSheet.getColumn(col).numFmt = 'mm/dd/yyyy';
+    for (const col of [12, 14, 17, 19, 21, 23]) ciSheet.getColumn(col).numFmt = '#,##0.00';
 
     if (data.skippedMissingSubjectNo.length > 0) {
       const skippedSheet = workbook.addWorksheet('Excluded (missing CIC ID)');

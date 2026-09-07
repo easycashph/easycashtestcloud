@@ -36,7 +36,7 @@ function ddmmyyyy(date: Date | null): string {
  * literal "6" in this position for a contract overdue more than a year, not a day count like
  * "400". This writer previously passed `contract.overdueDays` (the actual number of days, e.g. 45
  * or 120) straight through as the field value - wrong for every contract with any overdue days. */
-function cicOverdueDaysCode(days: number): string {
+export function cicOverdueDaysCode(days: number): string {
   if (days <= 0) return '0';
   if (days <= 30) return '1';
   if (days <= 60) return '2';

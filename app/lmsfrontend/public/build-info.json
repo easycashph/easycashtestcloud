@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-07T16:09:29+08:00",
-    "commitMessage":  "docs: log §126 - fixed the three CIC audit findings (amounts, overdue bucket, gross income)",
-    "commit":  "6329bb47",
-    "builtAt":  "2026-09-07T08:21:43.4712965Z"
+    "commitDate":  "2026-09-07T16:26:03+08:00",
+    "commitMessage":  "docs: log §127 - fixed CIC Address 1/2 mapping and Contract Status (Non-MFI confirmed)",
+    "commit":  "63868bad",
+    "builtAt":  "2026-09-07T08:51:28.4066559Z"
 }
