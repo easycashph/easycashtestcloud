@@ -6023,3 +6023,65 @@ intended), `loan_transactions` count unchanged at 280,377 throughout the entire 
   not actually terminate a background `bash | tail` pipeline's underlying spawned `node.exe` - always
   confirm via `tasklist`/`wmic process ... get ProcessId,CommandLine` (or `ps` equivalent) that a
   DB-writing script is truly gone before assuming the database is in a settled state.
+
+## §120 — 2026-09-07: Extended the sync tool to repayment schedules + payment history; added `--only` after the backlog bug recurred a second time
+
+Same day, follow-up to §119. User first asked why the two new loan accounts showed no repayment
+schedule or payment history in the LMS - expected, since §119's script deliberately touched
+`loan_accounts` only. User then asked to extend the same script (not create a separate one) to also
+cover both, still scoped narrowly.
+
+**Extended `sync-loan-accounts-only.ts`** with two more phases, each copied field-for-field from
+their respective official scripts (same "never re-derive the logic, only re-scope where it writes"
+approach as §119):
+- Phase 2, from `migrate-repayment-schedules.ts`: installment numbering by `due_date` ascending,
+  paid-amount/status resync guarded by the same "locked" (native-activity) check.
+- Phase 3, from `migrate-legacy-data.ts`'s `migrateLoanTransactions`: the 30→10 legacy transaction
+  type mapping, IMPORT-row exclusion, and the OR/AR number + payment channel enrichment joins
+  (`transaction_channels`/`transaction_details`/`custom_field_values`).
+
+Before applying, verified a suspicious-looking dry-run number (repayment_schedules: only 8,946 of
+31,357 source rows matching a loan) by writing a disposable check script - confirmed this is a
+pre-existing characteristic of the legacy data (71% of `repayments.bson` rows reference loan
+`parent_account_key`s that don't exist in the current `loan_accounts.bson` at all - likely
+restructured/consolidated loans no longer present as their own record), not a bug introduced here;
+this exact matching logic is a verbatim copy of the already-proven original script. Confirmed the
+two target loans themselves have exactly 4 repayment records each in the source, matching correctly.
+
+**The same backlog-resurfacing bug from §119 recurred immediately** on the first `--apply` of the
+extended script: `loan_accounts` count went 1811→1815 again - the identical 4 unrelated
+2025/2026-dated loans (`SL-CORP_00071`, `SML-REG_00281`, `REL-REG_00001`, `BL-SPEC_00030-LEGACY2`)
+came back, because Phase 1 still reprocessed the *entire* `loan_accounts.bson` on every run with no
+way to restrict it to only the two intended loans - the script was never actually fixed to prevent
+this, only manually cleaned up once in §119. This time the 4 unwanted loans had also picked up their
+own `repayment_schedules` (22 rows) and `loan_transactions` (12 rows) in the same run. Took a fresh
+`pg_dump` backup before this apply (`legacy/postgres-backups/pre_sdev_full_sync_20260907_112931.dump`),
+verified via `wmic` that the apply process had genuinely finished (per §119's process-hygiene
+lesson, applied this time from the start - output was redirected to a real log file instead of
+piped through `tail`, specifically to avoid a repeat of that pipe-detachment issue), deleted the 4
+unwanted loans' transaction and schedule rows first, then the loan accounts themselves, in one
+transaction. Final state confirmed clean: `loan_accounts` back to 1811, both target loans correctly
+showing 4 repayment installments and 7-8 transactions each.
+
+**Fix, this time for real**: added an `--only=CODE1,CODE2` CLI flag (comma-separated
+`loan_accounts.id`/`LoanAccount.loanCode` values) that scopes all three phases to exactly the named
+loans - Phase 1 filters the source `loan_accounts.bson` array directly; Phase 2 filters its own
+independently-loaded loan list the same way; Phase 3 needs no separate filter since it resolves
+transactions through Phase 1's already-filtered `loanAccountIdByLegacyKey` map. Verified with a dry
+run (`--only=SML-REG_00389,SML-REG_00390`, no `--apply`): reconciliation showed
+`loan_accounts: source=2 migrated=2`, `repayment_schedules: migrated=8`,
+`loan_transactions: migrated=15` - matching exactly what's already correctly in the database, with
+zero backlog loans considered at all. No `--apply` was needed this round since the database already
+holds the correct end state from the manual cleanup above.
+
+### Current state after §120
+
+- `sync-loan-accounts-only.ts` now supports `--only=CODE1,CODE2` and covers all three of
+  `loan_accounts`, `repayment_schedules`, and `loan_transactions` - still nothing else. **Always
+  pass `--only` when the intent is "bring in these specific new loans"** - omitting it reprocesses
+  the entire dump and can resurface old backlog loans whose dependencies only recently became
+  resolvable, as it did twice today.
+- SML-REG_00389 and SML-REG_00390 are now fully usable in the LMS: correct loan account record,
+  4-installment repayment schedule each, and their disbursement/repayment transaction history.
+- Two pre-incident Postgres backups exist from today (`pre_sdev_sync_20260907_103313.dump`,
+  `pre_sdev_full_sync_20260907_112931.dump`), both machine-local/gitignored.
