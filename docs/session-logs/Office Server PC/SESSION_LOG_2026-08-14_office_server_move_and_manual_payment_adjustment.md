@@ -5940,3 +5940,86 @@ future binary installer.
   device going forward, not sending the file through chat.
 - Still awaiting the user's confirmation that install + first launch works correctly via this new
   download path.
+
+## §119 — 2026-09-07: New September 2026 SDevTech loan accounts synced into the LMS (loan_accounts only)
+
+User asked to check `legacy/mongodb` for new loan accounts created in SDevTech during September
+2026, and to bring only those into the LMS Postgres database on Office Server PC - explicitly nothing
+else ("wala muna gagawin maliban dito").
+
+**Investigation.** A fresh mongodump (`20260907_100929.zip`) had already been placed in
+`legacy/mongodb` by the user; extracted it alongside the existing `20260901_110231.zip`. Wrote a
+disposable Node+`bson`-package script (`legacy/mongodb/scratch_bsonread/`, deleted after use) to
+scan `loan_accounts.bson` directly, since no `bsondump`/`mongorestore` binary was on PATH (a
+`mongodb-database-tools` install once referenced there no longer exists on disk - stale PATH entry,
+not investigated further since the disposable script worked fine). Found 2 loans with
+`creationDate` in September 2026 - **SML-REG_00389** (Rommel Yabut Maglonzo, ₱59,964.04, Sept 1) and
+**SML-REG_00390** (Rafael Alarcon Baguio, ₱46,301.12, Sept 3). A naive `_id`-based diff against the
+Sept 1 dump initially showed nearly every record as "new" - bug: comparing BSON `ObjectId` instances
+by object identity via `Set.has()` rather than by their string value; fixed with `.toString()` on
+both sides, which correctly narrowed it to 1 genuinely-new-since-last-dump record (SML-REG_00389
+already existed in the Sept 1 dump, created earlier the same day the dump was taken).
+
+Verified neither loan existed yet in the live LMS Postgres database (`SELECT ... WHERE "legacyId" IN
+(...) OR "loanCode" IN (...)` → 0 rows) before touching anything, per the user's explicit ask to
+confirm this first.
+
+**First attempt, reverted per user course-correction.** Ran the project's existing full
+`scripts/migrate-legacy-data.ts --apply` (after a `pg_dump` backup and a dry run showing normal,
+expected reconciliation numbers) - this is the officially-designed, tested tool for exactly this
+"new SDevTech activity since last sync" scenario, and is upsert-by-`legacyId`-safe against
+already-migrated data. Partway through the run (which also processes `loan_transactions`,
+`comments`, `attachments`, etc. in the same pass - not just `loan_accounts`), the user clarified
+they specifically wanted the `loan_accounts` table alone touched, nothing else. Attempted to stop it
+via `TaskStop` - **this did not actually kill the underlying detached Windows process** (a
+`bash | tail` pipeline's own `TaskStop` apparently only stops its own wrapper, not a long-running
+child `node.exe` it spawned); the real migration kept running unnoticed in the background for some
+time afterward, discovered later via `tasklist`/`wmic process` showing a ~1GB `node.exe` still
+executing `migrate-legacy-data.ts --apply`, force-killed with `taskkill /PID <pid> /F` for all three
+related process IDs (the npx wrapper, the tsx CLI, and the actual node worker). **Lesson for next
+time**: verify a supposedly-stopped background DB-writing script is truly gone via `tasklist`/`wmic`,
+not just by trusting `TaskStop`'s reported success, before treating the database as settled.
+
+**Built the scoped tool the user actually asked for**:
+`app/easycashbackend/scripts/sync-loan-accounts-only.ts` - a sibling of `migrate-legacy-data.ts`
+whose only Prisma write target is the `loan_accounts` table. Resolves `Borrower`/`LoanProductVersion`
+references via read-only `SELECT ... WHERE "legacyId" = ...` lookups against Postgres (these are
+assumed already-migrated) instead of re-processing `client_accounts.bson`/`loan_products.bson`
+through their own migration logic - avoids re-deriving that logic while guaranteeing no write ever
+reaches those tables. Copied the exact same safety model as the original's `migrateLoanAccounts`
+(locked-loan protection, no-fabrication rules, balance-field resync guard) verbatim, since this is
+financial data and CLAUDE.md forbids inventing business rules - see the script's own doc comment for
+the full reasoning. Dry run reconciliation matched the full script's own dry run exactly
+(source=1829, migrated=1814, skipped=15) confirming equivalent logic before ever running `--apply`.
+
+**Cleanup of the reverted first attempt.** Before undoing anything, diffed `loan_accounts.legacyId`
+between the live DB and the pre-migration `pg_dump` backup (restored into a scratch database
+`easycash_prebackup_check`, then dropped once done) to get an *exact*, evidence-based list of what
+the killed full-script run had actually added - not a guess from `createdAt` sort order alone (which
+first looked like only 4 extra loans, but really was `loan_accounts` count 1809→1815, i.e. 6 new,
+2 of which were the intended targets). The other 4 (`SL-CORP_00071`, `SML-REG_00281`,
+`REL-REG_00001` - all attributed to a placeholder-looking "EASYCASH ACCOUNT" borrower, one for
+₱10.15M - and `BL-SPEC_00030-LEGACY2`, a real reused-loan-code duplicate for Marlon Ricalde) were
+old backlog records (Nov 2025 - Aug 2026) that had been stuck unmigrated for unrelated reasons
+before now becoming resolvable - legitimate data, but not what was asked for today. User asked to
+remove them. Checked every table with a loan-account foreign key
+(`loan_transactions`, `loan_account_co_borrowers`, `loan_notes`, `loan_adjustments`,
+`loan_restructures`, `loan_compromise_settlements`, `loan_signing_documents`,
+`generated_loan_documents`) for any row referencing these 4 - all zero - then deleted the 4 rows
+directly in a transaction. Final verification: `loan_accounts` count 1811 (1809 + exactly the 2
+intended), `loan_transactions` count unchanged at 280,377 throughout the entire incident.
+
+### Current state after §119
+
+- The LMS now has exactly the 2 intended new loan accounts (SML-REG_00389, SML-REG_00390) and
+  nothing else changed - verified via an exact legacyId diff against a pre-incident backup, not
+  assumption.
+- A new reusable tool exists for this exact "sync only loan_accounts" need going forward:
+  `npx tsx scripts/sync-loan-accounts-only.ts` (dry run) / `--apply` (writes to `loan_accounts` only).
+- A pre-incident Postgres backup is saved at
+  `legacy/postgres-backups/pre_sdev_sync_20260907_103313.dump` (not committed to git - binary DB
+  dump, machine-local).
+- **Process-hygiene reminder for next session on any machine**: this session's `TaskStop` call did
+  not actually terminate a background `bash | tail` pipeline's underlying spawned `node.exe` - always
+  confirm via `tasklist`/`wmic process ... get ProcessId,CommandLine` (or `ps` equivalent) that a
+  DB-writing script is truly gone before assuming the database is in a settled state.
