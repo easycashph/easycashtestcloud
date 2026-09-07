@@ -6405,3 +6405,50 @@ Rebuilt, verified healthy, no stale WSL2 listener. Committed (`3e535cf3`) and pu
   writes to it), and (2) Address 2 stays blank for any borrower who only has one address on file
   (no "Present"/"Permanent" type label to distinguish, or only one address captured at all) -
   currently true for the large majority of migrated borrowers, 344 confirmed exceptions.
+
+## §128 — 2026-09-07: Ran a full CSDF cross-check, found a serious pre-existing data bug, and brought the Excel companion in line with the CSV
+
+User asked to re-verify the whole CIC monthly report end to end after §125-127's fixes. Wrote a
+disposable verification script that ran `getCicMonthlyReportData` + `CicCsdfReportWriter` across 6
+real months (March-August 2026) and checked: 92-field-per-line count, FT record count vs actual
+line count, every amount field is a plain integer, every Overdue Days value is a valid bucket code
+consistent with the raw day count, Contract Status consistency, mandatory Individual fields
+present, and Last Payment Date >= Contract Start Date (a rule the manual states explicitly for
+CI17).
+
+**Found a real, pre-existing data integrity bug, unrelated to any of this session's code
+changes**: ~28 old migrated loans (mostly `SML-MAX_*`/`SML-REG_*` series) have a `lastPaymentDate`
+that predates their own `contractStartDate` - e.g. `SML-REG_00004`'s real REPAYMENT transaction is
+dated 2016-05-30, but its DISBURSEMENT transaction (which `resolveContractStartDate` reads from)
+is dated 2024-11-29 - clearly a migration-time artifact, not the loan's true historical
+disbursement date. Both transactions have a `legacyId` (migrated, not native), so this isn't a new
+data-entry bug - the DISBURSEMENT transaction's `entryDate` itself was set wrong at some point
+during migration for this subset of loans, the same root-cause class as the previously-documented
+ALCINDOR ZUELA case, except this time the DISBURSEMENT record's own date is the wrong one (not
+just `activatedAt`). Per the manual, submitting these as-is would fail CIC's own validation ("Last
+Payment Date must be greater than Contract Start Date"). **Not fixed as of this log entry** -
+surfaced to the user, who has not yet decided how to proceed (needs the true historical
+disbursement date per loan, likely from the original SDevTech dump, not something to guess at).
+
+**Separately, user asked what Overdue Days shows in the Excel companion vs the CSV**, revealing
+the Excel had never been updated for ANY of the §125-127 CIC-manual fixes (only the earlier §123
+timezone fix ever touched it). Fixed per user request ("ayusin mo rin ang Excel para tumugma sa
+CSV... tama lahat sa excel hindi lang overdue days") - see commit `9ba6849c` for full details:
+Overdue Days now shows both the CIC bucket code (via a newly-exported `cicOverdueDaysCode` from
+`CicCsdfReportWriter.ts`, single source of truth for both writers) and the raw day count; added
+Contract Status, Gross Income, and full Address 2 (including Postal Code, initially missed and
+caught by a column-index cross-check against the type definition) columns to the ID/CI sheets.
+Verified end-to-end with a disposable script cross-checking every Excel row against both the
+report data and the real CSDF text output for the same month - 0 mismatches across 6 individuals
+and 709 contracts.
+
+Rebuilt, verified healthy, no stale WSL2 listener. Committed (`9ba6849c`) and pushed.
+
+### Current state after §128
+
+- The CIC Excel companion is now field-complete and verified consistent with the CSDF submission -
+  no more silent divergence between what staff review and what actually gets submitted.
+- **Open, unresolved finding carried forward**: the ~28-loan Contract-Start-Date-after-Last-Payment
+  data bug above needs the user's decision on how to source correct historical disbursement dates
+  before these loans can be safely included in a real CIC submission - flagging this prominently so
+  it isn't lost before the next actual monthly submission is prepared.
