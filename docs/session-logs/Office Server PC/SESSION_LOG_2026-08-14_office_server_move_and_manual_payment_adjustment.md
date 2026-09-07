@@ -6085,3 +6085,57 @@ holds the correct end state from the manual cleanup above.
   4-installment repayment schedule each, and their disbursement/repayment transaction history.
 - Two pre-incident Postgres backups exist from today (`pre_sdev_sync_20260907_103313.dump`,
   `pre_sdev_full_sync_20260907_112931.dump`), both machine-local/gitignored.
+
+## §121 — 2026-09-07: Fees confirmed correctly migrated; diagnosed why the Loan Releases report and Disclosure Statement looked incomplete for the two new loans
+
+Same day, follow-up to §119/§120. User asked whether fees were included for the two migrated
+loans, then separately reported the "Loan Releases" report not showing them and being unable to
+generate a Disclosure Statement, later adding that add-on interest and contractual rate were also
+missing from the report.
+
+**Fees check**: confirmed `feesDue` (₱9,964.04 / ₱6,301.12) migrated correctly at the loan-account
+level for both loans, matching the SDevTech source exactly. All per-installment `repayment_schedules`
+rows show ₱0 fees for every installment on both loans - verified this is a genuine characteristic of
+the source data itself (SDevTech records this loan's whole fee as one loan-level charge, not spread
+across the schedule), not a migration gap.
+
+**Loan Releases report / Disclosure Statement investigation** (via an Explore agent reading
+`GetLoanReleasesReportUseCase.ts`, `PrismaReportingRepository.ts`, `LoanDocumentMergeDataResolver.ts`,
+`loanDocumentController.ts`): ruled out a branch-scope mismatch (both loans correctly sit on `HQ`,
+which is the *only* branch that exists in this system - a red herring the agent's own report had
+flagged as worth checking, confirmed not the cause). Found instead:
+- `SML-REG_00389`'s `activatedAt` (Aug 31, 2026) falls just outside the report page's default date
+  range (1st-of-month through today, i.e. Sept 1-7 as of this session) - not a data bug, just needs
+  the user to widen the date filter.
+- `addOnInterestRate`/`contractualInterestRate` were genuinely null for both loans - confirmed this
+  is a known, pre-existing gap for *every* legacy-migrated loan (not specific to these two):
+  `migrate-legacy-data.ts` never mapped either field (confirmed via `grep`, zero matches), and a
+  dedicated one-time follow-up script, `backfill-loan-interest-rates.ts`, already exists for exactly
+  this (2026-07-15, per its own doc comment) - idempotent, only touches rows where these two fields
+  are still null. Ran it (dry run first, confirming it would touch only these 2 of 1,810 migrated
+  loans), then `--apply`'d with user confirmation:
+  `addOnInterestRate` <- legacy `loan_accounts.addOnRate` (3.000% for both), `contractualInterestRate`
+  <- copied from the loan's own already-correct `interestRate` (4.700%). Verified both fields now
+  populated correctly for both loans.
+- Origination fees (`processingFee`, `advanceInterestFee`, `docStampFee`, etc.) and `netProceeds`
+  remain ₱0.00 for both loans - checked the two existing backfill tools for this
+  (`backfill-loan-origination-fees-mongo.ts`, sourced from `monthly_loan_releases.bson`) and found
+  **no source data exists for these two loan codes in that collection at all** ("Would backfill
+  now: 0") - SDevTech's own release-report data apparently hasn't been recorded for these two loans
+  yet (they're only days old). This is a genuine data gap, not a bug: these two fees fields will
+  need either manual entry once the real figures are known, or a future re-run of the origination-
+  fees backfill once SDevTech's `monthly_loan_releases` collection is updated with them. Not
+  attempted to backfill `netProceeds` this session since its formula depends on the (still-missing)
+  origination fees being correct first - doing so now would just lock in ₱0.00 as if it were the
+  real answer.
+
+### Current state after §121
+
+- SML-REG_00389 / SML-REG_00390 now have correct `interestRate`, `addOnInterestRate`, and
+  `contractualInterestRate` - the Disclosure Statement's rate fields and the Loan Releases report's
+  rate columns should now populate correctly for both.
+- SML-REG_00389 still won't appear in a Loan Releases report run with the default date range - the
+  user needs to explicitly widen it to include August 2026.
+- Origination fees and `netProceeds` remain genuinely unset (₱0.00) for both loans - flagged to the
+  user as a real data gap requiring manual entry or a future source update, not something a backfill
+  script can currently fix (no source data exists yet).
