@@ -74,3 +74,22 @@ export function manilaWholeMonthsBetween(start: Date, end: Date): number {
 function manilaWallClock(targetDate: Date): Date {
   return new Date(targetDate.getTime() + MANILA_OFFSET_MS);
 }
+
+/**
+ * 2026-09-07 (user-reported): the Loan Releases Excel export showed Aug 31 for a loan the on-screen
+ * report (and SDevTech itself) correctly showed as Sep 1 - `activatedAt` is stored as
+ * `2026-08-31T16:00:00.000Z` (real UTC instant = Manila midnight Sep 1), but ExcelJS/Excel has no
+ * timezone concept: it reads a JS Date's **UTC** Y/M/D straight through as the displayed calendar
+ * date, the same way it would for a UTC-naive `numFmt`-formatted cell. Passing the real instant
+ * (`2026-08-31T16:00:00.000Z`) therefore always displays one day early for any Manila-midnight
+ * timestamp.
+ *
+ * This is the one legitimate use of the "wrong instant" trick `manilaWallClock` above deliberately
+ * warns never to expose: exported specifically for feeding a timezone-naive UTC-field-reading
+ * renderer (ExcelJS, or any other library/format with the same limitation) so the calendar date it
+ * displays matches Manila wall-clock reality. Never use this for arithmetic, storage, or comparison
+ * - `manilaCalendarDay`/`manilaDaysBetween` above remain correct for those.
+ */
+export function manilaExcelDisplayDate(targetDate: Date): Date {
+  return manilaWallClock(targetDate);
+}

@@ -1,5 +1,15 @@
 import ExcelJs from 'exceljs';
 import type { CicMonthlyReportData } from '../application/ports/IReportingRepository';
+import { manilaExcelDisplayDate } from '../../../shared/domain/manilaTime';
+
+/** See `manilaExcelDisplayDate`'s own doc comment - ExcelJS reads a JS Date's UTC Y/M/D straight
+ * through as the displayed calendar date, so every date cell in this workbook needs this same
+ * Manila-timezone correction (2026-09-07, same root cause as ExcelJsLoanReleasesReportWriter's
+ * fix) - doubly important here since this is a regulatory CIC submission companion, not just an
+ * internal report. */
+function d(value: Date | null): Date | null {
+  return value ? manilaExcelDisplayDate(value) : null;
+}
 
 const ID_COLUMNS: { header: string; width: number }[] = [
   { header: 'Provider Subject No', width: 22 },
@@ -87,7 +97,7 @@ export class CicExcelReportWriter {
         person.middleName,
         person.suffix,
         person.gender,
-        person.birthDate,
+        d(person.birthDate),
         person.nationality,
         person.mobile,
         person.email,
@@ -119,17 +129,17 @@ export class CicExcelReportWriter {
         contract.contractTypeCode,
         contract.purposeOfCreditCode,
         contract.contractPhase,
-        contract.contractStartDate,
-        contract.contractRequestDate,
-        contract.contractEndPlannedDate,
-        contract.contractEndActualDate,
+        d(contract.contractStartDate),
+        d(contract.contractRequestDate),
+        d(contract.contractEndPlannedDate),
+        d(contract.contractEndActualDate),
         Number(contract.financedAmount),
         contract.installmentsNumber,
         Number(contract.monthlyPaymentAmount),
-        contract.firstPaymentDate,
-        contract.lastPaymentDate,
+        d(contract.firstPaymentDate),
+        d(contract.lastPaymentDate),
         Number(contract.lastPaymentAmount),
-        contract.nextPaymentDate,
+        d(contract.nextPaymentDate),
         Number(contract.nextPaymentAmount),
         contract.outstandingPaymentsNumber,
         Number(contract.outstandingBalance),

@@ -1,5 +1,6 @@
 import ExcelJs from 'exceljs';
 import type { LoanReleaseReportRow } from '../application/ports/IReportingRepository';
+import { manilaExcelDisplayDate } from '../../../shared/domain/manilaTime';
 
 /**
  * Column order and headers match the legacy Excel report exactly (`legacy/reports/.../
@@ -64,7 +65,11 @@ const DATE_KEYS: ReadonlySet<string> = new Set([
 function cellValue(row: LoanReleaseReportRow, key: keyof LoanReleaseReportRow): string | number | Date | null {
   const value = row[key];
   if (value === null || value === undefined) return null;
-  if (DATE_KEYS.has(key)) return value as Date;
+  // ExcelJS has no timezone concept - it reads a JS Date's UTC Y/M/D straight through as the
+  // displayed calendar date. See manilaExcelDisplayDate's own doc comment for why a plain
+  // `value as Date` here showed Aug 31 for a loan Manila-midnight-stamped (and correctly displayed
+  // elsewhere) as Sep 1.
+  if (DATE_KEYS.has(key)) return manilaExcelDisplayDate(value as Date);
   if (MONEY_KEYS.has(key)) return Number(value);
   return value as string | number;
 }

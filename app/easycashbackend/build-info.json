@@ -1,1 +1,6 @@
-{"commit":"510af15","commitDate":"2026-09-06T14:18:31+08:00","commitMessage":"Update session log: camera feature diagnosed then removed (§114)","builtAt":"2026-09-06T06:26:04.000Z"}
+﻿{
+    "commitDate":  "2026-09-07T13:51:26+08:00",
+    "commitMessage":  "docs: log §122 - manually entered itemized fees, root-caused why they\u0027re not in the dump",
+    "commit":  "892fabf9",
+    "builtAt":  "2026-09-07T06:05:49.2686348Z"
+}
