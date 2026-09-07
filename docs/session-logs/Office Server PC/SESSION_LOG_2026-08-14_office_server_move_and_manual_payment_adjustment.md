@@ -6317,3 +6317,41 @@ committed (`86be48f7`) and pushed.
      Indicator" (hardcoded 'M') and "Currency" (hardcoded 'PHP') at ID87/ID88 ARE populated,
      leaving an inconsistent half-filled dependent field group (a value-less indicator+currency
      pair with no actual income number).
+
+## §126 — 2026-09-07: Fixed the three CIC audit findings from §125
+
+User approved fixing all three. Implemented:
+
+1. **Integer amounts** - new `cicAmount(n)` helper in `PrismaReportingRepository.ts`
+   (`Math.floor(Math.max(0, n)).toString()`), applied to `financedAmount`,
+   `monthlyPaymentAmount`, `lastPaymentAmount`, `nextPaymentAmount`, `outstandingBalance`,
+   `overduePaymentsAmount` - all previously `.toFixed(2)` or a raw `Decimal.toString()`.
+2. **CI35 Overdue Days bucket code** - new `cicOverdueDaysCode(days)` in
+   `CicCsdfReportWriter.ts` mapping day count -> `0`/`1`-`6` per OverdueDaysDomain, replacing
+   the previous raw `String(contract.overdueDays)`.
+3. **Gross Income (ID86)** - added `grossIncome: string` to `CicIndividualRow`
+   (`IReportingRepository.ts`), populated from `BorrowerIncomeDetail.monthlyIncome` via
+   `cicAmount()` in the repository, written at ID86 in the writer with Annual/Monthly
+   Indicator (ID87) and Currency (ID88) now conditional on it being present (same
+   dependent-field pattern already used elsewhere in this file), instead of always-on
+   regardless of whether there was an actual income value.
+
+**Verified with a disposable test script (deleted after use)**, run against real August 2026
+data: a genuinely 2,376-days-overdue contract (`BL-REG_N0U6G`) now writes CI35 = `"6"` (was
+writing `"2376"`) and CI20 `financedAmount` = `"114218"` (was carrying decimals). Also checked the
+database directly for Gross Income: `SELECT COUNT(*) FROM borrower_income_details WHERE
+"monthlyIncome" IS NOT NULL` returned **0** - no borrower in this database has income on file
+yet, so the wiring is correct but has nothing to populate until income capture starts happening
+upstream (loan origination form, most likely) - not a bug in this fix, a genuine data-capture gap
+worth flagging separately if the user wants it addressed.
+
+Rebuilt, verified healthy, no stale WSL2 listener. Committed (`5dc3b440`) and pushed.
+
+### Current state after §126
+
+- All four CIC CSDF findings from this session (§125's Last Payment Date + this section's three)
+  are fixed and deployed. The full field-by-field audit against the manual is complete for the
+  HD/ID/CI/FT sections this system actually populates.
+- **Known remaining gap, not a bug**: Gross Income will stay blank in every CIC submission until
+  `BorrowerIncomeDetail.monthlyIncome` is actually captured somewhere upstream (no UI currently
+  writes to it, as far as this session's investigation went).
