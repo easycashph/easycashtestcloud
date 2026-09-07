@@ -6139,3 +6139,48 @@ flagged as worth checking, confirmed not the cause). Found instead:
 - Origination fees and `netProceeds` remain genuinely unset (₱0.00) for both loans - flagged to the
   user as a real data gap requiring manual entry or a future source update, not something a backfill
   script can currently fix (no source data exists yet).
+
+## §122 — 2026-09-07: Found and manually entered the two loans' itemized origination fees; root-caused why they were never in the mongodump
+
+Same day, follow-up to §121. User pushed back correctly on §121's "no source data exists yet"
+conclusion: they had just taken the `20260907_100929.zip` mongodump *today*, yet could see the full
+itemized fee breakdown live in SDevTech's own "Loan Account Details" screen right then - if the data
+was live in SDevTech today, it should have been in a dump taken today too.
+
+**Investigated further** rather than accepting the earlier (wrong) explanation. Found a
+`custom_field_values` entry (key `8a8e8ee868fdc15c0168fe102291025a`) present for both loans whose
+value (₱50,000 / ₱40,000) matches `loanAmount - feesDue` almost exactly - verified against 265 other
+`SML-REG_*` loans at a 98.5% match rate, confirming this field is effectively "Net Proceeds" for this
+product. Searched `predefined_fee_amounts.bson` (the collection that actually stores itemized fee
+line-items for *older* loans, linked via a `loan_predefined_fee_amounts_encodedkey_own` chain) for
+any record referencing either loan's `_id`/`uid` across both the Sept 1 and Sept 7 dumps - zero
+matches in either. **Root cause, confirmed with the user's own screenshot of the SDevTech "Loan
+Account Details" page**: Processing Fee (₱5,996.40 / ₱4,630.11) is exactly 10% of Gross Loan Amount
+and Account Management Fee (₱599.64 / ₱463.01) is exactly 1%, for both loans - these are computed
+live by SDevTech's own product-fee-rule engine at render time, not a materialized per-loan value
+written anywhere in the database. That's why no mongodump, however fresh, will ever contain them for
+loans following this calculation path - there's nothing stored to dump. (Older loans that DO have
+`predefined_fee_amounts` rows presumably went through a different, now-retired workflow that
+materialized the amount at origination time.)
+
+With the user's screenshot as the authoritative source (not a legacy export), manually wrote the
+exact itemized fees via a direct SQL `UPDATE` (2 rows, both in one transaction, user-confirmed
+first): `accountManagementFee`, `processingFee`, `notarialFee`, `advanceInterestFee` (SML-REG_00389
+only - SML-REG_00390's screen shows no Advance Interest Fee row at all, left ₱0), `webFee`,
+`insuranceFee`, and `netProceeds` (Gross Loan Amount minus the fee total, matching the
+`custom_field_values` finding above almost exactly). Verified the six fee columns sum to exactly the
+already-migrated `feesDue` for both loans (₱9,964.04 / ₱6,301.12) - a clean cross-check that the
+manually-entered breakdown is internally consistent with the earlier, independently-migrated
+loan-level total.
+
+### Current state after §122
+
+- Both loans now have a complete, itemized fee breakdown and correct `netProceeds` - the Disclosure
+  Statement's fee line items and the Loan Releases report's fee columns should now show real figures
+  for both, not ₱0.00.
+- **Lesson for any future SDevTech-sourced loan with the same product ("SML-Regular"/similarly
+  product-fee-computed loans)**: don't assume a missing per-loan fee value means the data doesn't
+  exist yet - some products compute Processing Fee/Account Management Fee live as a percentage
+  (10%/1% confirmed for SML-Regular) rather than storing them, so a mongodump will never carry them
+  for that class of loan. The live SDevTech screen (or a known percentage rule) is the only source
+  for these, not a future re-export.
