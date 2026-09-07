@@ -1536,7 +1536,11 @@ export class PrismaReportingRepository implements IReportingRepository {
           ? (Number(firstInstallment.principalDue) + Number(firstInstallment.interestDue)).toFixed(2)
           : '0.00',
         firstPaymentDate: loan.firstRepaymentDate,
-        lastPaymentDate: lastPaid?.dueDate ?? null,
+        // 2026-09-07 (user-reported, verified against CIC manual field CI17 - "the date refers to
+        // the last payment from customer to FI"): must be the real payment date, not the
+        // installment's scheduled dueDate - a loan paid on Aug 28 against an Aug 14 due date
+        // showed Aug 14 here before this fix.
+        lastPaymentDate: lastPaid?.lastPaidAt ?? null,
         lastPaymentAmount: lastPaid ? (Number(lastPaid.principalPaid) + Number(lastPaid.interestPaid)).toFixed(2) : '0.00',
         nextPaymentDate: nextDue?.dueDate ?? null,
         nextPaymentAmount: nextDue ? (Number(nextDue.principalDue) + Number(nextDue.interestDue)).toFixed(2) : '0.00',
