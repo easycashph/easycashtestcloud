@@ -1,6 +1,6 @@
 import * as React from 'react';
 import QRCode from 'qrcode';
-import { Check, Copy, Share2, Smartphone } from 'lucide-react';
+import { Check, Copy, Download, Share2, Smartphone } from 'lucide-react';
 import { PublicPageLayout } from '@/components/PublicPageLayout';
 import { Button } from '@/components/ui/Button';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -101,6 +101,21 @@ export function GetAppPage() {
           <Share2 className="h-4 w-4" />
           {t.getApp.share}
         </Button>
+      </div>
+
+      {/* 2026-09-07 (user-reported): sending the APK through a chat app corrupted it in transit
+          ("invalid format" on install) - hosting the same file for direct download from this page
+          avoids that, and is also the safer distribution channel discussed with the user (a client
+          downloading from Easycash's own known domain, not a link pushed via SMS/Messenger). */}
+      <div className="mt-4 rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
+        <h3 className="text-sm font-bold">{t.getApp.androidAppHeading}</h3>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t.getApp.androidAppBody}</p>
+        <a href="./downloads/easycash-portal.apk" download className="mt-3 inline-block w-full">
+          <Button type="button" variant="outline" className="w-full">
+            <Download className="h-4 w-4" />
+            {t.getApp.downloadApk}
+          </Button>
+        </a>
       </div>
 
       <h2 className="mt-8 flex items-center gap-2 text-sm font-bold">
