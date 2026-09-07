@@ -5909,3 +5909,34 @@ Committed (`746e4f2a`) and pushed.
   Also not yet done: fixing the AAB/jarsigner PATH issue (only matters if/when a Play Store
   submission is pursued later) and any future version-bump workflow should remember the `PATH`
   workaround from bug #3 above.
+
+## §118 — 2026-09-07: APK corrupted in chat transfer - fixed by hosting it for direct download on the Portal
+
+User tried installing the APK sent via this session's file-delivery mechanism and got "invalid
+format" on the phone. Verified the source file was genuinely intact (`unzip -t` clean, recognized
+as a valid Android package with signing block) - the corruption happened somewhere in the transfer
+path, not the file itself, consistent with known issues sending binary attachments through
+chat/messaging-style channels.
+
+**Fix**: copied `app-release-signed.apk` to `app/portalfrontend/public/downloads/easycash-portal.apk`
+and added a "Download for Android" button + section to `GetAppPage.tsx` (EN/FIL translation keys
+`getApp.androidAppHeading`/`androidAppBody`/`downloadApk` added), so the same file can be
+downloaded directly by the phone's own browser from `easycash-portal.pages.dev` - no intermediary
+transfer step to corrupt it. This also happens to be the safer distribution channel already agreed
+on with the user in §117 (official domain, not a chat-pushed link). Type-checked clean, committed
+(`19bc6738`) and pushed - confirmed live within seconds
+(`curl -I https://easycash-portal.pages.dev/downloads/easycash-portal.apk` →
+`Content-Type: application/vnd.android.package-archive`). Rebuilt the local `portalfrontend`
+Docker container to match (hit a container-name conflict from an earlier rebuild attempt racing
+with a retry - resolved itself once the first attempt's recreate finished; confirmed no stale
+WSL2 listener on port 5199 afterward). Saved as a durable feedback memory
+([[feedback_no_apk_transfer_via_chat_apps]]) to avoid repeating the chat-transfer approach for any
+future binary installer.
+
+### Current state after §118
+
+- The Android APK is now downloadable directly from `https://easycash-portal.pages.dev/#/get-app`
+  via a visible "Download for Android" button - this is the recommended way to get it onto a
+  device going forward, not sending the file through chat.
+- Still awaiting the user's confirmation that install + first launch works correctly via this new
+  download path.
