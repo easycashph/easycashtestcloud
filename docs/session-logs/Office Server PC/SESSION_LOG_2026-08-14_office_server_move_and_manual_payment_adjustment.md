@@ -6184,3 +6184,55 @@ loan-level total.
   (10%/1% confirmed for SML-Regular) rather than storing them, so a mongodump will never carry them
   for that class of loan. The live SDevTech screen (or a known percentage rule) is the only source
   for these, not a future re-export.
+
+## §123 — 2026-09-07: Fixed a timezone bug in two Excel report exports (dates showed one day early)
+
+Same day, user noticed SML-REG_00389's Disbursement Date showed Aug 31, 2026 in the *downloaded*
+Loan Releases Excel report, but Sept 1, 2026 both in the LMS's own on-screen report list and in
+SDevTech itself (confirmed via a screenshot of the LMS "Loan Releases Report" page correctly
+showing "Sep 1, 2026").
+
+**Root cause**: `activatedAt` is stored as `2026-08-31T16:00:00.000Z` - a real, correct UTC instant
+that IS Manila midnight Sept 1 (the same storage convention `manilaTime.ts`'s existing doc comments
+already document, e.g. `manilaDaysBetween`'s). The on-screen report and SDevTech both correctly
+convert to Asia/Manila before displaying. `ExcelJsLoanReleasesReportWriter.ts`, however, passed the
+raw JS `Date` object straight into ExcelJS with a `numFmt: 'mm/dd/yyyy'` column format -
+**ExcelJS has no timezone concept**: it reads a `Date`'s **UTC** Y/M/D fields directly as the
+calendar date to display, so any Manila-midnight-stamped timestamp shows one day early in the
+exported file, even though the underlying data and every other display of it are correct.
+
+**Fix**: added `manilaExcelDisplayDate()` to `shared/domain/manilaTime.ts` - the one legitimate,
+intentional use of the "re-based wrong instant" technique the file's existing private
+`manilaWallClock` helper explicitly warns never to expose (documented inline exactly why this one
+call site is the sanctioned exception: feeding a UTC-field-reading, timezone-naive renderer).
+Applied it to all four date columns in `ExcelJsLoanReleasesReportWriter.ts` (Disbursement Date, Loan
+Created, Maturity Date, First Repayment Date).
+
+**Found the same bug in a second report while checking for it elsewhere**: `CicExcelReportWriter.ts`
+(the human-readable companion workbook for the CIC - Credit Information Corporation - monthly
+regulatory report) had the identical pattern across 8 date columns (Birth Date, Contract Start/
+Request/End Planned/End Actual, First/Last/Next Payment Date). Asked the user first (given this
+touches a compliance-adjacent report) - confirmed, fixed the same way. Checked the *actual*
+regulatory submission file, `CicCsdfReportWriter.ts` (pipe-delimited CSDF format, not Excel) -
+already handles this correctly via its own local `ddmmyyyy()` re-implementation of the same
+technique, complete with a doc comment citing a real verified case (a borrower's `birthDate`
+`1993-09-10T16:00Z` matching CIC's own on-file DOB of "11091993" = Sept 11, not the 10th) - left
+untouched, not broken.
+
+Rebuilt `easycashbackend` - hit the container-naming-conflict pattern from §119/§120 again (two
+rebuild attempts overlapped because the first one's completion wasn't checked before starting a
+second), left a `Dead` container and an orphaned renamed one; removed both explicitly
+(`docker rm -f`) before a clean final rebuild succeeded. Verified: no stale WSL2 port-forward
+listener on port 4000, container healthy (`/health` 200).
+
+### Current state after §123
+
+- Both the Loan Releases and CIC Excel exports now show the same Manila-local calendar date as the
+  on-screen report and SDevTech itself, for every date column in both files.
+- The actual CIC CSDF regulatory submission remains correct as it always was - not affected by this
+  bug, not touched by this fix.
+- **Reminder for any future report/export writer that formats dates for a UTC-field-reading library
+  (ExcelJS, or similar)**: use `manilaExcelDisplayDate()` from `shared/domain/manilaTime.ts`, not a
+  raw `Date` value, for any column that will get a date-only `numFmt` applied - the same class of
+  bug will recur silently otherwise, since the underlying data is correct and only the display is
+  wrong (easy to miss without a side-by-side comparison against the on-screen equivalent).
