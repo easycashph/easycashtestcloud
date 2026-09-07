@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-07T14:50:17+08:00",
-    "commitMessage":  "docs: log §124 - fixed CIC CSDF field padding to match real submission template",
-    "commit":  "7fd9df68",
-    "builtAt":  "2026-09-07T07:51:20.9635343Z"
+    "commitDate":  "2026-09-07T15:58:35+08:00",
+    "commitMessage":  "docs: log §125 - fixed CIC Last Payment Date, documented 3 pending audit findings",
+    "commit":  "6f794473",
+    "builtAt":  "2026-09-07T08:04:48.4654187Z"
 }

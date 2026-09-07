@@ -319,6 +319,12 @@ export interface CicIndividualRow {
   mobile: string;
   email: string;
   employerName: string;
+  /** 2026-09-07 (full-audit fix): `BorrowerIncomeDetail.monthlyIncome`, already an integer string
+   * per manual §2.1.3 (see `cicAmount` in the repository). Blank if not on file. Paired with the
+   * writer's hardcoded 'M' (Annual/Monthly Indicator) and 'PHP' (Currency) at ID87/ID88 - those two
+   * were previously populated with no underlying income value here, an inconsistent half-filled
+   * dependent field group. */
+  grossIncome: string;
   /** CivilStatusDomain code (1=Single, 2=Married, 3=Divorced/Separated, 4=Widow) mapped from
    * `Borrower.civilStatus` free text. Blank if the stored text doesn't match a known variant. */
   civilStatusCode: string;

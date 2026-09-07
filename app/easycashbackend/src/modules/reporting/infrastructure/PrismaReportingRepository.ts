@@ -287,6 +287,16 @@ function cicContractTypeCode(productCode: string): string {
   return '';
 }
 
+/** 2026-09-07 (full-audit fix): manual §2.1.3 - "All numbers and amounts should be positive
+ * INTEGER values. When the amounts have decimals they will be rounded down... without spaces or
+ * other dividing characters" (example: "1,000.30 PHP will be submitted as 1000"). Verified against
+ * a real accepted submission on file - every amount field there is a plain integer, never "6200.00".
+ * Every CI amount field (financedAmount, monthlyPaymentAmount, lastPaymentAmount,
+ * nextPaymentAmount, outstandingBalance, overduePaymentsAmount) previously kept 2 decimal places. */
+function cicAmount(n: number): string {
+  return Math.floor(Math.max(0, n)).toString();
+}
+
 function groupByLoanId<T extends { loanAccountId: string }>(rows: T[]): Map<string, T[]> {
   const map = new Map<string, T[]>();
   for (const row of rows) {
@@ -1482,6 +1492,7 @@ export class PrismaReportingRepository implements IReportingRepository {
           mobile: borrower.mobilePhone1 ?? borrower.mobilePhone2 ?? '',
           email: borrower.email ?? '',
           employerName: '', // filled below once income detail is fetched
+          grossIncome: '', // filled below once income detail is fetched
           civilStatusCode: cicCivilStatusCode(borrower.civilStatus),
           tin: '', // filled below once government IDs are fetched
           sss: '',
@@ -1530,24 +1541,24 @@ export class PrismaReportingRepository implements IReportingRepository {
         contractRequestDate: loan.createdAt,
         contractEndPlannedDate: schedule.length > 0 ? schedule[schedule.length - 1]!.dueDate : null,
         contractEndActualDate: wasClosedAsOf(loan) ? loan.closedAt : null,
-        financedAmount: loan.principalAmount.toString(),
+        financedAmount: cicAmount(Number(loan.principalAmount)),
         installmentsNumber: loan.installmentCount,
         monthlyPaymentAmount: firstInstallment
-          ? (Number(firstInstallment.principalDue) + Number(firstInstallment.interestDue)).toFixed(2)
-          : '0.00',
+          ? cicAmount(Number(firstInstallment.principalDue) + Number(firstInstallment.interestDue))
+          : '0',
         firstPaymentDate: loan.firstRepaymentDate,
         // 2026-09-07 (user-reported, verified against CIC manual field CI17 - "the date refers to
         // the last payment from customer to FI"): must be the real payment date, not the
         // installment's scheduled dueDate - a loan paid on Aug 28 against an Aug 14 due date
         // showed Aug 14 here before this fix.
         lastPaymentDate: lastPaid?.lastPaidAt ?? null,
-        lastPaymentAmount: lastPaid ? (Number(lastPaid.principalPaid) + Number(lastPaid.interestPaid)).toFixed(2) : '0.00',
+        lastPaymentAmount: lastPaid ? cicAmount(Number(lastPaid.principalPaid) + Number(lastPaid.interestPaid)) : '0',
         nextPaymentDate: nextDue?.dueDate ?? null,
-        nextPaymentAmount: nextDue ? (Number(nextDue.principalDue) + Number(nextDue.interestDue)).toFixed(2) : '0.00',
+        nextPaymentAmount: nextDue ? cicAmount(Number(nextDue.principalDue) + Number(nextDue.interestDue)) : '0',
         outstandingPaymentsNumber: outstanding.length,
-        outstandingBalance: outstandingBalance.toFixed(2),
+        outstandingBalance: cicAmount(outstandingBalance),
         overduePaymentsNumber: overdue.length,
-        overduePaymentsAmount: overdueAmount.toFixed(2),
+        overduePaymentsAmount: cicAmount(overdueAmount),
         overdueDays,
       });
     }
@@ -1580,6 +1591,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         if (!row) continue;
         const income = incomeByBorrowerId.get(loan.borrowerId);
         row.employerName = income?.employerName ?? '';
+        row.grossIncome = income?.monthlyIncome != null ? cicAmount(Number(income.monthlyIncome)) : '';
         row.occupationStatusCode = cicOccupationStatusCode(income?.employmentType ?? null);
 
         const governmentId = governmentIdByBorrowerId.get(loan.borrowerId);

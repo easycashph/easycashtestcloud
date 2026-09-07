@@ -31,6 +31,21 @@ function ddmmyyyy(date: Date | null): string {
   return `${dd}${mm}${yyyy}`;
 }
 
+/** 2026-09-07 (full-audit fix): CI35 "Overdue Days" is a coded bucket (OverdueDaysDomain,
+ * manual §7.1.19), NOT the raw day count - confirmed against a real accepted submission, which has
+ * literal "6" in this position for a contract overdue more than a year, not a day count like
+ * "400". This writer previously passed `contract.overdueDays` (the actual number of days, e.g. 45
+ * or 120) straight through as the field value - wrong for every contract with any overdue days. */
+function cicOverdueDaysCode(days: number): string {
+  if (days <= 0) return '0';
+  if (days <= 30) return '1';
+  if (days <= 60) return '2';
+  if (days <= 90) return '3';
+  if (days <= 180) return '4';
+  if (days <= 365) return '5';
+  return '6';
+}
+
 /** Builds a fixed-length field array, fills known positions, leaves the rest blank, and joins ALL
  * `length` fields - including a fully-blank tail. 2026-09-07 (user-reported, "dapat kasama pa rin
  * ito sa csv file pero naka separator at blank"): verified directly against a real accepted
@@ -103,8 +118,14 @@ export class CicCsdfReportWriter {
           79: person.email ? '7' : '',
           80: person.email,
           81: person.employerName,
-          86: 'M',
-          87: 'PHP',
+          // 2026-09-07 (full-audit fix): GrossIncome (ID86) was never populated even though
+          // Annual/Monthly Indicator and Currency (ID87/ID88) were hardcoded on - an inconsistent
+          // half-filled dependent field group. Now sourced from `BorrowerIncomeDetail.monthlyIncome`
+          // (see `CicIndividualRow.grossIncome`'s own doc comment) and the other two are only
+          // filled alongside it, same conditional pattern as every other dependent pair in this file.
+          85: person.grossIncome,
+          86: person.grossIncome ? 'M' : '',
+          87: person.grossIncome ? 'PHP' : '',
           88: person.occupationStatusCode,
         }),
       );
@@ -141,7 +162,7 @@ export class CicCsdfReportWriter {
           31: contract.outstandingBalance,
           32: String(contract.overduePaymentsNumber),
           33: contract.overduePaymentsAmount,
-          34: String(contract.overdueDays),
+          34: cicOverdueDaysCode(contract.overdueDays),
         }),
       );
     }
