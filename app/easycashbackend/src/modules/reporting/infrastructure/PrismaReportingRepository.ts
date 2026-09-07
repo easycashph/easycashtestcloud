@@ -1505,6 +1505,12 @@ export class PrismaReportingRepository implements IReportingRepository {
           addressBarangay: '',
           addressCity: '',
           addressProvince: '',
+          address2FullAddress: '',
+          address2StreetNo: '',
+          address2PostalCode: '',
+          address2Barangay: '',
+          address2City: '',
+          address2Province: '',
         });
       }
 
@@ -1537,6 +1543,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         contractTypeCode,
         purposeOfCreditCode: contractTypeCode === '12' || contractTypeCode === '20' ? '32' : '',
         contractPhase: wasClosedAsOf(loan) ? 'CL' : 'AC',
+        contractStatus: overdueDays > 0 ? 'PD' : '',
         contractStartDate: resolveContractStartDate(loan),
         contractRequestDate: loan.createdAt,
         contractEndPlannedDate: schedule.length > 0 ? schedule[schedule.length - 1]!.dueDate : null,
@@ -1581,9 +1588,27 @@ export class PrismaReportingRepository implements IReportingRepository {
       for (const doc of identificationDocs) {
         if (!firstIdDocByBorrowerId.has(doc.borrowerId)) firstIdDocByBorrowerId.set(doc.borrowerId, doc);
       }
-      const firstAddressByBorrowerId = new Map<string, (typeof addressRows)[number]>();
+      // 2026-09-07 (user-confirmed: Easycash is Non-MFI - full-audit fix): was a single
+      // "first address wins" map, which for a borrower with BOTH a "Present" and a "Permanent"
+      // row picked whichever happened to come back first from the DB - risking a "Present" address
+      // getting mislabeled as Address 1's 'MI' = "Main Address (Residence, Permanent)". Now grouped
+      // per borrower so `pickAddresses` below can deliberately choose by `addressType`.
+      const addressesByBorrowerId = new Map<string, (typeof addressRows)[number][]>();
       for (const address of addressRows) {
-        if (!firstAddressByBorrowerId.has(address.ownerId)) firstAddressByBorrowerId.set(address.ownerId, address);
+        const list = addressesByBorrowerId.get(address.ownerId) ?? [];
+        list.push(address);
+        addressesByBorrowerId.set(address.ownerId, list);
+      }
+      function pickAddresses(list: (typeof addressRows)[number][]): {
+        primary: (typeof addressRows)[number] | undefined;
+        secondary: (typeof addressRows)[number] | undefined;
+      } {
+        const byType = (t: string) => list.find((a) => (a.addressType ?? '').trim().toUpperCase() === t);
+        const permanent = byType('PERMANENT');
+        const present = byType('PRESENT');
+        const primary = permanent ?? list[0];
+        const secondary = present && present !== primary ? present : undefined;
+        return { primary, secondary };
       }
       for (const loan of loans) {
         if (!loan.borrower.cicProviderSubjectNo) continue;
@@ -1605,14 +1630,22 @@ export class PrismaReportingRepository implements IReportingRepository {
           row.idNumber = code ? idDoc.documentNumber : '';
         }
 
-        const address = firstAddressByBorrowerId.get(loan.borrowerId);
-        if (address) {
-          row.addressFullAddress = formatAddress(address);
-          row.addressStreetNo = address.street ?? address.houseUnitNumber ?? '';
-          row.addressPostalCode = address.zipCode ?? '';
-          row.addressBarangay = address.barangay ?? '';
-          row.addressCity = address.cityMunicipality ?? '';
-          row.addressProvince = address.province ?? '';
+        const { primary, secondary } = pickAddresses(addressesByBorrowerId.get(loan.borrowerId) ?? []);
+        if (primary) {
+          row.addressFullAddress = formatAddress(primary);
+          row.addressStreetNo = primary.street ?? primary.houseUnitNumber ?? '';
+          row.addressPostalCode = primary.zipCode ?? '';
+          row.addressBarangay = primary.barangay ?? '';
+          row.addressCity = primary.cityMunicipality ?? '';
+          row.addressProvince = primary.province ?? '';
+        }
+        if (secondary) {
+          row.address2FullAddress = formatAddress(secondary);
+          row.address2StreetNo = secondary.street ?? secondary.houseUnitNumber ?? '';
+          row.address2PostalCode = secondary.zipCode ?? '';
+          row.address2Barangay = secondary.barangay ?? '';
+          row.address2City = secondary.cityMunicipality ?? '';
+          row.address2Province = secondary.province ?? '';
         }
       }
     }

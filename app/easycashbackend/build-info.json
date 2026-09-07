@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-07T15:58:35+08:00",
-    "commitMessage":  "docs: log §125 - fixed CIC Last Payment Date, documented 3 pending audit findings",
-    "commit":  "6f794473",
-    "builtAt":  "2026-09-07T08:04:48.4654187Z"
+    "commitDate":  "2026-09-07T16:09:29+08:00",
+    "commitMessage":  "docs: log §126 - fixed the three CIC audit findings (amounts, overdue bucket, gross income)",
+    "commit":  "6329bb47",
+    "builtAt":  "2026-09-07T08:21:43.4712965Z"
 }

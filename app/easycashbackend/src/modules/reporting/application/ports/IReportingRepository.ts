@@ -343,16 +343,31 @@ export interface CicIndividualRow {
   /** OccupationStatusDomain code. Only 'Self Employed' maps confidently (-> 5) - `BorrowerIncomeDetail.employmentType`'s other stored value, plain 'Employed', doesn't distinguish permanent/temporary or private/government sector, so it's left blank rather than guessed. */
   occupationStatusCode: string;
   /** 2026-08-30 (mandatory-field fix): the manual requires at least one address (Address Type,
-   * Full Address, StreetNo, City, Province) for every Individual record. Sourced from the
-   * borrower's first `Address` on file (polymorphic `ownerType`/`ownerId`, same convention as
-   * every other report's address handling in this module). Empty strings when the borrower has no
-   * address on file at all - never fabricated. */
+   * Full Address, StreetNo, City, Province) for every Individual record.
+   * 2026-09-07 (user-confirmed: Easycash is Non-MFI - full-audit fix): the manual's own summary
+   * (§3.1.1.1.2) requires TWO addresses for Non-MFIs, not one - "Address 1: Address Type" (ID32)
+   * must be 'MI' = "Main Address (Residence, Permanent)" per its own rule text, so this is now
+   * specifically the borrower's Address row typed "Permanent" (falling back to whatever address
+   * exists if no row is explicitly typed - most migrated borrowers have exactly one, unlabeled).
+   * Empty strings when the borrower has no address on file at all - never fabricated. */
   addressFullAddress: string;
   addressStreetNo: string;
   addressPostalCode: string;
   addressBarangay: string;
   addressCity: string;
   addressProvince: string;
+  /** 2026-09-07 (full-audit fix, Non-MFI mandatory Address 2): the borrower's Address row typed
+   * "Present" - the manual calls Address 2 (ID43, 'AI') the "Additional Address (Mailing)", which
+   * best matches where this system's "Present" address type actually represents (where the
+   * borrower currently receives mail, vs. "Permanent" above). Empty when no distinct second
+   * address row exists on file for this borrower - most migrated borrowers only have one address,
+   * a genuine data-capture gap, not something this fix can retroactively invent. */
+  address2FullAddress: string;
+  address2StreetNo: string;
+  address2PostalCode: string;
+  address2Barangay: string;
+  address2City: string;
+  address2Province: string;
 }
 
 export interface CicContractRow {
@@ -374,6 +389,15 @@ export interface CicContractRow {
   purposeOfCreditCode: string;
   /** 'AC' (Active) or 'CL' (Closed) - from `LoanAccount.status`/`closedAt`. */
   contractPhase: 'AC' | 'CL';
+  /** 2026-09-07 (full-audit fix, user-confirmed Easycash is Non-MFI): ContractStatusDomain code
+   * (manual §3.1.2). The manual only gives institution-specific Contract Status mapping tables for
+   * Credit Card companies, Microfinance Institutions, Commercial Banks, and Cooperative Banks - a
+   * plain non-bank, non-MFI lending/financing company like Easycash isn't explicitly covered by
+   * any of those threshold rules (e.g. Commercial Banks' 90+ day rule, Cooperative Banks' 30+ day
+   * rule). Rather than borrow a threshold that doesn't apply, this uses the domain's own generic
+   * description directly: 'PD' (Past Due) whenever `overdueDays` (this loan's own precisely
+   * computed days-late figure) is greater than zero, blank otherwise. */
+  contractStatus: 'PD' | '';
   contractStartDate: Date;
   /** `LoanAccount.createdAt` - the application/request date, distinct from the actual disbursement (`contractStartDate`). */
   contractRequestDate: Date;

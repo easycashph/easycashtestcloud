@@ -103,6 +103,20 @@ export class CicCsdfReportWriter {
           37: person.addressCity,
           38: person.addressProvince,
           39: person.addressFullAddress ? 'PH' : '',
+          // 2026-09-07 (user-confirmed: Easycash is Non-MFI - full-audit fix): the manual's own
+          // summary (§3.1.1.1.2) requires TWO addresses for Non-MFIs, not one - this was previously
+          // never populated. "AI" = Individual - Additional Address (Mailing) per the manual.
+          // Blank when the borrower has no distinct second address row on file (see
+          // `CicIndividualRow.address2FullAddress`'s own doc comment - a real data-capture gap for
+          // most migrated borrowers, not something this writer can invent).
+          42: person.address2FullAddress ? 'AI' : '',
+          43: person.address2FullAddress,
+          44: person.address2StreetNo,
+          45: person.address2PostalCode,
+          47: person.address2Barangay,
+          48: person.address2City,
+          49: person.address2Province,
+          50: person.address2FullAddress ? 'PH' : '',
           // "Identification N" (TIN=10/SSS=11, structured `BorrowerGovernmentId` fields - the
           // manual's own mandatory "at least one of TIN/SSS/GSIS" rule) and "ID N" (government
           // photo ID, non-mandatory, from free-text `IdentificationDocument.documentType`) are two
@@ -142,6 +156,11 @@ export class CicCsdfReportWriter {
           6: contract.providerContractNo,
           7: contract.contractTypeCode,
           8: contract.contractPhase,
+          // 2026-09-07 (user-confirmed: Easycash is Non-MFI - full-audit fix): was always blank.
+          // See `CicContractRow.contractStatus`'s own doc comment for why this uses the domain's
+          // generic 'PD' (Past Due) rather than an institution-specific threshold that doesn't
+          // apply to a plain non-bank, non-MFI lending company.
+          9: contract.contractStatus,
           10: 'PHP',
           11: 'PHP',
           12: ddmmyyyy(contract.contractStartDate),
