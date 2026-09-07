@@ -10,6 +10,7 @@ const PROVIDER_CODE = 'PF017290';
 // `PF017290_CSDF_20260811105959.csv`) - CIC's own template technically defines more optional
 // trailing columns (guarantor/asset/linked-subject blocks for CI, sole-trader blocks for ID) that
 // this company's real submissions simply never populate, so this writer doesn't emit them either.
+const HD_FIELD_COUNT = 92;
 const ID_FIELD_COUNT = 92;
 const CI_FIELD_COUNT = 92;
 const FT_FIELD_COUNT = 92;
@@ -30,15 +31,17 @@ function ddmmyyyy(date: Date | null): string {
   return `${dd}${mm}${yyyy}`;
 }
 
-/** Builds a fixed-length field array, fills known positions, leaves the rest blank, then trims
- * trailing blanks before joining - matching how the real files are actually shaped (see field
- * count comment above; a fully blank tail is simply omitted rather than padded out). */
+/** Builds a fixed-length field array, fills known positions, leaves the rest blank, and joins ALL
+ * `length` fields - including a fully-blank tail. 2026-09-07 (user-reported, "dapat kasama pa rin
+ * ito sa csv file pero naka separator at blank"): verified directly against a real accepted
+ * submission's raw `.txt` (`legacy/CIC/06 2026 June/PF017290_CSDF_20260706134200.txt`) - every line
+ * (HD/ID/CI, and even the almost-entirely-blank FT footer) has exactly 92 pipe-delimited fields
+ * with blanks preserved as empty strings all the way to the end, never trimmed. The previous
+ * trim-trailing-blanks behavior here was wrong - not verified against this file, just assumed. */
 function buildLine(length: number, known: Record<number, string>): string {
   const fields = new Array<string>(length).fill('');
   for (const [index, value] of Object.entries(known)) fields[Number(index)] = value;
-  let lastNonBlank = -1;
-  for (let i = 0; i < fields.length; i++) if (fields[i] !== '') lastNonBlank = i;
-  return fields.slice(0, lastNonBlank + 1).join('|');
+  return fields.join('|');
 }
 
 export class CicCsdfReportWriter {
@@ -46,7 +49,14 @@ export class CicCsdfReportWriter {
     const lines: string[] = [];
 
     lines.push(
-      ['HD', PROVIDER_CODE, ddmmyyyy(data.referenceDate), 'v1.0', '0', `ECLC ${data.referenceDate.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })} ${data.referenceDate.getUTCFullYear()}`].join('|'),
+      buildLine(HD_FIELD_COUNT, {
+        0: 'HD',
+        1: PROVIDER_CODE,
+        2: ddmmyyyy(data.referenceDate),
+        3: 'v1.0',
+        4: '0',
+        5: `ECLC ${data.referenceDate.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })} ${data.referenceDate.getUTCFullYear()}`,
+      }),
     );
 
     for (const person of data.individuals) {
