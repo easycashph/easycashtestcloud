@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-07T16:26:03+08:00",
-    "commitMessage":  "docs: log §127 - fixed CIC Address 1/2 mapping and Contract Status (Non-MFI confirmed)",
-    "commit":  "63868bad",
-    "builtAt":  "2026-09-07T08:51:28.4066559Z"
+    "commitDate":  "2026-09-07T16:56:35+08:00",
+    "commitMessage":  "docs: log §128 - full CSDF cross-check, found pre-existing data bug, fixed Excel to match CSV",
+    "commit":  "bf662e5c",
+    "builtAt":  "2026-09-08T07:12:59.8827112Z"
 }

@@ -25,7 +25,7 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { apiClient } from '@/lib/apiClient';
 import type { PaymentReminder, PaymentReminderStatus } from '@/lib/paymentReminderApiTypes';
-import { formatDate, formatPeso } from '@/lib/utils';
+import { formatDate, formatPeso, manilaDateInputValue } from '@/lib/utils';
 
 /**
  * 2026-07-11 (user request): this table has enough columns to force horizontal scrolling on most
@@ -142,9 +142,12 @@ export function PaymentRemindersPage() {
     const matchesSearch =
       query.length === 0 || r.borrowerName.toLowerCase().includes(query) || r.loanCode.toLowerCase().includes(query);
     const matchesStatus = status === 'ALL' || r.status === status;
-    // Plain string comparison on the ISO-format dueDate - safe since both sides are YYYY-MM-DD,
-    // which sorts/compares correctly as strings without needing Date parsing.
-    const dueDateOnly = r.dueDate.slice(0, 10);
+    // 2026-09-07 (user-reported: filter showed/hid rows inconsistent with the displayed Due Date
+    // column): a plain `r.dueDate.slice(0, 10)` reads the UTC calendar day, which is a day EARLIER
+    // than the Manila one for any Manila-midnight-as-`T16:00:00Z` value (most due dates in this
+    // system) - the exact class of bug `manilaDateInputValue` exists to prevent. The displayed Due
+    // Date column already used Manila time via `formatDate` - this filter now matches it.
+    const dueDateOnly = manilaDateInputValue(new Date(r.dueDate));
     const matchesFrom = !dueDateRange.from || dueDateOnly >= dueDateRange.from;
     const matchesTo = !dueDateRange.to || dueDateOnly <= dueDateRange.to;
     return matchesSearch && matchesStatus && matchesFrom && matchesTo;
