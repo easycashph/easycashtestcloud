@@ -6452,3 +6452,53 @@ Rebuilt, verified healthy, no stale WSL2 listener. Committed (`9ba6849c`) and pu
   data bug above needs the user's decision on how to source correct historical disbursement dates
   before these loans can be safely included in a real CIC submission - flagging this prominently so
   it isn't lost before the next actual monthly submission is prepared.
+
+## §129 — 2026-09-07: Fixed the "Due & Overdue" date filter timezone bug, audited every other date filter in the app
+
+User asked why filtering "Due & Overdue" (`/reminders`, `PaymentRemindersPage.tsx`) by From/To
+09/09/2026-09/09/2026 showed two rows whose displayed Due Date read Sep 10, 2026 - a screenshot
+made the mismatch directly visible (filter set to Sept 9, table shows Sept 10).
+
+**Root cause**: the displayed Due Date column correctly used `formatDate()` (Manila timezone via
+`Intl.DateTimeFormat`), but the filter's own comparison used a plain `r.dueDate.slice(0, 10)` on
+the raw ISO string - reading the UTC calendar day, which is a day EARLIER than Manila's for any
+Manila-midnight-as-`T16:00:00Z` value (most due dates in this system). Exact same root-cause class
+as the CIC Excel timezone bug from §123, this time in a live client-side filter instead of an
+export. Fixed using the existing `manilaDateInputValue()` helper from `lib/utils.ts` (already built
+2026-08-21 for exactly this class of bug, just not applied here) instead of the naive slice.
+
+**User then asked to audit every other date filter in the app for the same issue before fixing
+anything else further.** Findings:
+- **10 Report pages** (`Transaction`, `Loan Origination`, `Loan Releases`, `First Amortization`,
+  `Fully Paid Accounts`, `Expected Collection`, `Daily Collection`, `Collection`, `Accounts With
+  Past Due`, `Collection History`) all send `from`/`to` to the **backend** as query params rather
+  than filtering client-side. Traced the backend's `parseDate()` (in `reportingController.ts`)
+  through `manilaDayRange()` (`shared/domain/manilaTime.ts`) and confirmed it correctly converts
+  the query string into true Manila-calendar-day UTC boundaries before querying - **no bug found
+  in any of these 10**.
+- **`ClientCreatePage.tsx`'s duplicate-borrower check** (new client form) has the identical pattern:
+  `b.birthDate?.slice(0, 10) === birthDate` compares an existing borrower's raw stored `birthDate`
+  against the newly-typed one - if the stored value follows the same Manila-midnight convention, a
+  genuine duplicate borrower (same name + birthdate) could silently go undetected because the dates
+  would compare unequal by one day. **Found, not yet fixed** - user hasn't confirmed whether to
+  proceed.
+- **`ClientProfilePage.tsx`'s "one month from now" default prefill** for a new date input uses
+  `new Date()` + `setUTCMonth` + `.toISOString().slice(0,10)` - a narrower, lower-stakes edge case
+  (only shifts the *default* value during Manila's early-morning hours, and the field is editable
+  before submission, not a data-integrity filter) - flagged as a minor observation, not treated as
+  equally urgent.
+- Confirmed via `grep` that `dueDateRange`/`matchesFrom`/`matchesTo` (the exact pattern from the
+  bug just fixed) appears nowhere else in the frontend - `PaymentRemindersPage.tsx` was the only
+  instance of that specific client-side range-filter shape.
+
+Rebuilt both `easycashbackend` and `lmsfrontend` (`docker compose up -d --build lmsfrontend` per
+CLAUDE.md's Docker Rebuild instruction), verified `lmsfrontend` healthy on its actual port (5173,
+not 80 - `docker port` needed to find it). Committed (`1aae69af`) and pushed.
+
+### Current state after §129
+
+- The "Due & Overdue" page's filter now matches its own displayed dates.
+- Every backend-filtered Report page confirmed already correct (no code changes needed there).
+- **Two open items carried forward, both awaiting user decision**: (1) the ~28-loan CIC
+  Contract-Start-Date bug from §128, and (2) `ClientCreatePage.tsx`'s duplicate-borrower birthdate
+  check found in this section's audit - user has not yet said whether to fix it.
