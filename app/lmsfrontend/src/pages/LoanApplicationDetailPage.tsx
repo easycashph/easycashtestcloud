@@ -1382,6 +1382,19 @@ const UnderwritingCard = React.forwardRef<
     },
   });
 
+  /** 2026-09-09 (user request): "Save Underwriting Details" now also (re)generates and attaches the
+   * CRM Report itself - staff no longer have to remember to separately click Preview/Download just
+   * to guarantee it's on file. Silent (no preview tab, no download prompt) - just replaces the
+   * attachment in place via the same GenerateCrmReportUseCase every Preview/Download click already
+   * uses, so a save made while still mid-edit simply produces a report that reflects that save, not
+   * a stale one. Failures here are swallowed (not surfaced as a save error) since the review report
+   * itself was already saved successfully by this point - the PDF attach is a bonus, not something
+   * that should make staff think their edits didn't save. */
+  const autoAttachCrmReportMutation = useMutation({
+    mutationFn: () => apiClient.post<Attachment>(`/loan-applications/${application.id}/crm-report`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attachments', 'LOAN_APPLICATION', application.id] }),
+  });
+
   const [editingRisk, setEditingRisk] = React.useState(false);
   const [monthlyIncome, setMonthlyIncome] = React.useState(String(application.monthlyIncome ?? ''));
   const [creditScore, setCreditScore] = React.useState(String(application.creditScore ?? ''));
@@ -1529,6 +1542,7 @@ const UnderwritingCard = React.forwardRef<
         documentVerifications,
       });
       queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] });
+      autoAttachCrmReportMutation.mutate();
     },
   });
 
