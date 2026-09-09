@@ -1572,7 +1572,13 @@ const UnderwritingCard = React.forwardRef<
         atmCardNumber: mitigation.atmCardNumber,
         allotmentAmount: mitigation.allotmentAmount,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] });
+      // 2026-09-09 (user request): same auto-attach as Save Underwriting Details - mitigation has
+      // its own separate Save button (works at any status, not just UNDER_REVIEW), so it needs its
+      // own trigger too rather than relying on staff also clicking Save Underwriting Details.
+      autoAttachCrmReportMutation.mutate();
+    },
   });
 
   const breakdown = application.preQualificationBreakdown;

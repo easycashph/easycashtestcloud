@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T14:56:38+08:00",
-    "commitMessage":  "Mode of Payment \u0026 Mitigation section: same always-collapsed + badge fix",
-    "commit":  "257e1de4",
-    "builtAt":  "2026-09-09T07:02:26.7615000Z"
+    "commitDate":  "2026-09-09T15:04:46+08:00",
+    "commitMessage":  "Auto-attach the CRM Report every time Save Underwriting Details is clicked",
+    "commit":  "2cb4423f",
+    "builtAt":  "2026-09-09T07:11:10.9078978Z"
 }
