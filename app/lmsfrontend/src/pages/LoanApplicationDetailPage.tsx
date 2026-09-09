@@ -1715,45 +1715,41 @@ const UnderwritingCard = React.forwardRef<
 
         <div className="space-y-2">
           <Label className="text-xs">Credit bureau check</Label>
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-secondary/30">
-                  <th className="p-2 text-left text-xs font-medium text-muted-foreground"></th>
-                  <th className="p-2 text-left text-xs font-medium text-muted-foreground">Borrower</th>
-                  <th className="p-2 text-left text-xs font-medium text-muted-foreground">Co-borrower</th>
-                </tr>
-              </thead>
-              <tbody>
-                {CREDIT_BUREAU_PARTY_FIELDS.map((f) => (
-                  <tr key={f.key} className="border-b last:border-0">
-                    <td className="p-2 text-xs text-muted-foreground">{f.label}</td>
-                    <td className="p-2">
+          {/* 2026-09-09 (user request) - grouped by person (two cards) instead of a Borrower/
+              Co-Borrower table, so the CMAP/KYC/MyScore fields read as "everything about this one
+              party" rather than a wide grid of same-looking boxes. */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(
+              [
+                { key: 'borrower' as const, label: 'Borrower', value: creditBureauBorrower, setValue: setCreditBureauBorrower },
+                { key: 'coBorrower' as const, label: 'Co-borrower', value: creditBureauCoBorrower, setValue: setCreditBureauCoBorrower },
+              ]
+            ).map((party) => (
+              <div key={party.key} className="rounded-md border p-3">
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium">
+                    {party.label[0]}
+                  </div>
+                  <p className="text-xs font-medium">{party.label}</p>
+                </div>
+                <div className="space-y-2">
+                  {CREDIT_BUREAU_PARTY_FIELDS.map((f) => (
+                    <div key={f.key}>
+                      <Label className="mb-1 block text-[10px] uppercase tracking-wide text-muted-foreground">{f.label}</Label>
                       {canEditReview ? (
                         <Input
                           className="h-8"
-                          value={creditBureauBorrower[f.key] ?? ''}
-                          onChange={(e) => setCreditBureauBorrower((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                          value={party.value[f.key] ?? ''}
+                          onChange={(e) => party.setValue((prev) => ({ ...prev, [f.key]: e.target.value }))}
                         />
                       ) : (
-                        <span>{creditBureauBorrower[f.key] || '-'}</span>
+                        <p className="text-sm">{party.value[f.key] || '-'}</p>
                       )}
-                    </td>
-                    <td className="p-2">
-                      {canEditReview ? (
-                        <Input
-                          className="h-8"
-                          value={creditBureauCoBorrower[f.key] ?? ''}
-                          onChange={(e) => setCreditBureauCoBorrower((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                        />
-                      ) : (
-                        <span>{creditBureauCoBorrower[f.key] || '-'}</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

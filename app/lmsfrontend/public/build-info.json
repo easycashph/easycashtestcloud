@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T15:48:38+08:00",
-    "commitMessage":  "Add \"Revert to Pre-Approval\" for Approved/Declined applications",
-    "commit":  "f186ff26",
-    "builtAt":  "2026-09-09T07:56:20.2297462Z"
+    "commitDate":  "2026-09-09T16:00:44+08:00",
+    "commitMessage":  "Cap Activity Timeline height with internal scroll instead of growing unbounded",
+    "commit":  "b0b76dc0",
+    "builtAt":  "2026-09-09T08:10:21.7754728Z"
 }
