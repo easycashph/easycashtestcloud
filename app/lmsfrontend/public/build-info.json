@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T09:01:28+08:00",
-    "commitMessage":  "docs: log §130 - took easycash-portal offline via placeholder + tunnel script change",
-    "commit":  "e4a275c6",
-    "builtAt":  "2026-09-09T02:56:23.8505332Z"
+    "commitDate":  "2026-09-09T11:06:58+08:00",
+    "commitMessage":  "Add a dedicated \"Add Co-Borrower\" action to Loan Application detail",
+    "commit":  "fa981b00",
+    "builtAt":  "2026-09-09T03:13:14.0749516Z"
 }

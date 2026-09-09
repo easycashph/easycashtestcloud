@@ -667,8 +667,8 @@ type LoanTypeOption = (typeof LOAN_TYPE_OPTIONS)[number];
 const DEFAULT_CARD_ORDER = [
   'applicantDetails',
   'requestedLoan',
-  'coBorrowerDetails',
   'personalHousehold',
+  'coBorrowerDetails',
   'attachments',
   'recentActivity',
   'aiReview',
@@ -676,11 +676,12 @@ const DEFAULT_CARD_ORDER = [
   'notes',
   'activityTimeline',
 ];
-// 2026-08-07 (user request): ".v2" forces every officer onto the new default order below
-// (Requested Loan moved up next to Applicant Details, ahead of Co-Borrower Details) - same
-// key-version-bump technique ClientProfilePage.tsx used for its own default-order change, so it
-// applies even to an officer who already has a saved custom order under the old key.
-const CARD_ORDER_KEY_PREFIX = 'lms.loanApplicationDetailCardOrder.v2';
+// 2026-09-09 (user request): ".v3" forces every officer onto the new default order below
+// (Co-Borrower Details moved below Personal & Household Information, now that it has its own
+// "Add Co-Borrower" action and isn't just a quiet read-only card) - same key-version-bump
+// technique ClientProfilePage.tsx used for its own default-order change, so it applies even to an
+// officer who already has a saved custom order under the old key.
+const CARD_ORDER_KEY_PREFIX = 'lms.loanApplicationDetailCardOrder.v3';
 function cardOrderKey(userId: string): string {
   return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
 }
@@ -2393,27 +2394,27 @@ export function LoanApplicationDetailPage() {
           </CardHeader>
           <CardContent>
             <dl className="grid grid-cols-2 gap-y-3 text-sm">
-              <dt className="text-muted-foreground">Category</dt>
+              <IconDt icon={Landmark}>Category</IconDt>
               <dd className="text-right font-medium">{productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, application.requestedCategory)}</dd>
-              <dt className="text-muted-foreground">Requested amount</dt>
+              <IconDt icon={CreditCard}>Requested amount</IconDt>
               <dd className="text-right font-medium">{formatPeso(application.requestedAmount)}</dd>
-              <dt className="text-muted-foreground">Requested term</dt>
+              <IconDt icon={Calendar}>Requested term</IconDt>
               <dd className="text-right font-medium">{application.requestedTermMonths} months</dd>
               {application.accountType && (
                 <>
-                  <dt className="text-muted-foreground">Type of account</dt>
+                  <IconDt icon={RotateCcw}>Type of account</IconDt>
                   <dd className="text-right font-medium">{application.accountType === 'NEW' ? 'New' : 'Renewal'}</dd>
                 </>
               )}
               {application.loanPurpose && (
                 <>
-                  <dt className="text-muted-foreground">Loan purpose</dt>
+                  <IconDt icon={Flag}>Loan purpose</IconDt>
                   <dd className="text-right font-medium">{application.loanPurpose}</dd>
                 </>
               )}
               {application.referralSource && (
                 <>
-                  <dt className="text-muted-foreground">Found Easycash via</dt>
+                  <IconDt icon={UserPlus}>Found Easycash via</IconDt>
                   <dd className="text-right font-medium">{application.referralSource}</dd>
                 </>
               )}
