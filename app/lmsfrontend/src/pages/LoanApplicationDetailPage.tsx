@@ -35,6 +35,7 @@ import {
   Trash2,
   User as UserIcon,
   UserPlus,
+  Users,
   XCircle,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -103,6 +104,40 @@ function IconDt({ icon: Icon, children }: { icon: React.ComponentType<{ classNam
       <Icon className="h-3.5 w-3.5 shrink-0" />
       {children}
     </dt>
+  );
+}
+
+/** 2026-09-09 (user request) - groups Personal & Household Information's fields into labeled
+ * sections (Personal/Residence/Employment & IDs) with a zebra-striped row treatment, instead of
+ * one long flat two-column list - the card was hard to scan with 11 fields all reading the same. */
+function PersonalInfoGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="grid gap-0.5">{children}</div>
+    </div>
+  );
+}
+
+function PersonalInfoRow({
+  icon: Icon,
+  label,
+  value,
+  tabularNums,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string | number | null | undefined;
+  tabularNums?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded px-2 py-1.5 text-sm odd:bg-muted/40">
+      <span className="flex items-center gap-2 text-muted-foreground">
+        <Icon className="h-3.5 w-3.5 shrink-0" />
+        {label}
+      </span>
+      <span className={`font-medium ${tabularNums ? 'tabular-nums' : ''}`}>{value ?? '-'}</span>
+    </div>
   );
 }
 
@@ -670,18 +705,17 @@ const DEFAULT_CARD_ORDER = [
   'personalHousehold',
   'coBorrowerDetails',
   'attachments',
-  'recentActivity',
   'aiReview',
   'underwriting',
   'notes',
   'activityTimeline',
+  'recentActivity',
 ];
-// 2026-09-09 (user request): ".v3" forces every officer onto the new default order below
-// (Co-Borrower Details moved below Personal & Household Information, now that it has its own
-// "Add Co-Borrower" action and isn't just a quiet read-only card) - same key-version-bump
-// technique ClientProfilePage.tsx used for its own default-order change, so it applies even to an
-// officer who already has a saved custom order under the old key.
-const CARD_ORDER_KEY_PREFIX = 'lms.loanApplicationDetailCardOrder.v3';
+// 2026-09-09 (user request): ".v4" forces every officer onto the new default order below
+// (Recent Loan Application Activity Logs moved to the very bottom, past Activity Timeline) - same
+// key-version-bump technique ClientProfilePage.tsx used for its own default-order change, so it
+// applies even to an officer who already has a saved custom order under an older key.
+const CARD_ORDER_KEY_PREFIX = 'lms.loanApplicationDetailCardOrder.v4';
 function cardOrderKey(userId: string): string {
   return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
 }
@@ -1871,6 +1905,7 @@ export function LoanApplicationDetailPage() {
     canAccessLoanApplications,
     canRevertLoanApplicationDecision,
     canReviewLoanApplication,
+    canUseAiDocumentReview,
     canApproveLoanApplication,
     canDeleteLoanApplication,
     currentAccount,
@@ -2652,74 +2687,89 @@ export function LoanApplicationDetailPage() {
           <CardTitle>Personal &amp; Household Information</CardTitle>
           <CardDescription>Everything else captured on the application form - not shown above to keep the summary cards short.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <dl className="grid grid-cols-2 gap-y-3 text-sm">
-            <IconDt icon={UserIcon}>Gender</IconDt>
-            <dd className="text-right font-medium">{application.gender ?? '-'}</dd>
-            <IconDt icon={Heart}>Civil Status</IconDt>
-            <dd className="text-right font-medium">{application.civilStatus ?? '-'}</dd>
-            <IconDt icon={Cake}>Birth Date</IconDt>
-            <dd className="text-right font-medium">
-              {application.birthDate
-                ? `${formatDate(application.birthDate)} (Age: ${computeAge(application.birthDate)})`
-                : '-'}
-            </dd>
-            <IconDt icon={MapPin}>Place of Birth</IconDt>
-            <dd className="text-right font-medium">{application.placeOfBirth ?? '-'}</dd>
-            <IconDt icon={Flag}>Nationality</IconDt>
-            <dd className="text-right font-medium">{application.nationality ?? '-'}</dd>
-            <IconDt icon={Home}>Home Ownership</IconDt>
-            <dd className="text-right font-medium">{application.homeOwnership ?? '-'}</dd>
-            <IconDt icon={Calendar}>Length of Stay</IconDt>
-            <dd className="text-right font-medium">
-              {application.presentAddressLengthOfStayMonths != null
-                ? `${Math.floor(application.presentAddressLengthOfStayMonths / 12)} yr${Math.floor(application.presentAddressLengthOfStayMonths / 12) === 1 ? '' : 's'} ${application.presentAddressLengthOfStayMonths % 12} mo`
-                : '-'}
-            </dd>
-            <IconDt icon={Briefcase}>Occupation</IconDt>
-            <dd className="text-right font-medium">{application.occupation ?? '-'}</dd>
-            <IconDt icon={MapPin}>Office Address</IconDt>
-            <dd className="text-right font-medium">{application.officeAddress ?? '-'}</dd>
-            <IconDt icon={IdCard}>TIN</IconDt>
-            <dd className="text-right font-medium">{application.tinNumber ?? '-'}</dd>
-            <IconDt icon={CreditCard}>SSS</IconDt>
-            <dd className="text-right font-medium">{application.sssNumber ?? '-'}</dd>
-          </dl>
+        <CardContent className="grid gap-6 sm:grid-cols-[1.5fr_1fr]">
+          <div className="space-y-5">
+            <PersonalInfoGroup label="Personal">
+              <PersonalInfoRow icon={UserIcon} label="Gender" value={application.gender} />
+              <PersonalInfoRow icon={Heart} label="Civil Status" value={application.civilStatus} />
+              <PersonalInfoRow
+                icon={Cake}
+                label="Birth Date"
+                value={
+                  application.birthDate
+                    ? `${formatDate(application.birthDate)} (${computeAge(application.birthDate)})`
+                    : null
+                }
+              />
+              <PersonalInfoRow icon={MapPin} label="Place of Birth" value={application.placeOfBirth} />
+              <PersonalInfoRow icon={Flag} label="Nationality" value={application.nationality} />
+            </PersonalInfoGroup>
 
-          <div className="space-y-4">
-            <div>
-              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Dependants ({application.dependants.length})</p>
+            <PersonalInfoGroup label="Residence">
+              <PersonalInfoRow icon={Home} label="Home Ownership" value={application.homeOwnership} />
+              <PersonalInfoRow
+                icon={Calendar}
+                label="Length of Stay"
+                value={
+                  application.presentAddressLengthOfStayMonths != null
+                    ? `${Math.floor(application.presentAddressLengthOfStayMonths / 12)} yr${Math.floor(application.presentAddressLengthOfStayMonths / 12) === 1 ? '' : 's'} ${application.presentAddressLengthOfStayMonths % 12} mo`
+                    : null
+                }
+              />
+            </PersonalInfoGroup>
+
+            <PersonalInfoGroup label="Employment & IDs">
+              <PersonalInfoRow icon={Briefcase} label="Occupation" value={application.occupation} />
+              <PersonalInfoRow icon={MapPin} label="Office Address" value={application.officeAddress} />
+              <PersonalInfoRow icon={IdCard} label="TIN" value={application.tinNumber} tabularNums />
+              <PersonalInfoRow icon={CreditCard} label="SSS" value={application.sssNumber} tabularNums />
+            </PersonalInfoGroup>
+          </div>
+
+          <div className="grid content-start gap-3">
+            <div className="rounded-md border-l-2 border-primary bg-muted/40 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Users className="h-3.5 w-3.5" /> Dependants ({application.dependants.length})
+              </p>
               {application.dependants.length === 0 ? (
                 <p className="text-sm text-muted-foreground">None on record.</p>
               ) : (
-                <ul className="space-y-1">
+                <ul className="space-y-1.5">
                   {application.dependants.map((d, i) => (
                     <li key={i} className="text-sm">
-                      {d.name}
-                      {d.age ? ` · ${d.age} yrs old` : ''}
-                      {d.relationship ? ` · ${d.relationship}` : ''}
+                      <span className="font-medium">{d.name}</span>
+                      <span className="text-muted-foreground">
+                        {d.age ? ` · ${d.age} yrs old` : ''}
+                        {d.relationship ? ` · ${d.relationship}` : ''}
+                      </span>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
 
-            <div>
-              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Character References</p>
+            <div className="rounded-md bg-muted/40 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <IdCard className="h-3.5 w-3.5" /> Character References
+              </p>
               {!application.reference1Name && !application.reference2Name ? (
                 <p className="text-sm text-muted-foreground">None on record.</p>
               ) : (
-                <ul className="space-y-1 text-sm">
+                <ul className="space-y-1.5 text-sm">
                   {application.reference1Name && (
                     <li>
-                      {application.reference1Name}
-                      {application.reference1Mobile ? ` · ${formatMobileNumber(application.reference1Mobile)}` : ''}
+                      <span className="font-medium">{application.reference1Name}</span>
+                      <span className="text-muted-foreground">
+                        {application.reference1Mobile ? ` · ${formatMobileNumber(application.reference1Mobile)}` : ''}
+                      </span>
                     </li>
                   )}
                   {application.reference2Name && (
                     <li>
-                      {application.reference2Name}
-                      {application.reference2Mobile ? ` · ${formatMobileNumber(application.reference2Mobile)}` : ''}
+                      <span className="font-medium">{application.reference2Name}</span>
+                      <span className="text-muted-foreground">
+                        {application.reference2Mobile ? ` · ${formatMobileNumber(application.reference2Mobile)}` : ''}
+                      </span>
                     </li>
                   )}
                 </ul>
@@ -2727,8 +2777,8 @@ export function LoanApplicationDetailPage() {
             </div>
 
             {application.note && (
-              <div>
-                <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Note</p>
+              <div className="rounded-md bg-muted/40 p-3">
+                <p className="mb-1.5 text-xs font-medium text-muted-foreground">Note</p>
                 <p className="text-sm">{application.note}</p>
                 {encodedByName && <p className="mt-1 text-xs text-muted-foreground">Encoded by {encodedByName}</p>}
               </div>
@@ -2744,7 +2794,7 @@ export function LoanApplicationDetailPage() {
         // verdict, not a real underwriting pass yet. Only added to cardsById when applicable, so
         // they join the draggable set while shown but leave no dangling slot when hidden (see the
         // cardOrder.filter in the render below).
-        if (isUnderReview && canReviewLoanApplication) {
+        if (isUnderReview && canUseAiDocumentReview) {
           cardsById.aiReview = (
             <AiDocumentReviewCard
               application={application}

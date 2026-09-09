@@ -29,6 +29,10 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
   const controller = new LoanApplicationController(deps);
   const requireAuth = createRequireAuth(tokenService);
   const requireApplicationAccess = requirePermission('loan_application.manage');
+  // 2026-09-09 (user request): split out of requireApplicationAccess above - lets MIS
+  // grant/restrict the AI-assisted document review panel independently of general Loan
+  // Application access.
+  const requireAiReviewAccess = requirePermission('loan_application.ai_review');
 
   router.post('/loan-applications', requireAuth, requireApplicationAccess, validateBody(createLoanApplicationSchema), controller.create);
   router.get('/loan-applications/:id', requireAuth, requireApplicationAccess, controller.get);
@@ -89,8 +93,10 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
     controller.setMitigationDetails,
   );
   // 2026-07-22: mocked "Assist" panel above the Credit Evaluation Report - see
-  // AiDocumentReviewResult's doc comment. Same access gate as the review report it feeds.
-  router.post('/loan-applications/:id/ai-document-review', requireAuth, requireApplicationAccess, controller.aiDocumentReview);
+  // AiDocumentReviewResult's doc comment. 2026-09-09: gated on its own dedicated permission
+  // (loan_application.ai_review) instead of the general requireApplicationAccess, so MIS can
+  // control this AI feature independently of Loan Application access.
+  router.post('/loan-applications/:id/ai-document-review', requireAuth, requireAiReviewAccess, controller.aiDocumentReview);
   // 2026-08-21 (user request): "Print Application" - saves a generated PDF of the application as
   // an Attachment on it. Same access gate as the rest of this router (not decision-gated - it's
   // available once there's something meaningful to show, see the use case's doc comment).

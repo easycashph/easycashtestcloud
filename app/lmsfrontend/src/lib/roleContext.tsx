@@ -32,6 +32,7 @@ export type PermissionCode =
   | 'loan_application.final_approve'
   | 'loan_application.revert'
   | 'loan_application.delete'
+  | 'loan_application.ai_review'
   | 'loan_account.originate'
   | 'loan_account.approve'
   | 'loan_account.undo_approve'
@@ -110,6 +111,10 @@ interface RoleContextValue {
    * canAccessLoanApplications today, kept as its own named boolean so a future change to one
    * doesn't silently affect the other. */
   canReviewLoanApplication: boolean;
+  /** 2026-09-09 (user request) - split out of canReviewLoanApplication: whether this account may
+   * use the "AI-assisted document review" panel on a loan application. Defaults OFF for every
+   * role except MIS - see seed.ts's loan_application.ai_review doc comment. */
+  canUseAiDocumentReview: boolean;
   /** Only MIS and Loan Operation Manager may give the FINAL Approve on a Loan Application -
    * excludes CRM, whose role in the pipeline stops at Tag Pre Approval (2026-07-17). */
   canApproveLoanApplication: boolean;
@@ -342,6 +347,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canApproveLoanAccount: hasPermission('loan_account.approve'),
     canActivateLoanAccount: hasPermission('loan_account.activate'),
     canReviewLoanApplication: hasPermission('loan_application.manage'),
+    canUseAiDocumentReview: hasPermission('loan_application.ai_review'),
     canApproveLoanApplication: hasPermission('loan_application.final_approve'),
     canManageReminderSettings: hasPermission('reminder_settings.manage'),
     canEnforceTwoFactor: hasPermission('two_factor_enforcement.manage'),

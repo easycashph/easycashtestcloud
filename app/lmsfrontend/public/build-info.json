@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T11:06:58+08:00",
-    "commitMessage":  "Add a dedicated \"Add Co-Borrower\" action to Loan Application detail",
-    "commit":  "fa981b00",
-    "builtAt":  "2026-09-09T03:13:14.0749516Z"
+    "commitDate":  "2026-09-09T11:24:40+08:00",
+    "commitMessage":  "Add icons to Requested Loan card, move Co-Borrower Details below Personal \u0026 Household",
+    "commit":  "8b4be8fc",
+    "builtAt":  "2026-09-09T03:37:18.6032695Z"
 }

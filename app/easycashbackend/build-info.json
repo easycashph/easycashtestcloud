@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-07T16:56:35+08:00",
-    "commitMessage":  "docs: log §128 - full CSDF cross-check, found pre-existing data bug, fixed Excel to match CSV",
-    "commit":  "bf662e5c",
-    "builtAt":  "2026-09-08T07:12:59.8827112Z"
+    "commitDate":  "2026-09-09T11:24:40+08:00",
+    "commitMessage":  "Add icons to Requested Loan card, move Co-Borrower Details below Personal \u0026 Household",
+    "commit":  "8b4be8fc",
+    "builtAt":  "2026-09-09T03:37:18.6032695Z"
 }

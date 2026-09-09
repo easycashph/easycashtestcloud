@@ -66,6 +66,15 @@ async function main() {
     'loan_application.final_approve': 'Give final approval or decline on a loan application',
     'loan_application.revert': 'Revert a loan application to an earlier stage',
     'loan_application.delete': 'Permanently delete a loan application',
+    // 2026-09-09 (user request): split out of the general loan_application.manage - the
+    // "AI-assisted document review" card and its POST /ai-document-review endpoint were only ever
+    // gated by loan_application.manage (see loanApplicationRouter.ts's route comment before this
+    // change), so MIS had no way to grant/restrict this specific AI feature independently of
+    // general application access. Deliberately NOT added to any role's default grant below
+    // (user request: "gawin mong default OFF sa lahat ng users") - every role except MIS (the
+    // super-user role, granted every permission by definition) starts without it; MIS enables it
+    // per role explicitly via the Roles & Permissions screen.
+    'loan_application.ai_review': 'Use the AI-assisted document review panel on a loan application',
     'loan_account.originate': 'Create a new loan account from an approved application',
     'loan_account.approve': 'Approve a loan account for disbursement',
     'loan_account.undo_approve': 'Undo a loan account approval',
