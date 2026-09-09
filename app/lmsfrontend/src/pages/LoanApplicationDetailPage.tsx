@@ -1428,6 +1428,32 @@ const UnderwritingCard = React.forwardRef<
   const [documentVerifications, setDocumentVerifications] = React.useState<Record<string, DocumentVerificationEntry>>(
     report?.documentVerifications ?? {},
   );
+
+  /** 2026-09-09 (user request): the CRM Report PDF reads the SAVED review report from the DB, not
+   * this component's live draft state - Preview/Download must be blocked while there are unsaved
+   * edits, or staff could generate/download a report that silently doesn't match what they just
+   * typed. Snapshot of the last-saved values (mitigation excluded - it saves immediately through
+   * its own separate endpoints below, never goes stale relative to this snapshot). Updated in
+   * saveReviewMutation's onSuccess, not on every keystroke. */
+  const lastSavedReviewSnapshot = React.useRef(
+    JSON.stringify({
+      creditBureauBorrower: report?.creditBureauBorrower ?? {},
+      creditBureauCoBorrower: report?.creditBureauCoBorrower ?? {},
+      agencyVerification: report?.agencyVerification ?? {},
+      conditionsForApproval: report?.conditionsForApproval ?? '',
+      crmRecommendation: report?.crmRecommendation ?? '',
+      documentVerifications: report?.documentVerifications ?? {},
+    }),
+  );
+  const isReviewReportDirty =
+    JSON.stringify({
+      creditBureauBorrower,
+      creditBureauCoBorrower,
+      agencyVerification,
+      conditionsForApproval,
+      crmRecommendation,
+      documentVerifications,
+    }) !== lastSavedReviewSnapshot.current;
   const isSeafarerLoan = assignedProductName ? classifyProductType(assignedProductName) === 'Seafarer Loan' : false;
   const hasMitigationData = MITIGATION_FIELDS.some((f) => mitigation[f.key]?.trim());
   // 2026-07-29: only meaningful (and only required) when there's actually a co-borrower to
@@ -1480,7 +1506,17 @@ const UnderwritingCard = React.forwardRef<
         crmRecommendation: crmRecommendation.trim() || undefined,
         documentVerifications,
       } satisfies SubmitReviewReportRequest),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] }),
+    onSuccess: () => {
+      lastSavedReviewSnapshot.current = JSON.stringify({
+        creditBureauBorrower,
+        creditBureauCoBorrower,
+        agencyVerification,
+        conditionsForApproval,
+        crmRecommendation,
+        documentVerifications,
+      });
+      queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] });
+    },
   });
 
   // 2026-07-29: separate, status-unrestricted endpoint - see SetMitigationAccountOwnerUseCase's
@@ -1997,7 +2033,8 @@ const UnderwritingCard = React.forwardRef<
           <Button
             size="sm"
             variant="outline"
-            disabled={generateCrmReportMutation.isPending}
+            disabled={generateCrmReportMutation.isPending || isReviewReportDirty}
+            title={isReviewReportDirty ? 'Save Underwriting Details first - the report reads the saved data, not unsaved edits.' : undefined}
             onClick={() => {
               crmReportPreviewWindowRef.current = window.open('', '_blank');
               generateCrmReportMutation.mutate();
@@ -2013,7 +2050,8 @@ const UnderwritingCard = React.forwardRef<
           <Button
             size="sm"
             variant="outline"
-            disabled={downloadCrmReportMutation.isPending}
+            disabled={downloadCrmReportMutation.isPending || isReviewReportDirty}
+            title={isReviewReportDirty ? 'Save Underwriting Details first - the report reads the saved data, not unsaved edits.' : undefined}
             onClick={() => downloadCrmReportMutation.mutate()}
           >
             {downloadCrmReportMutation.isPending ? (
@@ -2024,6 +2062,11 @@ const UnderwritingCard = React.forwardRef<
             {downloadCrmReportMutation.isPending ? 'Generating…' : 'Download CRM Report'}
           </Button>
         </div>
+        {isReviewReportDirty && (
+          <p className="text-xs text-muted-foreground">
+            You have unsaved changes - save them first so the CRM Report reflects what you just entered.
+          </p>
+        )}
           </>
         )}
       </CardContent>
