@@ -27,6 +27,7 @@ import {
   Loader2,
   Pencil,
   Phone,
+  Plus,
   Printer,
   RotateCcw,
   ShieldCheck,
@@ -912,6 +913,191 @@ const AGENCY_VERIFICATION_FIELDS: { key: keyof AgencyVerificationDetails; label:
  * `AiDocumentReviewResult`'s doc comment: no real model is wired up yet, every field is a
  * deterministic placeholder). The officer can edit the draft before inserting it into CRM
  * recommendation via `onInsert` - nothing here saves on its own. */
+/** 2026-09-09 (user request): "Add Co-Borrower" on the application itself, same purpose as
+ * ClientProfilePage's CoBorrowersCard - a focused dialog scoped to just these fields, instead of
+ * routing staff through the full "Edit Application" form for a one-field addition. Writes through
+ * the same `PATCH /loan-applications/:id/intake` endpoint the full edit form already uses (see
+ * loanApplicationSchemas.ts's updateLoanApplicationIntakeSchema), so the status guard
+ * (PREAPPROVED/PREDECLINED/UNDER_REVIEW only) is enforced identically either way - `canEdit` here
+ * just mirrors that same condition to decide whether the button renders at all. */
+function CoBorrowerDetailsCard({ application, canEdit }: { application: LoanApplication; canEdit: boolean }) {
+  const queryClient = useQueryClient();
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+
+  const coBorrowerParsed = React.useMemo(
+    () => (application.coBorrowerName ? parseCoBorrowerName(application.coBorrowerName) : null),
+    [application.coBorrowerName],
+  );
+  const coBorrowerSplit = React.useMemo(
+    () =>
+      application.coBorrowerFirstName || application.coBorrowerLastName
+        ? {
+            firstName: application.coBorrowerFirstName ?? '',
+            middleName: application.coBorrowerMiddleName ?? '',
+            lastName: application.coBorrowerLastName ?? '',
+          }
+        : coBorrowerParsed
+          ? splitApplicantName(coBorrowerParsed.name)
+          : null,
+    [application, coBorrowerParsed],
+  );
+
+  const [firstName, setFirstName] = React.useState('');
+  const [middleName, setMiddleName] = React.useState('');
+  const [lastName, setLastName] = React.useState('');
+  const [relationship, setRelationship] = React.useState('');
+  const [phoneNumber, setPhoneNumber] = React.useState('');
+  const [email, setEmail] = React.useState('');
+  const [employer, setEmployer] = React.useState('');
+  const [address, setAddress] = React.useState('');
+
+  const openDialog = () => {
+    setFirstName(coBorrowerSplit?.firstName ?? '');
+    setMiddleName(coBorrowerSplit?.middleName ?? '');
+    setLastName(coBorrowerSplit?.lastName ?? '');
+    setRelationship(coBorrowerParsed?.relationship ?? '');
+    setPhoneNumber(application.coBorrowerContactNumber ?? '');
+    setEmail(application.coBorrowerEmail ?? '');
+    setEmployer(application.coBorrowerEmployer ?? '');
+    setAddress(application.coBorrowerAddress ?? '');
+    setSubmitError(null);
+    setEditOpen(true);
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      apiClient.patch<LoanApplication>(`/loan-applications/${application.id}/intake`, {
+        coBorrowerName: `${[firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(' ')}${
+          relationship.trim() ? ` (${relationship.trim().toLowerCase()})` : ''
+        }`,
+        coBorrowerFirstName: firstName.trim(),
+        coBorrowerMiddleName: middleName.trim() || undefined,
+        coBorrowerLastName: lastName.trim(),
+        coBorrowerContactNumber: phoneNumber.trim() || undefined,
+        coBorrowerEmail: email.trim() || undefined,
+        coBorrowerEmployer: employer.trim() || undefined,
+        coBorrowerAddress: address.trim() || undefined,
+      }),
+    onSuccess: () => {
+      setEditOpen(false);
+      setSubmitError(null);
+      void queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] });
+    },
+    onError: (error: unknown) => {
+      setSubmitError(error instanceof Error ? error.message : 'Could not reach the server. Check your connection and try again.');
+    },
+  });
+
+  return (
+    <Card className="h-full">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div>
+          <CardTitle>Co-Borrower Details</CardTitle>
+          <CardDescription>
+            {application.coBorrowerName ? 'Named on this loan application.' : 'None named on this loan application.'}
+          </CardDescription>
+        </div>
+        {canEdit && (
+          <Button size="sm" variant="outline" onClick={openDialog}>
+            {application.coBorrowerName ? (
+              <>
+                <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+              </>
+            ) : (
+              <>
+                <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Co-Borrower
+              </>
+            )}
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent>
+        {application.coBorrowerName ? (
+          <dl className="grid grid-cols-2 gap-y-3 text-sm">
+            <IconDt icon={UserIcon}>Name</IconDt>
+            <dd className="text-right font-medium">{application.coBorrowerName}</dd>
+            <IconDt icon={Phone}>Contact Number</IconDt>
+            <dd className="text-right font-medium">{formatMobileNumber(application.coBorrowerContactNumber)}</dd>
+            <IconDt icon={Mail}>Email</IconDt>
+            <dd className="text-right font-medium">{application.coBorrowerEmail ?? '-'}</dd>
+            <IconDt icon={Briefcase}>Employer</IconDt>
+            <dd className="text-right font-medium">{application.coBorrowerEmployer ?? '-'}</dd>
+            <IconDt icon={MapPin}>Address</IconDt>
+            <dd className="text-right font-medium">{toProperCase(application.coBorrowerAddress) || '-'}</dd>
+          </dl>
+        ) : (
+          <p className="py-2 text-center text-sm text-muted-foreground">No co-borrower on record for this application.</p>
+        )}
+      </CardContent>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{application.coBorrowerName ? 'Edit Co-Borrower' : 'Add Co-Borrower'}</DialogTitle>
+            <DialogDescription>Saved directly on this loan application&apos;s intake record.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>
+                First Name<span className="text-destructive"> *</span>
+              </Label>
+              <Input value={firstName} onChange={(e) => setFirstName(e.target.value.toUpperCase())} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>
+                Last Name<span className="text-destructive"> *</span>
+              </Label>
+              <Input value={lastName} onChange={(e) => setLastName(e.target.value.toUpperCase())} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Middle Name</Label>
+              <Input value={middleName} onChange={(e) => setMiddleName(e.target.value.toUpperCase())} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Relationship</Label>
+              <Input placeholder="e.g. Spouse" value={relationship} onChange={(e) => setRelationship(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Phone Number</Label>
+              <PhoneInput value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="917 XXX XXXX" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Employer</Label>
+              <Input value={employer} onChange={(e) => setEmployer(e.target.value.toUpperCase())} />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Address</Label>
+              <Input value={address} onChange={(e) => setAddress(e.target.value)} />
+            </div>
+          </div>
+          {submitError && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              {submitError}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => saveMutation.mutate()}
+              disabled={!firstName.trim() || !lastName.trim() || saveMutation.isPending}
+            >
+              {saveMutation.isPending ? 'Saving…' : application.coBorrowerName ? 'Save Changes' : 'Add Co-Borrower'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
 function AiDocumentReviewCard({ application, onInsert }: { application: LoanApplication; onInsert: (text: string) => void }) {
   const [result, setResult] = React.useState<AiDocumentReviewResult | null>(null);
   const [draft, setDraft] = React.useState('');
@@ -2197,30 +2383,7 @@ export function LoanApplicationDetailPage() {
         );
 
         cardsById.coBorrowerDetails = (
-        <Card>
-          <CardHeader>
-            <CardTitle>Co-Borrower Details</CardTitle>
-            <CardDescription>{application.coBorrowerName ? 'Named on this loan application at intake.' : 'None named on this loan application.'}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {application.coBorrowerName ? (
-              <dl className="grid grid-cols-2 gap-y-3 text-sm">
-                <IconDt icon={UserIcon}>Name</IconDt>
-                <dd className="text-right font-medium">{application.coBorrowerName}</dd>
-                <IconDt icon={Phone}>Contact Number</IconDt>
-                <dd className="text-right font-medium">{formatMobileNumber(application.coBorrowerContactNumber)}</dd>
-                <IconDt icon={Mail}>Email</IconDt>
-                <dd className="text-right font-medium">{application.coBorrowerEmail ?? '-'}</dd>
-                <IconDt icon={Briefcase}>Employer</IconDt>
-                <dd className="text-right font-medium">{application.coBorrowerEmployer ?? '-'}</dd>
-                <IconDt icon={MapPin}>Address</IconDt>
-                <dd className="text-right font-medium">{toProperCase(application.coBorrowerAddress) || '-'}</dd>
-              </dl>
-            ) : (
-              <p className="py-2 text-center text-sm text-muted-foreground">No co-borrower on record for this application.</p>
-            )}
-          </CardContent>
-        </Card>
+          <CoBorrowerDetailsCard application={application} canEdit={canAccessLoanApplications && (isPreApprovalStage || isUnderReview)} />
         );
 
         cardsById.requestedLoan = (

@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-07T16:56:35+08:00",
-    "commitMessage":  "docs: log §128 - full CSDF cross-check, found pre-existing data bug, fixed Excel to match CSV",
-    "commit":  "bf662e5c",
-    "builtAt":  "2026-09-08T07:12:59.8827112Z"
+    "commitDate":  "2026-09-09T09:01:28+08:00",
+    "commitMessage":  "docs: log §130 - took easycash-portal offline via placeholder + tunnel script change",
+    "commit":  "e4a275c6",
+    "builtAt":  "2026-09-09T02:56:23.8505332Z"
 }
