@@ -2806,7 +2806,7 @@ export function LoanApplicationDetailPage() {
 
             {isUnderReview && (
               <div className="space-y-3">
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     onClick={() => setConfirmAction('PRE_APPROVAL')}
                     disabled={!canReviewLoanApplication || tagPreApprovalMutation.isPending || agencyVerificationMissing}
@@ -2831,9 +2831,9 @@ export function LoanApplicationDetailPage() {
                       variant="ghost"
                       onClick={() => setConfirmAction('REVERT')}
                       disabled={revertMutation.isPending}
-                      title="Move this application back to AI Pre-Qualification"
+                      title="Move this application back to Pre-Qualification"
                     >
-                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to AI Pre-Qualification
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to Pre-Qualification
                     </Button>
                   )}
                 </div>
@@ -2919,7 +2919,7 @@ export function LoanApplicationDetailPage() {
                       onClick={() => setConfirmAction('REVERT')}
                       disabled={revertMutation.isPending}
                     >
-                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to AI Pre-Qualification
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to Pre-Qualification
                     </Button>
                   )
                 ) : (
@@ -3112,7 +3112,7 @@ export function LoanApplicationDetailPage() {
             </DialogTitle>
             <DialogDescription>
               {confirmAction === 'REVERT' &&
-                `This will revert ${application.applicantName}'s application back to a freshly recomputed AI pre-qualification and clear the previous decision.`}
+                `This will revert ${application.applicantName}'s application back to a freshly recomputed pre-qualification and clear the previous decision.`}
               {confirmAction === 'PRE_APPROVAL' &&
                 `This will tag ${application.applicantName}'s application as Pre Approval and lock the Review Report. It will then be ready for the final Approve/Decline.`}
               {confirmAction === 'UNDO_PRE_APPROVAL' &&

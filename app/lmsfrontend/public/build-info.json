@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T14:19:47+08:00",
-    "commitMessage":  "Give \"Save bank / ATM details\" the same filled color as other Save buttons",
-    "commit":  "bff40564",
-    "builtAt":  "2026-09-09T06:26:23.0943311Z"
+    "commitDate":  "2026-09-09T14:28:51+08:00",
+    "commitMessage":  "Add \"Revert to AI Pre-Qualification\" from Under Review, show Facebook link",
+    "commit":  "6836efac",
+    "builtAt":  "2026-09-09T06:33:47.9661603Z"
 }
