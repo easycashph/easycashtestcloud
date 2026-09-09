@@ -1343,6 +1343,28 @@ const UnderwritingCard = React.forwardRef<
   ref,
 ) {
   const queryClient = useQueryClient();
+
+  /** 2026-09-09 (user request): "Preview CRM Report" - same "open a tab synchronously, load the PDF
+   * into it once ready" pattern as the header's Print Application (`generateFormMutation`) - see
+   * that mutation's own doc comment for why the tab has to open in the click handler itself. */
+  const crmReportPreviewWindowRef = React.useRef<Window | null>(null);
+  const generateCrmReportMutation = useMutation({
+    mutationFn: () => apiClient.post<Attachment>(`/loan-applications/${application.id}/crm-report`, {}),
+    onSuccess: async (attachment) => {
+      queryClient.invalidateQueries({ queryKey: ['attachments', 'LOAN_APPLICATION', application.id] });
+      const blob = await fetchFileBlob(`/attachments/${attachment.id}/download`);
+      const url = URL.createObjectURL(blob);
+      if (crmReportPreviewWindowRef.current && !crmReportPreviewWindowRef.current.closed) {
+        crmReportPreviewWindowRef.current.location.href = url;
+      } else {
+        window.open(url, '_blank');
+      }
+    },
+    onError: () => {
+      crmReportPreviewWindowRef.current?.close();
+    },
+  });
+
   const [editingRisk, setEditingRisk] = React.useState(false);
   const [monthlyIncome, setMonthlyIncome] = React.useState(String(application.monthlyIncome ?? ''));
   const [creditScore, setCreditScore] = React.useState(String(application.creditScore ?? ''));
@@ -1950,11 +1972,29 @@ const UnderwritingCard = React.forwardRef<
           )}
         </div>
 
-        {canEditReview && (
-          <Button size="sm" disabled={saveReviewMutation.isPending} onClick={() => saveReviewMutation.mutate()}>
-            {saveReviewMutation.isPending ? 'Saving…' : 'Save Underwriting Details'}
+        <div className="flex flex-wrap gap-2">
+          {canEditReview && (
+            <Button size="sm" disabled={saveReviewMutation.isPending} onClick={() => saveReviewMutation.mutate()}>
+              {saveReviewMutation.isPending ? 'Saving…' : 'Save Underwriting Details'}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={generateCrmReportMutation.isPending}
+            onClick={() => {
+              crmReportPreviewWindowRef.current = window.open('', '_blank');
+              generateCrmReportMutation.mutate();
+            }}
+          >
+            {generateCrmReportMutation.isPending ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Printer className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {generateCrmReportMutation.isPending ? 'Generating…' : 'Preview CRM Report'}
           </Button>
-        )}
+        </div>
           </>
         )}
       </CardContent>

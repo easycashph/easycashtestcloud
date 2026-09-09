@@ -20,6 +20,7 @@ import type { UpdateLoanApplicationUseCase } from '../../application/use-cases/U
 import type { UpdateLoanApplicationIntakeUseCase } from '../../application/use-cases/UpdateLoanApplicationIntakeUseCase';
 import type { DeleteLoanApplicationUseCase } from '../../application/use-cases/DeleteLoanApplicationUseCase';
 import type { GenerateLoanApplicationFormUseCase } from '../../application/use-cases/GenerateLoanApplicationFormUseCase';
+import type { GenerateCrmReportUseCase } from '../../application/use-cases/GenerateCrmReportUseCase';
 import type { LoanApplicationPreQualificationService } from '../../application/services/LoanApplicationPreQualificationService';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
@@ -53,6 +54,7 @@ export interface LoanApplicationControllerDeps {
   updateLoanApplicationIntakeUseCase: UpdateLoanApplicationIntakeUseCase;
   deleteLoanApplicationUseCase: DeleteLoanApplicationUseCase;
   generateLoanApplicationFormUseCase: GenerateLoanApplicationFormUseCase;
+  generateCrmReportUseCase: GenerateCrmReportUseCase;
   preQualificationService: LoanApplicationPreQualificationService;
   borrowerRepository: IBorrowerRepository;
   loanAccountRepository: ILoanAccountRepository;
@@ -317,6 +319,19 @@ export class LoanApplicationController {
     try {
       const currentUser = getCurrentUser(req);
       const attachment = await this.deps.generateLoanApplicationFormUseCase.execute(req.params.id as string, currentUser.sub);
+      res.status(201).json(attachment);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-09-09 (user request): "CRM Report" - prints the Credit Evaluation Report data as a PDF,
+   * saved as an Attachment on the application (same pattern as generateForm above). Responds with
+   * the created Attachment's metadata; the frontend previews it via `GET /attachments/:id/download`. */
+  generateCrmReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const attachment = await this.deps.generateCrmReportUseCase.execute(req.params.id as string, currentUser.sub);
       res.status(201).json(attachment);
     } catch (error) {
       next(error);

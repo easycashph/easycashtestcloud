@@ -219,6 +219,7 @@ import { DeclineLoanApplicationUseCase } from '@modules/loan-application/applica
 import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/application/use-cases/RevertLoanApplicationDecisionUseCase';
 import { DeleteLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/DeleteLoanApplicationUseCase';
 import { GenerateLoanApplicationFormUseCase } from '@modules/loan-application/application/use-cases/GenerateLoanApplicationFormUseCase';
+import { GenerateCrmReportUseCase } from '@modules/loan-application/application/use-cases/GenerateCrmReportUseCase';
 import { StartLoanApplicationReviewUseCase } from '@modules/loan-application/application/use-cases/StartLoanApplicationReviewUseCase';
 import { SubmitLoanApplicationReviewReportUseCase } from '@modules/loan-application/application/use-cases/SubmitLoanApplicationReviewReportUseCase';
 import { SetMitigationAccountOwnerUseCase } from '@modules/loan-application/application/use-cases/SetMitigationAccountOwnerUseCase';
@@ -1485,6 +1486,10 @@ export function createApp(): Express {
         loanApplicationRepository,
         loanAccountRepository,
         userRepository,
+        uploadAttachmentUseCase: loanApplicationUploadAttachmentUseCase,
+      }),
+      generateCrmReportUseCase: new GenerateCrmReportUseCase({
+        loanApplicationRepository,
         uploadAttachmentUseCase: loanApplicationUploadAttachmentUseCase,
       }),
       preQualificationService,

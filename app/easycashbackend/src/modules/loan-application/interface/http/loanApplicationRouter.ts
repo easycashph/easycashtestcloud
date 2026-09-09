@@ -101,6 +101,9 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
   // an Attachment on it. Same access gate as the rest of this router (not decision-gated - it's
   // available once there's something meaningful to show, see the use case's doc comment).
   router.post('/loan-applications/:id/generate-form', requireAuth, requireApplicationAccess, controller.generateForm);
+  // 2026-09-09 (user request): "CRM Report" PDF of the Credit Evaluation Report - same access gate
+  // as the review report it's generated from (requireApplicationAccess/loan_application.manage).
+  router.post('/loan-applications/:id/crm-report', requireAuth, requireApplicationAccess, controller.generateCrmReport);
   router.post(
     '/loan-applications/:id/approve',
     requireAuth,

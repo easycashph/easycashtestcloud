@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T12:43:18+08:00",
-    "commitMessage":  "Add pipeline stepper, DTI gauge, and document-card attachment grid",
-    "commit":  "468590c2",
-    "builtAt":  "2026-09-09T05:00:41.3366483Z"
+    "commitDate":  "2026-09-09T13:03:36+08:00",
+    "commitMessage":  "Replace address-proximity decision check with employment/occupation",
+    "commit":  "2b2b464d",
+    "builtAt":  "2026-09-09T05:12:30.2161620Z"
 }
