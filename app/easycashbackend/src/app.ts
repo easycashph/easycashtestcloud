@@ -1491,6 +1491,8 @@ export function createApp(): Express {
       generateCrmReportUseCase: new GenerateCrmReportUseCase({
         loanApplicationRepository,
         uploadAttachmentUseCase: loanApplicationUploadAttachmentUseCase,
+        attachmentRepository: new PrismaAttachmentRepository(),
+        fileStorage: new LocalFileStorage(),
       }),
       preQualificationService,
       borrowerRepository,

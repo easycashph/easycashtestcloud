@@ -1,5 +1,6 @@
 import { NotFoundError } from '@shared/errors/DomainError';
-import type { AttachmentRecord } from '@modules/document/application/ports/IAttachmentRepository';
+import type { AttachmentRecord, IAttachmentRepository } from '@modules/document/application/ports/IAttachmentRepository';
+import type { IFileStorage } from '@modules/document/application/ports/IFileStorage';
 import type { UploadAttachmentUseCase } from '@modules/document/application/use-cases/UploadAttachmentUseCase';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import { CrmReportPdfBuilder } from '../services/CrmReportPdfBuilder';
@@ -7,6 +8,8 @@ import { CrmReportPdfBuilder } from '../services/CrmReportPdfBuilder';
 export interface GenerateCrmReportUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
   uploadAttachmentUseCase: UploadAttachmentUseCase;
+  attachmentRepository: IAttachmentRepository;
+  fileStorage: IFileStorage;
   pdfBuilder?: CrmReportPdfBuilder;
 }
 
@@ -17,8 +20,15 @@ export interface GenerateCrmReportUseCaseDeps {
  * fields. Mirrors GenerateLoanApplicationFormUseCase exactly: saved as an Attachment on the
  * application itself (auto-shows in the Attachments tab, no manual upload step), same
  * `documentCategory: null` reasoning (a system-generated report, not a borrower-supplied document
- * type). The frontend previews it in a new tab before it's "saved" anywhere further, same UX as
- * Print Application.
+ * type). The frontend previews/downloads it via the same generate step.
+ *
+ * 2026-09-09 (user follow-up, "isang beses lang mag-attach"): every Preview/Download click re-runs
+ * this use case, and each run used to create a brand-new Attachment - clicking Preview a few times
+ * while reviewing a draft piled up several near-identical "CRM Report" files in the Attachments
+ * tab. Now replaces in place: any existing attachment(s) on this application whose fileName exactly
+ * matches this run's own naming convention are deleted (DB row + underlying file) before the fresh
+ * one is uploaded. Exact-fileName match, not a prefix/substring search, so this can never touch an
+ * unrelated attachment that merely happens to start with "CRM-Report-".
  */
 export class GenerateCrmReportUseCase {
   constructor(private readonly deps: GenerateCrmReportUseCaseDeps) {}
@@ -34,6 +44,13 @@ export class GenerateCrmReportUseCase {
 
     const props = application.toProps();
     const fileName = `CRM-Report-${props.applicantName.replace(/\s+/g, '-')}-${application.id.slice(0, 8)}.pdf`;
+
+    const existing = await this.deps.attachmentRepository.listByOwner('LOAN_APPLICATION', application.id);
+    for (const attachment of existing) {
+      if (attachment.fileName !== fileName) continue;
+      await this.deps.fileStorage.delete(attachment.storageKey);
+      await this.deps.attachmentRepository.delete(attachment.id);
+    }
 
     return this.deps.uploadAttachmentUseCase.execute({
       ownerType: 'LOAN_APPLICATION',

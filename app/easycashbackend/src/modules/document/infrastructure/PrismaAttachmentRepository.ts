@@ -42,6 +42,10 @@ export class PrismaAttachmentRepository implements IAttachmentRepository {
     return rows.map((row) => this.toRecord(row));
   }
 
+  async delete(id: string): Promise<void> {
+    await prisma.attachment.delete({ where: { id } });
+  }
+
   private toRecord(row: {
     id: string;
     ownerType: string;

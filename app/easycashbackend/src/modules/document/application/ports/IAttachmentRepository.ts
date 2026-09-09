@@ -55,4 +55,7 @@ export interface IAttachmentRepository {
   create(input: CreateAttachmentInput): Promise<AttachmentRecord>;
   findById(id: string): Promise<AttachmentRecord | null>;
   listByOwner(ownerType: AttachmentOwnerType, ownerId: string): Promise<AttachmentRecord[]>;
+  /** 2026-09-09 (CRM Report "replace, don't pile up" behavior) - the DB row only; the caller is
+   * responsible for also removing the underlying file via `IFileStorage.delete`. */
+  delete(id: string): Promise<void>;
 }
