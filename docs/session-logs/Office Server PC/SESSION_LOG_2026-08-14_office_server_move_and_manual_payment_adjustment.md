@@ -6502,3 +6502,61 @@ not 80 - `docker port` needed to find it). Committed (`1aae69af`) and pushed.
 - **Two open items carried forward, both awaiting user decision**: (1) the ~28-loan CIC
   Contract-Start-Date bug from §128, and (2) `ClientCreatePage.tsx`'s duplicate-borrower birthdate
   check found in this section's audit - user has not yet said whether to fix it.
+
+## §130 — 2026-09-09: Took `easycash-portal.pages.dev` offline (placeholder page + tunnel script change)
+
+User asked how to take down/pause `https://easycash-portal.pages.dev/` while keeping
+`https://easycash-lms.pages.dev/` fully working - both frontends share one Cloudflare quick tunnel
+(`cloudflared tunnel --url http://localhost:4000`, no domain owned yet so the URL changes every
+run), updated and redeployed by `scripts/Start Cloudflare Tunnel (Auto-Update).ps1`.
+
+Explored several options first (delete a Pages deployment - blocked, can't delete the live
+production deployment from the UI; Cloudflare Access - free up to 50 users but still shows a
+Cloudflare-branded login wall, not a blank page; deleting the whole Pages project - reversible only
+by recreating the project and its env vars from scratch, and the `.pages.dev` name/URL isn't
+guaranteed to come back). User settled on a lighter-weight, fully reversible plan instead:
+
+1. **Killed the running tunnel** (`cloudflared.exe`, PID 7532) so Portal (and LMS) briefly went
+   without live backend connectivity - confirmed stopped via an explicit re-check (`Get-Process`),
+   not just the ambiguous Stop-Process exit code (same lesson as earlier in this project: Windows
+   process-stop results need independent verification).
+2. **Disabled the Portal-specific step in `Start Cloudflare Tunnel (Auto-Update).ps1`**: the script
+   used to call `Update-PagesProject 'Portal' $PortalProjectName` every run, pushing a fresh tunnel
+   URL to `easycash-portal` and triggering its redeploy. Replaced that call with a hardcoded
+   `$portalOk = $true` and a comment explaining why, leaving the `Update-PagesProject 'LMS'
+   $ProjectName` call (and everything else in the script) untouched. To re-enable Portal later,
+   restore the old `Update-PagesProject 'Portal' $PortalProjectName` call.
+3. **Swapped in a static "Under Development" placeholder for the Portal app itself**
+   (`app/portalfrontend/src/main.tsx` now renders a new `UnderDevelopment.tsx` component instead of
+   `App` - a plain centered "Under Development, check back soon." message). This was the more
+   important piece: even with the tunnel-update step disabled, the Portal's *last deployed* build
+   would otherwise keep trying to call a now-dead backend URL and show a broken app, not a clean
+   "offline" message. The placeholder needs no backend at all, so it renders correctly regardless
+   of tunnel state. Reversible by swapping `<App />` back in for `<UnderDevelopment />` in
+   `main.tsx` - nothing else in the Portal app was touched. Type-checked (`tsc -b`, no errors),
+   committed (`6825d92b`) and pushed - Cloudflare Pages' git-integrated auto-deploy picked it up.
+4. User then ran `Start Cloudflare Tunnel (Auto-Update).bat` themselves (per their own stated
+   plan - "papatakbuhin ulit ang script pagkatapos i edit para bumalik agad ang lms") to bring up a
+   fresh tunnel. Verified in-browser afterward: `easycash-lms.pages.dev` loads its login page and
+   its 401 console errors on load are the *expected* "not logged in yet" response (proof the
+   backend is reachable, not a connection failure); `easycash-portal.pages.dev` shows the "Under
+   Development" placeholder as intended.
+
+**Note on the Task Scheduler task** ("Easycash LMS - Cloudflare Tunnel AutoStart"): its trigger is
+**At Log On only**, not continuous/recurring - it ran once at this morning's restart (08:25:25 AM)
+but then died when the tunnel process was killed in step 1 above (Windows exit code consistent with
+a killed process, not a script bug). It will not restart itself again until the next logon/reboot -
+this is why the manual run in step 4 was necessary, and is expected behavior for this task, not a
+malfunction.
+
+### Current state after §130
+
+- `easycash-portal.pages.dev` is intentionally offline behind a static placeholder page - safe to
+  leave indefinitely, no broken UI or failed API calls exposed to visitors.
+- `easycash-lms.pages.dev` is fully functional again on a fresh tunnel URL.
+- The tunnel auto-update script's Portal step is disabled but not deleted - trivial to restore
+  (see step 2 above) whenever the Portal is ready to come back online for real.
+- User asked whether to re-enable the Portal tunnel-update step now that the placeholder is safe;
+  recommended leaving it disabled since the placeholder doesn't call the backend at all, so
+  updating its env var would just add an unnecessary extra build/API-call cycle every tunnel run
+  for zero benefit - re-enable only when reverting the placeholder back to the real Portal app.
