@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T15:13:48+08:00",
-    "commitMessage":  "Also auto-attach the CRM Report on \"Save bank / ATM details\"",
-    "commit":  "0eadf06f",
-    "builtAt":  "2026-09-09T07:30:30.5782637Z"
+    "commitDate":  "2026-09-09T15:48:38+08:00",
+    "commitMessage":  "Add \"Revert to Pre-Approval\" for Approved/Declined applications",
+    "commit":  "f186ff26",
+    "builtAt":  "2026-09-09T07:56:20.2297462Z"
 }

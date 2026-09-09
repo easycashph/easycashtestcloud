@@ -119,8 +119,13 @@ export function ProfileActivityTimeline({
     );
   }
 
+  // 2026-09-09 (user request, "humahaba na kasi yung row"): capped height + internal scroll
+  // instead of letting the card grow without bound as more activity accumulates - the pipeline
+  // grew several new revert/undo/tag actions recently, each logging its own entry here. "Load
+  // more" (cursor pagination) stays reachable by scrolling to the bottom of this box, not a
+  // separate control outside it.
   return (
-    <div className="space-y-0 divide-y">
+    <div className="max-h-[420px] space-y-0 divide-y overflow-y-auto pr-1">
       {accumulated.map((activity, index) => {
         const isExpanded = expandedIds.has(activity.id);
         const hasDetails = Object.keys(activity.details).length > 0;
