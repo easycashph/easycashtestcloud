@@ -2154,6 +2154,7 @@ export function LoanApplicationDetailPage() {
   const {
     canAccessLoanApplications,
     canRevertLoanApplicationDecision,
+    canRevertToPreApproval,
     canReviewLoanApplication,
     canUseAiDocumentReview,
     canApproveLoanApplication,
@@ -2161,7 +2162,9 @@ export function LoanApplicationDetailPage() {
     currentAccount,
   } = useRole();
   const [decisionNote, setDecisionNote] = React.useState('');
-  const [confirmAction, setConfirmAction] = React.useState<'APPROVED' | 'DECLINED' | 'REVERT' | 'PRE_APPROVAL' | 'UNDO_PRE_APPROVAL' | null>(null);
+  const [confirmAction, setConfirmAction] = React.useState<
+    'APPROVED' | 'DECLINED' | 'REVERT' | 'PRE_APPROVAL' | 'UNDO_PRE_APPROVAL' | 'REVERT_TO_PRE_APPROVAL' | null
+  >(null);
   const [createClientOpen, setCreateClientOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = React.useState('');
@@ -2386,6 +2389,17 @@ export function LoanApplicationDetailPage() {
     },
   });
 
+  /** 2026-09-09 (user request) - one-step-back alternative to revertMutation above: Approved/
+   * Declined -> Pre-Approval instead of all the way back to pre-qualification. Own permission
+   * (canRevertToPreApproval), defaulted OFF for every role except MIS. */
+  const revertToPreApprovalMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanApplication>(`/loan-applications/${applicationId}/revert-to-pre-approval`),
+    onSuccess: () => {
+      setConfirmAction(null);
+      invalidate();
+    },
+  });
+
   if (!canAccessLoanApplications) {
     return (
       <div className="space-y-4">
@@ -2449,7 +2463,8 @@ export function LoanApplicationDetailPage() {
     revertMutation.error ||
     startReviewMutation.error ||
     tagPreApprovalMutation.error ||
-    undoPreApprovalMutation.error;
+    undoPreApprovalMutation.error ||
+    revertToPreApprovalMutation.error;
 
   return (
     <div className="space-y-6">
@@ -2927,7 +2942,7 @@ export function LoanApplicationDetailPage() {
                     disabled={!canReviewLoanApplication || undoPreApprovalMutation.isPending}
                     title="Move this application back to Under Review"
                   >
-                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Undo to Under Review
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to Under Review
                   </Button>
                 </div>
                 {!application.assignedLoanProductVersionId && (
@@ -2959,25 +2974,41 @@ export function LoanApplicationDetailPage() {
                   </p>
                   {application.decisionNote && <p className="mt-2 text-sm text-muted-foreground">{application.decisionNote}</p>}
                 </div>
-                {canRevertLoanApplicationDecision ? (
-                  isCreatedLoanAccountActivated ? (
-                    <p className="text-xs text-muted-foreground">
-                      This application's loan account has already been Activated - the decision can no longer be reverted.
-                    </p>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setConfirmAction('REVERT')}
-                      disabled={revertMutation.isPending}
-                    >
-                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to Pre-Qualification
-                    </Button>
-                  )
-                ) : (
+                {isCreatedLoanAccountActivated ? (
                   <p className="text-xs text-muted-foreground">
-                    Only MIS can revert a decided application back to AI pre-qualification (accidental-click safety net).
+                    This application's loan account has already been Activated - the decision can no longer be reverted.
                   </p>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {canRevertLoanApplicationDecision && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConfirmAction('REVERT')}
+                        disabled={revertMutation.isPending}
+                      >
+                        <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to Pre-Qualification
+                      </Button>
+                    )}
+                    {/* 2026-09-09 (user request): one-step-back alternative, own dedicated
+                        permission (default OFF for every role but MIS) - separate from the
+                        broader Revert to Pre-Qualification above. */}
+                    {canRevertToPreApproval && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setConfirmAction('REVERT_TO_PRE_APPROVAL')}
+                        disabled={revertToPreApprovalMutation.isPending}
+                      >
+                        <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to Pre-Approval
+                      </Button>
+                    )}
+                    {!canRevertLoanApplicationDecision && !canRevertToPreApproval && (
+                      <p className="text-xs text-muted-foreground">
+                        Only MIS can revert a decided application (accidental-click safety net).
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -3158,8 +3189,8 @@ export function LoanApplicationDetailPage() {
                   ? 'approval'
                   : confirmAction === 'PRE_APPROVAL'
                     ? 'pre approval'
-                    : confirmAction === 'UNDO_PRE_APPROVAL'
-                      ? 'undo'
+                    : confirmAction === 'UNDO_PRE_APPROVAL' || confirmAction === 'REVERT_TO_PRE_APPROVAL'
+                      ? 'revert'
                       : 'decline'}
             </DialogTitle>
             <DialogDescription>
@@ -3169,6 +3200,8 @@ export function LoanApplicationDetailPage() {
                 `This will tag ${application.applicantName}'s application as Pre Approval and lock the Review Report. It will then be ready for the final Approve/Decline.`}
               {confirmAction === 'UNDO_PRE_APPROVAL' &&
                 `This will move ${application.applicantName}'s application back to Under Review, unlocking the Review Report for editing again.`}
+              {confirmAction === 'REVERT_TO_PRE_APPROVAL' &&
+                `This will move ${application.applicantName}'s application back to Pre-Approval and clear the previous decision.`}
               {(confirmAction === 'APPROVED' || confirmAction === 'DECLINED') &&
                 `Are you sure you want to ${confirmAction === 'APPROVED' ? 'approve' : 'decline'} ${application.applicantName}'s application? This is a safety-net confirmation to prevent an accidental click.`}
             </DialogDescription>
@@ -3182,6 +3215,7 @@ export function LoanApplicationDetailPage() {
                 if (confirmAction === 'REVERT') revertMutation.mutate();
                 else if (confirmAction === 'PRE_APPROVAL') tagPreApprovalMutation.mutate();
                 else if (confirmAction === 'UNDO_PRE_APPROVAL') undoPreApprovalMutation.mutate();
+                else if (confirmAction === 'REVERT_TO_PRE_APPROVAL') revertToPreApprovalMutation.mutate();
                 else if (confirmAction === 'APPROVED' || confirmAction === 'DECLINED') decideMutation.mutate(confirmAction);
               }}
             >

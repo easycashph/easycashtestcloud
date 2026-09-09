@@ -31,6 +31,7 @@ export type PermissionCode =
   | 'loan_application.manage'
   | 'loan_application.final_approve'
   | 'loan_application.revert'
+  | 'loan_application.revert_to_pre_approval'
   | 'loan_application.delete'
   | 'loan_application.ai_review'
   | 'loan_account.originate'
@@ -94,6 +95,10 @@ interface RoleContextValue {
   canAccessLoanApplications: boolean;
   /** Only MIS may revert a decided (Approved/Declined) Loan Application back to Pending Review - the accidental-click safety net. */
   canRevertLoanApplicationDecision: boolean;
+  /** 2026-09-09 (user request) - separate, narrower permission: one-step-back to Pre-Approval
+   * instead of canRevertLoanApplicationDecision's full revert to pre-qualification. Defaults OFF
+   * for every role except MIS - see seed.ts's loan_application.revert_to_pre_approval doc comment. */
+  canRevertToPreApproval: boolean;
   canDeleteLoanApplication: boolean;
   /** Only MIS sees Activity Logs - both the dedicated section and every per-section "Recent Activity" panel. */
   canViewActivityLogs: boolean;
@@ -341,6 +346,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canManageMembers: hasPermission('user.manage'),
     canAccessLoanApplications: hasPermission('loan_application.manage'),
     canRevertLoanApplicationDecision: hasPermission('loan_application.revert'),
+    canRevertToPreApproval: hasPermission('loan_application.revert_to_pre_approval'),
     canDeleteLoanApplication: hasPermission('loan_application.delete'),
     canViewActivityLogs: hasPermission('audit_log.read'),
     canCreateLoanAccount: hasPermission('loan_account.originate'),

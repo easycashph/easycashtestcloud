@@ -683,4 +683,23 @@ export class LoanApplication {
     this.props.decisionNote = undefined;
     this.props.updatedAt = new Date();
   }
+
+  /** 2026-09-09 (user request) - one-step-back counterpart to revert() above: APPROVED/DECLINED ->
+   * PRE_APPROVAL, instead of jumping all the way back to a freshly recomputed system
+   * pre-qualification (skipping Under Review and Pre-Approval entirely). Clears the final-decision
+   * stamp (reviewedByUserId/reviewedAt/decisionNote); leaves preApprovedByUserId/preApprovedAt
+   * intact since the application genuinely still was pre-approved before this decision - unlike
+   * revert()'s target status, which discards that context. Gated on its own dedicated permission
+   * (loan_application.revert_to_pre_approval), separate from revert()'s loan_application.revert -
+   * see seed.ts's doc comment for why (user request: default OFF for every role but MIS). */
+  revertToPreApproval(): void {
+    if (this.props.status !== 'APPROVED' && this.props.status !== 'DECLINED') {
+      throw new InvalidLoanApplicationTransitionError(this.props.status, 'revert to pre approval');
+    }
+    this.props.status = 'PRE_APPROVAL';
+    this.props.reviewedByUserId = undefined;
+    this.props.reviewedAt = undefined;
+    this.props.decisionNote = undefined;
+    this.props.updatedAt = new Date();
+  }
 }

@@ -65,6 +65,13 @@ async function main() {
     'loan_application.manage': 'Create, review, and pre-approve loan applications',
     'loan_application.final_approve': 'Give final approval or decline on a loan application',
     'loan_application.revert': 'Revert a loan application to an earlier stage',
+    // 2026-09-09 (user request): separate from loan_application.revert above - that one jumps an
+    // Approved/Declined application all the way back to a freshly recomputed system
+    // pre-qualification; this one-step-back alternative only goes back to Pre-Approval. Deliberately
+    // NOT added to any role's default grant below (user request: "i default mo lang na toggle off
+    // sa lahat maliban sa MIS") - every role except MIS starts without it, same pattern as
+    // loan_application.ai_review.
+    'loan_application.revert_to_pre_approval': 'Revert an Approved or Declined application back to Pre-Approval',
     'loan_application.delete': 'Permanently delete a loan application',
     // 2026-09-09 (user request): split out of the general loan_application.manage - the
     // "AI-assisted document review" card and its POST /ai-document-review endpoint were only ever

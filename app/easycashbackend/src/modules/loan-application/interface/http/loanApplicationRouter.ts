@@ -123,6 +123,14 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
   );
   // Mirrors the mock UI's canRevertLoanApplicationDecision — MIS only by default, a narrower gate than the rest of this router.
   router.post('/loan-applications/:id/revert', requireAuth, requirePermission('loan_application.revert'), controller.revert);
+  // 2026-09-09 (user request): one-step-back alternative to /revert above - own dedicated
+  // permission, defaulted OFF for every role except MIS (see seed.ts's doc comment).
+  router.post(
+    '/loan-applications/:id/revert-to-pre-approval',
+    requireAuth,
+    requirePermission('loan_application.revert_to_pre_approval'),
+    controller.revertToPreApproval,
+  );
   // 2026-08-16 (user request): permanent delete — MIS only. Blocked once the application has
   // already produced a Borrower/LoanAccount, see DeleteLoanApplicationUseCase's doc comment.
   router.delete('/loan-applications/:id', requireAuth, requirePermission('loan_application.delete'), controller.deleteApplication);

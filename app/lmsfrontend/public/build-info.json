@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T15:04:46+08:00",
-    "commitMessage":  "Auto-attach the CRM Report every time Save Underwriting Details is clicked",
-    "commit":  "2cb4423f",
-    "builtAt":  "2026-09-09T07:11:10.9078978Z"
+    "commitDate":  "2026-09-09T15:13:48+08:00",
+    "commitMessage":  "Also auto-attach the CRM Report on \"Save bank / ATM details\"",
+    "commit":  "0eadf06f",
+    "builtAt":  "2026-09-09T07:30:30.5782637Z"
 }

@@ -17,6 +17,7 @@ import type { SetMitigationDetailsUseCase } from '../../application/use-cases/Se
 import type { GenerateAiDocumentReviewUseCase } from '../../application/use-cases/GenerateAiDocumentReviewUseCase';
 import type { TagLoanApplicationPreApprovalUseCase } from '../../application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import type { UndoLoanApplicationPreApprovalUseCase } from '../../application/use-cases/UndoLoanApplicationPreApprovalUseCase';
+import type { RevertLoanApplicationToPreApprovalUseCase } from '../../application/use-cases/RevertLoanApplicationToPreApprovalUseCase';
 import type { UpdateLoanApplicationUseCase } from '../../application/use-cases/UpdateLoanApplicationUseCase';
 import type { UpdateLoanApplicationIntakeUseCase } from '../../application/use-cases/UpdateLoanApplicationIntakeUseCase';
 import type { DeleteLoanApplicationUseCase } from '../../application/use-cases/DeleteLoanApplicationUseCase';
@@ -52,6 +53,7 @@ export interface LoanApplicationControllerDeps {
   generateAiDocumentReviewUseCase: GenerateAiDocumentReviewUseCase;
   tagLoanApplicationPreApprovalUseCase: TagLoanApplicationPreApprovalUseCase;
   undoLoanApplicationPreApprovalUseCase: UndoLoanApplicationPreApprovalUseCase;
+  revertLoanApplicationToPreApprovalUseCase: RevertLoanApplicationToPreApprovalUseCase;
   updateLoanApplicationUseCase: UpdateLoanApplicationUseCase;
   updateLoanApplicationIntakeUseCase: UpdateLoanApplicationIntakeUseCase;
   deleteLoanApplicationUseCase: DeleteLoanApplicationUseCase;
@@ -317,6 +319,17 @@ export class LoanApplicationController {
     try {
       const currentUser = getCurrentUser(req);
       const application = await this.deps.revertLoanApplicationDecisionUseCase.execute(req.params.id as string, currentUser.sub);
+      res.status(200).json(await this.present(application));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-09-09 (user request): "Revert to Pre-Approval" - one step back from Approved/Declined. */
+  revertToPreApproval = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const application = await this.deps.revertLoanApplicationToPreApprovalUseCase.execute(req.params.id as string, currentUser.sub);
       res.status(200).json(await this.present(application));
     } catch (error) {
       next(error);

@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T13:44:39+08:00",
-    "commitMessage":  "Replace, not duplicate, the CRM Report attachment on regeneration",
-    "commit":  "a12a81e9",
-    "builtAt":  "2026-09-09T05:51:00.6448766Z"
+    "commitDate":  "2026-09-09T15:13:48+08:00",
+    "commitMessage":  "Also auto-attach the CRM Report on \"Save bank / ATM details\"",
+    "commit":  "0eadf06f",
+    "builtAt":  "2026-09-09T07:30:30.5782637Z"
 }
