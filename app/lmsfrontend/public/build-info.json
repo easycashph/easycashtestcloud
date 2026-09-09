@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T11:24:40+08:00",
-    "commitMessage":  "Add icons to Requested Loan card, move Co-Borrower Details below Personal \u0026 Household",
-    "commit":  "8b4be8fc",
-    "builtAt":  "2026-09-09T03:37:18.6032695Z"
+    "commitDate":  "2026-09-09T11:47:22+08:00",
+    "commitMessage":  "Redesign Personal \u0026 Household card, add dedicated AI review permission",
+    "commit":  "2bc88e7d",
+    "builtAt":  "2026-09-09T04:40:05.7707359Z"
 }

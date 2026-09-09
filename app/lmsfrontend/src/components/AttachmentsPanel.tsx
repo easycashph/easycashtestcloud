@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Download, Eye, Loader2, Paperclip, Upload } from 'lucide-react';
+import { AlertCircle, Download, Eye, FileImage, FileText, Loader2, Paperclip, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AttachmentPreviewModal } from '@/components/AttachmentPreviewModal';
@@ -14,6 +14,13 @@ import {
   type AttachmentOwnerType,
 } from '@/lib/documentApiTypes';
 import { formatDateTime } from '@/lib/utils';
+
+/** 2026-09-09 (user request) - document-card grid replaced the flat filename list, so the icon
+ * needs to read at a glance too: PDF vs image is the only distinction worth making here (the
+ * category label/badge below already carries the real meaning). */
+function fileTypeIcon(fileType: string) {
+  return fileType === 'application/pdf' ? FileText : FileImage;
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -151,50 +158,48 @@ export function AttachmentsPanel({
         ) : attachments.length === 0 ? (
           <p className="text-sm text-muted-foreground">No attachments uploaded yet.</p>
         ) : (
-          <ul className="divide-y rounded-md border">
-            {attachments.map((a) => (
-              <li key={a.id} className="flex items-center justify-between gap-3 p-2.5 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">
-                    {a.fileName}
-                    {a.documentCategory && (
-                      <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-normal text-primary">
-                        {DOCUMENT_CATEGORY_LABELS[a.documentCategory]}
-                      </span>
-                    )}
-                    {a.ownerType !== ownerType && (
-                      <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-[11px] font-normal text-secondary-foreground">
-                        {SECONDARY_OWNER_LABELS[a.ownerType]}
-                      </span>
-                    )}
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            {attachments.map((a) => {
+              const Icon = fileTypeIcon(a.fileType);
+              return (
+                <div key={a.id} className="group flex flex-col rounded-md border p-2.5 text-sm">
+                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <p className="mt-1.5 truncate font-medium" title={a.fileName}>
+                    {a.documentCategory ? DOCUMENT_CATEGORY_LABELS[a.documentCategory] : a.fileName}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatFileSize(a.fileSize)} · {a.uploadedByName ?? (a.isLegacyMigrated ? 'Migrated from legacy system' : 'Unknown')} ·{' '}
-                    {formatDateTime(a.uploadedAt)}
+                  <p className="truncate text-xs text-muted-foreground">
+                    {formatFileSize(a.fileSize)} · {formatDateTime(a.uploadedAt)}
                   </p>
+                  {a.ownerType !== ownerType && (
+                    <span className="mt-1.5 w-fit rounded bg-secondary px-1.5 py-0.5 text-[11px] font-normal text-secondary-foreground">
+                      {SECONDARY_OWNER_LABELS[a.ownerType]}
+                    </span>
+                  )}
+                  <div className="mt-2 flex items-center gap-1 border-t pt-1.5">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => setPreviewAttachment(a)}
+                      aria-label={`Preview ${a.fileName}`}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      disabled={downloadingId === a.id}
+                      onClick={() => void handleDownload(a)}
+                      aria-label={`Download ${a.fileName}`}
+                    >
+                      {downloadingId === a.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setPreviewAttachment(a)}
-                    aria-label={`Preview ${a.fileName}`}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    disabled={downloadingId === a.id}
-                    onClick={() => void handleDownload(a)}
-                    aria-label={`Download ${a.fileName}`}
-                  >
-                    {downloadingId === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
+              );
+            })}
+          </div>
         )}
 
         {canUpload && (

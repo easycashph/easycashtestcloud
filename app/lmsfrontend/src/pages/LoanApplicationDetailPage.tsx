@@ -141,6 +141,47 @@ function PersonalInfoRow({
   );
 }
 
+/** 2026-09-09 (user request) - a visual pipeline stepper for the header, replacing the status
+ * badge as the only progress indicator. Mirrors the same four stages the rest of this page already
+ * gates on (isPreApprovalStage/isUnderReview/isPreApproval/isDecided) - purely presentational, no
+ * new status logic. DECLINED renders as a failed fourth stage rather than a completed "Approved"
+ * one; PREDECLINED (the system's advisory pre-check, not a real decline) still shows as stage 1
+ * in progress, matching how it doesn't block Start Review elsewhere on this page. */
+function PipelineStepper({ status }: { status: LoanApplication['status'] }) {
+  const isDeclined = status === 'DECLINED';
+  const stageIndex = status === 'APPROVED' || isDeclined ? 3 : status === 'PRE_APPROVAL' ? 2 : status === 'UNDER_REVIEW' ? 1 : 0;
+  const stages = ['Pre-qualified', 'Under Review', 'Pre-approval', isDeclined ? 'Declined' : 'Approved'];
+  return (
+    <div className="mt-3 flex items-center">
+      {stages.map((label, i) => (
+        <React.Fragment key={label}>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <div
+              className={cn(
+                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium',
+                i < stageIndex && 'bg-primary text-primary-foreground',
+                i === stageIndex && !isDeclined && 'bg-primary text-primary-foreground',
+                i === stageIndex && isDeclined && 'bg-destructive text-destructive-foreground',
+                i > stageIndex && 'bg-muted text-muted-foreground',
+              )}
+            >
+              {i < stageIndex ? (
+                <CheckCircle2 className="h-3 w-3" />
+              ) : i === stageIndex && isDeclined ? (
+                <XCircle className="h-3 w-3" />
+              ) : (
+                i + 1
+              )}
+            </div>
+            <span className={cn('text-xs', i <= stageIndex ? 'font-medium' : 'text-muted-foreground')}>{label}</span>
+          </div>
+          {i < stages.length - 1 && <div className={cn('mx-2 h-px flex-1', i < stageIndex ? 'bg-primary' : 'bg-border')} />}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
 /** Best-effort split of a free-text full name into first/middle/last for the create-client
  * form's initial prefill - staff can still edit every field before submitting, so an imperfect
  * split (e.g. multi-word surnames) is never silently wrong, just a starting point. */
@@ -839,6 +880,39 @@ function dtiBandClass(dtiPercent: number): string {
   return 'text-destructive';
 }
 
+/** 2026-09-09 (user request) - a visual gauge for the DTI figure above, replacing a plain percentage
+ * with something scannable at a glance. Colored via `dtiBandClass` on the wrapping element so the
+ * arc/text inherit it through `currentColor` - one color decision, not two. */
+function DtiGauge({ percent }: { percent: number }) {
+  const radius = 38;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.max(0, Math.min(percent, 100));
+  const offset = circumference * (1 - clamped / 100);
+  return (
+    <svg width="72" height="72" viewBox="0 0 90 90" role="img" aria-label={`Debt to income ratio ${percent.toFixed(1)} percent`}>
+      <circle cx="45" cy="45" r={radius} fill="none" className="stroke-muted" strokeWidth="8" />
+      <circle
+        cx="45"
+        cy="45"
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="8"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        transform="rotate(-90 45 45)"
+      />
+      <text x="45" y="41" textAnchor="middle" fontSize="15" fontWeight="600" fill="currentColor">
+        {percent.toFixed(1)}%
+      </text>
+      <text x="45" y="55" textAnchor="middle" fontSize="9" className="fill-muted-foreground">
+        DTI
+      </text>
+    </svg>
+  );
+}
+
 const CREDIT_BUREAU_PARTY_FIELDS: { key: keyof CreditBureauPartyCheck; label: string }[] = [
   { key: 'cmap', label: 'CMAP' },
   { key: 'kyc', label: 'KYC' },
@@ -1423,19 +1497,21 @@ const UnderwritingCard = React.forwardRef<
             <DecisionScoringRow {...breakdown.checks.income} />
             <DecisionScoringRow {...breakdown.checks.distance} />
             {dtiPercent !== null && (
-              <div className="mt-2 border-t pt-2">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-medium">Debt-to-Income ratio</p>
-                  <TermTip
-                    term="DTI"
-                    definition="Estimated monthly loan amortization as a share of monthly income. A common lending-industry rule of thumb: under ~30% is comfortable, 30-40% warrants a closer look, above 40% is high - not an Easycash policy threshold, informational only."
-                  />
+              <div className={cn('mt-2 flex items-center gap-4 rounded-md bg-muted/40 p-3', dtiBandClass(dtiPercent))}>
+                <DtiGauge percent={dtiPercent} />
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium text-foreground">Debt-to-Income ratio</p>
+                    <TermTip
+                      term="DTI"
+                      definition="Estimated monthly loan amortization as a share of monthly income. A common lending-industry rule of thumb: under ~30% is comfortable, 30-40% warrants a closer look, above 40% is high - not an Easycash policy threshold, informational only."
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Estimated ₱{breakdown.estimatedMonthlyAmortization.toFixed(2)}/month amortization vs. ₱
+                    {application.monthlyIncome!.toFixed(2)} monthly income.
+                  </p>
                 </div>
-                <p className={`text-sm font-semibold ${dtiBandClass(dtiPercent)}`}>{dtiPercent.toFixed(1)}%</p>
-                <p className="text-xs text-muted-foreground">
-                  Estimated ₱{breakdown.estimatedMonthlyAmortization.toFixed(2)}/month amortization vs. ₱
-                  {application.monthlyIncome!.toFixed(2)} monthly income.
-                </p>
               </div>
             )}
           </div>
@@ -2364,6 +2440,7 @@ export function LoanApplicationDetailPage() {
             </div>
           )}
         </div>
+        <PipelineStepper status={application.status} />
       </div>
 
       {mutationError && (
