@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T13:53:55+08:00",
-    "commitMessage":  "Add \"Undo to Under Review\" for Pre-Approval-stage applications",
-    "commit":  "ffca8625",
-    "builtAt":  "2026-09-09T06:03:26.4943560Z"
+    "commitDate":  "2026-09-09T14:05:52+08:00",
+    "commitMessage":  "Block CRM Report Preview/Download while there are unsaved edits",
+    "commit":  "7bc12310",
+    "builtAt":  "2026-09-09T06:16:44.7947162Z"
 }

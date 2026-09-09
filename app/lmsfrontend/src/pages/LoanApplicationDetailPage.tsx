@@ -1765,7 +1765,7 @@ const UnderwritingCard = React.forwardRef<
               section needs its own explicit Save action. */}
           {mitigationOpen && canEditAccountOwner && (
             <div className="flex items-center gap-2 pt-1">
-              <Button size="sm" variant="outline" disabled={setMitigationDetailsMutation.isPending} onClick={() => setMitigationDetailsMutation.mutate()}>
+              <Button size="sm" disabled={setMitigationDetailsMutation.isPending} onClick={() => setMitigationDetailsMutation.mutate()}>
                 {setMitigationDetailsMutation.isPending ? 'Saving…' : 'Save bank / ATM details'}
               </Button>
               {setMitigationDetailsMutation.isSuccess && !setMitigationDetailsMutation.isPending && (
