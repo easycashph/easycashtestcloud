@@ -1721,11 +1721,26 @@ const UnderwritingCard = React.forwardRef<
           <div className="grid gap-3 sm:grid-cols-2">
             {(
               [
-                { key: 'borrower' as const, label: 'Borrower', value: creditBureauBorrower, setValue: setCreditBureauBorrower },
-                { key: 'coBorrower' as const, label: 'Co-borrower', value: creditBureauCoBorrower, setValue: setCreditBureauCoBorrower },
+                {
+                  key: 'borrower' as const,
+                  label: 'Borrower',
+                  value: creditBureauBorrower,
+                  setValue: setCreditBureauBorrower,
+                  accentClassName: 'border-t-blue-400',
+                },
+                {
+                  key: 'coBorrower' as const,
+                  label: 'Co-borrower',
+                  value: creditBureauCoBorrower,
+                  setValue: setCreditBureauCoBorrower,
+                  accentClassName: 'border-t-pink-400',
+                },
               ]
             ).map((party) => (
-              <div key={party.key} className="rounded-md border p-3">
+              // 2026-09-09 (user request) - a colored top accent bar per party (Borrower/Co-Borrower)
+              // for a quicker at-a-glance distinction between the two cards, chosen over a colored
+              // avatar so the neutral initial badge still reads cleanly against either accent.
+              <div key={party.key} className={`rounded-md border border-t-4 p-3 ${party.accentClassName}`}>
                 <div className="mb-3 flex items-center gap-2">
                   <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium">
                     {party.label[0]}

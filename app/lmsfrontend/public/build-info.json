@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T16:17:23+08:00",
-    "commitMessage":  "Redesign Credit Bureau Check as two per-party cards instead of a table",
-    "commit":  "3185ba21",
-    "builtAt":  "2026-09-09T08:20:16.0225927Z"
+    "commitDate":  "2026-09-09T16:21:52+08:00",
+    "commitMessage":  "Redesign Activity Timeline: compact single-line rows, icons, date groups",
+    "commit":  "d5885dac",
+    "builtAt":  "2026-09-09T08:40:53.7061950Z"
 }
