@@ -652,6 +652,23 @@ export class LoanApplication {
     this.props.updatedAt = new Date();
   }
 
+  /** 2026-09-09 (user request) - "Undo" for tagPreApproval() above: PRE_APPROVAL -> UNDER_REVIEW,
+   * so staff can go back and correct the Review Report without the two-step "revert() all the way
+   * to PREAPPROVED/PREDECLINED, then Start Review again" detour `revert()` would otherwise require.
+   * Clears the pre-approval stamp (preApprovedByUserId/preApprovedAt) since the application is no
+   * longer pre-approved; leaves reviewStartedByUserId/reviewStartedAt and the Review Report itself
+   * untouched - updateReviewReport() re-opens for editing purely because the status guard it checks
+   * is UNDER_REVIEW again, not because anything here resets the report's content. */
+  undoPreApproval(): void {
+    if (this.props.status !== 'PRE_APPROVAL') {
+      throw new InvalidLoanApplicationTransitionError(this.props.status, 'undo pre approval');
+    }
+    this.props.status = 'UNDER_REVIEW';
+    this.props.preApprovedByUserId = undefined;
+    this.props.preApprovedAt = undefined;
+    this.props.updatedAt = new Date();
+  }
+
   /** MIS-only in the mock UI — enforced by the controller's role check, not here (this entity has
    * no concept of roles). `targetStatus` is a freshly recomputed system verdict (the calling use
    * case re-runs LoanApplicationPreQualificationService) rather than a memorized old value, so

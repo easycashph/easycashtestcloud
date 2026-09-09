@@ -16,6 +16,7 @@ import type { SetMitigationAccountOwnerUseCase } from '../../application/use-cas
 import type { SetMitigationDetailsUseCase } from '../../application/use-cases/SetMitigationDetailsUseCase';
 import type { GenerateAiDocumentReviewUseCase } from '../../application/use-cases/GenerateAiDocumentReviewUseCase';
 import type { TagLoanApplicationPreApprovalUseCase } from '../../application/use-cases/TagLoanApplicationPreApprovalUseCase';
+import type { UndoLoanApplicationPreApprovalUseCase } from '../../application/use-cases/UndoLoanApplicationPreApprovalUseCase';
 import type { UpdateLoanApplicationUseCase } from '../../application/use-cases/UpdateLoanApplicationUseCase';
 import type { UpdateLoanApplicationIntakeUseCase } from '../../application/use-cases/UpdateLoanApplicationIntakeUseCase';
 import type { DeleteLoanApplicationUseCase } from '../../application/use-cases/DeleteLoanApplicationUseCase';
@@ -50,6 +51,7 @@ export interface LoanApplicationControllerDeps {
   setMitigationDetailsUseCase: SetMitigationDetailsUseCase;
   generateAiDocumentReviewUseCase: GenerateAiDocumentReviewUseCase;
   tagLoanApplicationPreApprovalUseCase: TagLoanApplicationPreApprovalUseCase;
+  undoLoanApplicationPreApprovalUseCase: UndoLoanApplicationPreApprovalUseCase;
   updateLoanApplicationUseCase: UpdateLoanApplicationUseCase;
   updateLoanApplicationIntakeUseCase: UpdateLoanApplicationIntakeUseCase;
   deleteLoanApplicationUseCase: DeleteLoanApplicationUseCase;
@@ -294,6 +296,17 @@ export class LoanApplicationController {
     try {
       const currentUser = getCurrentUser(req);
       const application = await this.deps.tagLoanApplicationPreApprovalUseCase.execute(req.params.id as string, currentUser.sub);
+      res.status(200).json(await this.present(application));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-09-09 (user request): "Undo" for Tag as Pre Approval - one step back to UNDER_REVIEW. */
+  undoPreApproval = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const application = await this.deps.undoLoanApplicationPreApprovalUseCase.execute(req.params.id as string, currentUser.sub);
       res.status(200).json(await this.present(application));
     } catch (error) {
       next(error);

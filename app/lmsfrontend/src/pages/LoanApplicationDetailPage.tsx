@@ -2065,7 +2065,7 @@ export function LoanApplicationDetailPage() {
     currentAccount,
   } = useRole();
   const [decisionNote, setDecisionNote] = React.useState('');
-  const [confirmAction, setConfirmAction] = React.useState<'APPROVED' | 'DECLINED' | 'REVERT' | 'PRE_APPROVAL' | null>(null);
+  const [confirmAction, setConfirmAction] = React.useState<'APPROVED' | 'DECLINED' | 'REVERT' | 'PRE_APPROVAL' | 'UNDO_PRE_APPROVAL' | null>(null);
   const [createClientOpen, setCreateClientOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = React.useState('');
@@ -2279,6 +2279,17 @@ export function LoanApplicationDetailPage() {
     },
   });
 
+  /** 2026-09-09 (user request) - "Undo" for Tag as Pre Approval, one step back to UNDER_REVIEW
+   * (see UndoLoanApplicationPreApprovalUseCase's doc comment for why this exists alongside the
+   * broader revertMutation above). */
+  const undoPreApprovalMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanApplication>(`/loan-applications/${applicationId}/undo-pre-approval`),
+    onSuccess: () => {
+      setConfirmAction(null);
+      invalidate();
+    },
+  });
+
   if (!canAccessLoanApplications) {
     return (
       <div className="space-y-4">
@@ -2341,7 +2352,8 @@ export function LoanApplicationDetailPage() {
     decideMutation.error ||
     revertMutation.error ||
     startReviewMutation.error ||
-    tagPreApprovalMutation.error;
+    tagPreApprovalMutation.error ||
+    undoPreApprovalMutation.error;
 
   return (
     <div className="space-y-6">
@@ -2780,6 +2792,17 @@ export function LoanApplicationDetailPage() {
                   >
                     Decline Application
                   </Button>
+                  {/* 2026-09-09 (user request): "Undo" - one step back to Under Review, so a
+                      Pre-Approval-stage correction doesn't need the broader revert() detour back
+                      to system pre-qualification. */}
+                  <Button
+                    variant="ghost"
+                    onClick={() => setConfirmAction('UNDO_PRE_APPROVAL')}
+                    disabled={!canReviewLoanApplication || undoPreApprovalMutation.isPending}
+                    title="Move this application back to Under Review"
+                  >
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Undo to Under Review
+                  </Button>
                 </div>
                 {!application.assignedLoanProductVersionId && (
                   <p className="text-xs text-muted-foreground">Assign a product version above before approving.</p>
@@ -3009,13 +3032,17 @@ export function LoanApplicationDetailPage() {
                   ? 'approval'
                   : confirmAction === 'PRE_APPROVAL'
                     ? 'pre approval'
-                    : 'decline'}
+                    : confirmAction === 'UNDO_PRE_APPROVAL'
+                      ? 'undo'
+                      : 'decline'}
             </DialogTitle>
             <DialogDescription>
               {confirmAction === 'REVERT' &&
                 `This will revert ${application.applicantName}'s application back to a freshly recomputed AI pre-qualification and clear the previous decision.`}
               {confirmAction === 'PRE_APPROVAL' &&
                 `This will tag ${application.applicantName}'s application as Pre Approval and lock the Review Report. It will then be ready for the final Approve/Decline.`}
+              {confirmAction === 'UNDO_PRE_APPROVAL' &&
+                `This will move ${application.applicantName}'s application back to Under Review, unlocking the Review Report for editing again.`}
               {(confirmAction === 'APPROVED' || confirmAction === 'DECLINED') &&
                 `Are you sure you want to ${confirmAction === 'APPROVED' ? 'approve' : 'decline'} ${application.applicantName}'s application? This is a safety-net confirmation to prevent an accidental click.`}
             </DialogDescription>
@@ -3028,6 +3055,7 @@ export function LoanApplicationDetailPage() {
               onClick={() => {
                 if (confirmAction === 'REVERT') revertMutation.mutate();
                 else if (confirmAction === 'PRE_APPROVAL') tagPreApprovalMutation.mutate();
+                else if (confirmAction === 'UNDO_PRE_APPROVAL') undoPreApprovalMutation.mutate();
                 else if (confirmAction === 'APPROVED' || confirmAction === 'DECLINED') decideMutation.mutate(confirmAction);
               }}
             >

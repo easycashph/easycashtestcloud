@@ -226,6 +226,7 @@ import { SetMitigationAccountOwnerUseCase } from '@modules/loan-application/appl
 import { SetMitigationDetailsUseCase } from '@modules/loan-application/application/use-cases/SetMitigationDetailsUseCase';
 import { GenerateAiDocumentReviewUseCase } from '@modules/loan-application/application/use-cases/GenerateAiDocumentReviewUseCase';
 import { TagLoanApplicationPreApprovalUseCase } from '@modules/loan-application/application/use-cases/TagLoanApplicationPreApprovalUseCase';
+import { UndoLoanApplicationPreApprovalUseCase } from '@modules/loan-application/application/use-cases/UndoLoanApplicationPreApprovalUseCase';
 import { UpdateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationUseCase';
 import { UpdateLoanApplicationIntakeUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationIntakeUseCase';
 import { UpdateLoanApplicationSelfServiceUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationSelfServiceUseCase';
@@ -1478,6 +1479,11 @@ export function createApp(): Express {
         auditLogger,
         profileActivityLogService,
         notificationService,
+      }),
+      undoLoanApplicationPreApprovalUseCase: new UndoLoanApplicationPreApprovalUseCase({
+        loanApplicationRepository,
+        auditLogger,
+        profileActivityLogService,
       }),
       updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, profileActivityLogService }),
       updateLoanApplicationIntakeUseCase: new UpdateLoanApplicationIntakeUseCase({ loanApplicationRepository, preQualificationService }),

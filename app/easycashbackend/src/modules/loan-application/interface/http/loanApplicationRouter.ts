@@ -74,6 +74,9 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
     controller.submitReviewReport,
   );
   router.post('/loan-applications/:id/tag-pre-approval', requireAuth, requireApplicationAccess, controller.tagPreApproval);
+  // 2026-09-09 (user request): "Undo" back to UNDER_REVIEW - same access gate as tagging it in the
+  // first place.
+  router.post('/loan-applications/:id/undo-pre-approval', requireAuth, requireApplicationAccess, controller.undoPreApproval);
   // 2026-07-29: deliberately NOT status-gated (unlike /review-report above) - see
   // SetMitigationAccountOwnerUseCase's doc comment.
   router.patch(
