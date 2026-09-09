@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T14:28:51+08:00",
-    "commitMessage":  "Add \"Revert to AI Pre-Qualification\" from Under Review, show Facebook link",
-    "commit":  "6836efac",
-    "builtAt":  "2026-09-09T06:33:47.9661603Z"
+    "commitDate":  "2026-09-09T14:36:00+08:00",
+    "commitMessage":  "Fix Revert button overflowing its card, drop \"AI\" from the label",
+    "commit":  "11a6a8fa",
+    "builtAt":  "2026-09-09T06:47:30.5815546Z"
 }

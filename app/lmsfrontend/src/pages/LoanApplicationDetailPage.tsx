@@ -1463,6 +1463,11 @@ const UnderwritingCard = React.forwardRef<
   const mitigationOwnerRequired = hasMitigationData && Boolean(application.coBorrowerName);
   const mitigationOwnerMissing = mitigationOwnerRequired && !mitigation.accountOwner;
   const hasAgencyData = AGENCY_VERIFICATION_FIELDS.some((f) => agencyVerification[f.key]?.trim());
+  /** 2026-09-09 (user request) - collapsed-state summary so staff don't have to expand the section
+   * (now collapsed by default on every visit, see agencyOpen below) just to see whether it's already
+   * filled in or still needs attention. */
+  const filledAgencyFieldsCount = AGENCY_VERIFICATION_FIELDS.filter((f) => agencyVerification[f.key]?.trim()).length;
+  const agencyCoreFieldsIncomplete = isSeafarerLoan && AGENCY_CORE_FIELDS.some((f) => f.required && !agencyVerification[f.key]?.trim());
   const [mitigationOpen, setMitigationOpen] = React.useState(hasMitigationData);
   // 2026-08-13 (user request): Client Profile's read-only mitigation card links back here to edit -
   // deep-links via `?section=mitigation` so staff land straight on the section instead of having to
@@ -1476,7 +1481,11 @@ const UnderwritingCard = React.forwardRef<
     return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
-  const [agencyOpen, setAgencyOpen] = React.useState(hasAgencyData || isSeafarerLoan);
+  // 2026-09-09 (user request): always starts collapsed on every visit to this page - previously
+  // auto-opened whenever hasAgencyData or isSeafarerLoan was true, which read as the section
+  // "remembering" a manual expand across navigation (it wasn't - it's a fresh mount every time, the
+  // auto-open condition just kept re-triggering for the same application).
+  const [agencyOpen, setAgencyOpen] = React.useState(false);
   /** 2026-07-23: per-group collapse state for AGENCY_FIELD_GROUPS - each group starts open only if
    * it already has data on file (e.g. loaded from an existing review report), collapsed otherwise. */
   const [openAgencyGroups, setOpenAgencyGroups] = React.useState<Record<string, boolean>>(() =>
@@ -1842,10 +1851,20 @@ const UnderwritingCard = React.forwardRef<
             <button
               type="button"
               onClick={() => setAgencyOpen((v) => !v)}
-              className="flex items-center gap-1 text-xs font-medium text-primary"
+              className="flex items-center gap-1.5 text-xs font-medium text-primary"
             >
               {agencyOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
               {agencyOpen ? 'Hide section' : 'Expand section (vessel, contract dates, allottees)'}
+              {!agencyOpen && agencyCoreFieldsIncomplete && (
+                <Badge variant="warning" className="text-[10px]">
+                  <AlertTriangle className="mr-1 h-2.5 w-2.5" /> Incomplete
+                </Badge>
+              )}
+              {!agencyOpen && !agencyCoreFieldsIncomplete && hasAgencyData && (
+                <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+                  {filledAgencyFieldsCount} of {AGENCY_VERIFICATION_FIELDS.length} filled
+                </Badge>
+              )}
             </button>
           )}
           {agencyOpen && (
