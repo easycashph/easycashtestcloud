@@ -5,7 +5,6 @@ import { computeFlatRateAmortization, getMonthlyFlatRate } from '../config/loanC
 
 const MIN_AGE = 18;
 const MAX_AGE = 55;
-const MAX_DISTANCE_KM = 50;
 
 export interface PreQualificationInput {
   branchId: string;
@@ -16,8 +15,12 @@ export interface PreQualificationInput {
   requestedCategory: string;
   /** The applicant's already-joined address string (same shape the intake form submits as
    * `address`) - geocoded fresh each time this runs (no per-application caching of the applicant's
-   * own coordinates; only the resulting `distanceFromBranchKm` is cached on the entity). */
+   * own coordinates; only the resulting `distanceFromBranchKm` is cached on the entity). Kept for
+   * the Detail page's informational "X km from branch" header line - no longer a decision-scoring
+   * check (see PreQualificationBreakdown's `checks.employment` doc comment). */
   applicantAddressText: string | undefined;
+  occupation: string | undefined;
+  employer: string | undefined;
 }
 
 export interface PreQualificationResult {
@@ -39,7 +42,12 @@ export interface PreQualificationBreakdown {
   checks: {
     age: PreQualificationCheck;
     income: PreQualificationCheck;
-    distance: PreQualificationCheck;
+    /** 2026-09-09 (user request): replaced the old `distance` (address proximity to branch) check
+     * - that rule almost never had real data to evaluate (free Nominatim geocoding rarely resolves
+     * informal Philippine barangay addresses, so it was "could not be verified - treated as
+     * passing" on nearly every application, never actually informative). Employment/occupation is
+     * captured at intake on every application and is a real, always-available signal. */
+    employment: PreQualificationCheck;
   };
   /** Same estimate the income check's own `detail` text already describes in words - exposed as a
    * raw number too (2026-07-20, Underwriting rework) so the Detail page can compute a Debt-to-
@@ -49,10 +57,8 @@ export interface PreQualificationBreakdown {
 
 /**
  * Advisory-only system pre-classification - never an autonomous approval/decline. All three rules
- * must pass for PREAPPROVED; any failure (including missing/unknown data) is PREDECLINED, except
- * the distance rule, which fails OPEN (treated as passing) when geocoding can't resolve an address,
- * since granular Philippine barangay addresses are often unresolvable by free geocoding data and
- * that should not by itself sink an otherwise-qualified applicant.
+ * (age, income vs. requested loan, employment/occupation on record) must pass for PREAPPROVED; any
+ * failure, including missing/unknown data, is PREDECLINED.
  */
 export class LoanApplicationPreQualificationService {
   constructor(
@@ -63,15 +69,16 @@ export class LoanApplicationPreQualificationService {
   ) {}
 
   async classify(input: PreQualificationInput): Promise<PreQualificationResult> {
+    // Still resolved and stored for the Detail page's informational "X km from branch" header
+    // line - just no longer fed into evaluateCriteria below (see checks.employment's doc comment).
     const distanceFromBranchKm = await this.resolveDistanceKm(input.branchId, input.applicantAddressText);
-    const breakdown = this.evaluateCriteria({ ...input, distanceFromBranchKm });
+    const breakdown = this.evaluateCriteria(input);
     return { status: breakdown.status, distanceFromBranchKm };
   }
 
   /**
-   * Pure, no I/O - re-evaluates the same three rules from already-known inputs (reusing a
-   * previously-resolved `distanceFromBranchKm` rather than re-geocoding) so the Detail page can
-   * show a live "why" breakdown on every read without an extra network call.
+   * Pure, no I/O - re-evaluates the same three rules from already-known inputs so the Detail page
+   * can show a live "why" breakdown on every read without an extra network call.
    */
   evaluateCriteria(input: {
     age: number | undefined;
@@ -79,7 +86,8 @@ export class LoanApplicationPreQualificationService {
     requestedAmount: number;
     requestedTermMonths: number;
     requestedCategory: string;
-    distanceFromBranchKm: number | null;
+    occupation: string | undefined;
+    employer: string | undefined;
   }): PreQualificationBreakdown {
     const ageOk = input.age !== undefined && input.age >= MIN_AGE && input.age <= MAX_AGE;
     const ageCheck: PreQualificationCheck = {
@@ -103,19 +111,20 @@ export class LoanApplicationPreQualificationService {
           : `Monthly income ₱${input.monthlyIncome.toFixed(2)} vs. estimated ₱${amortization.toFixed(2)}/month amortization.`,
     };
 
-    const distanceOk = input.distanceFromBranchKm === null || input.distanceFromBranchKm <= MAX_DISTANCE_KM;
-    const distanceCheck: PreQualificationCheck = {
-      passed: distanceOk,
-      label: 'Address proximity to branch',
-      detail:
-        input.distanceFromBranchKm === null
-          ? 'Distance from branch could not be verified - treated as passing.'
-          : `${input.distanceFromBranchKm} km from branch - requires ${MAX_DISTANCE_KM} km or less.`,
+    const occupation = input.occupation?.trim();
+    const employer = input.employer?.trim();
+    const employmentOk = Boolean(occupation) || Boolean(employer);
+    const employmentCheck: PreQualificationCheck = {
+      passed: employmentOk,
+      label: 'Employment / occupation',
+      detail: employmentOk
+        ? `${occupation || 'Occupation not specified'}${employer ? ` at ${employer}` : ''}.`
+        : 'No occupation or employer on record.',
     };
 
     return {
-      status: ageCheck.passed && incomeCheck.passed && distanceCheck.passed ? 'PREAPPROVED' : 'PREDECLINED',
-      checks: { age: ageCheck, income: incomeCheck, distance: distanceCheck },
+      status: ageCheck.passed && incomeCheck.passed && employmentCheck.passed ? 'PREAPPROVED' : 'PREDECLINED',
+      checks: { age: ageCheck, income: incomeCheck, employment: employmentCheck },
       estimatedMonthlyAmortization: amortization,
     };
   }

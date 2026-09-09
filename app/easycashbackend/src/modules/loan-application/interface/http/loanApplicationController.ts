@@ -63,8 +63,9 @@ export class LoanApplicationController {
   constructor(private readonly deps: LoanApplicationControllerDeps) {}
 
   /** Re-derives the "why" breakdown behind the application's current PREAPPROVED/PREDECLINED
-   * verdict, purely from already-known fields — reuses the cached `distanceFromBranchKm` rather
-   * than re-geocoding, so this is a cheap, no-I/O call safe to make on every read. */
+   * verdict, purely from already-known fields — no I/O, so this is cheap and safe to call on every
+   * read. Since this recomputes fresh every time, every application (old or new) shows the current
+   * `checks.employment` shape immediately, not just ones edited after 2026-09-09's check swap. */
   private buildBreakdown(application: LoanApplication) {
     const p = application.toProps();
     return this.deps.preQualificationService.evaluateCriteria({
@@ -73,7 +74,8 @@ export class LoanApplicationController {
       requestedAmount: p.requestedAmount,
       requestedTermMonths: p.requestedTermMonths,
       requestedCategory: p.requestedCategory,
-      distanceFromBranchKm: p.distanceFromBranchKm ?? null,
+      occupation: p.occupation,
+      employer: p.employer,
     });
   }
 

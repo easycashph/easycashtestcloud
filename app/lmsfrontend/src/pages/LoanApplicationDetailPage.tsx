@@ -1495,7 +1495,12 @@ const UnderwritingCard = React.forwardRef<
             <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Decision scoring</p>
             <DecisionScoringRow {...breakdown.checks.age} />
             <DecisionScoringRow {...breakdown.checks.income} />
-            <DecisionScoringRow {...breakdown.checks.distance} />
+            {/* 2026-09-09 (user request): replaced the old address-proximity check, which almost
+                never had real data to evaluate. `breakdown.checks.employment` is guarded because an
+                application classified before this change still has the old `distance`-shaped
+                breakdown stored until it's next edited/reverted (re-triggers classification) - shown
+                blank rather than a broken/undefined row until then. */}
+            {breakdown.checks.employment && <DecisionScoringRow {...breakdown.checks.employment} />}
             {dtiPercent !== null && (
               <div className={cn('mt-2 flex items-center gap-4 rounded-md bg-muted/40 p-3', dtiBandClass(dtiPercent))}>
                 <DtiGauge percent={dtiPercent} />
@@ -1707,8 +1712,10 @@ const UnderwritingCard = React.forwardRef<
                     disabled={setAccountOwnerMutation.isPending}
                     onClick={() => setAccountOwnerMutation.mutate('BORROWER')}
                     className={cn(
-                      'rounded-md border py-2 text-sm transition-colors',
-                      mitigation.accountOwner === 'BORROWER' ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-muted/40',
+                      'rounded-md border py-2 text-sm font-medium transition-colors',
+                      mitigation.accountOwner === 'BORROWER'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted',
                     )}
                   >
                     Borrower
@@ -1718,8 +1725,10 @@ const UnderwritingCard = React.forwardRef<
                     disabled={setAccountOwnerMutation.isPending}
                     onClick={() => setAccountOwnerMutation.mutate('CO_BORROWER')}
                     className={cn(
-                      'rounded-md border py-2 text-sm transition-colors',
-                      mitigation.accountOwner === 'CO_BORROWER' ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-muted/40',
+                      'rounded-md border py-2 text-sm font-medium transition-colors',
+                      mitigation.accountOwner === 'CO_BORROWER'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted',
                     )}
                   >
                     Co-borrower

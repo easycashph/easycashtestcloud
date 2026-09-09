@@ -132,14 +132,16 @@ export interface PreQualificationCheck {
 }
 
 /** The "why" behind `status` - mirrors the backend's `LoanApplicationPreQualificationService`
- * `evaluateCriteria()` output, re-derived on every read (cheap, no I/O - reuses the cached
- * `distanceFromBranchKm`, never re-geocodes). */
+ * `evaluateCriteria()` output, re-derived on every read (cheap, no I/O). */
 export interface PreQualificationBreakdown {
   status: 'PREAPPROVED' | 'PREDECLINED';
   checks: {
     age: PreQualificationCheck;
     income: PreQualificationCheck;
-    distance: PreQualificationCheck;
+    /** 2026-09-09: replaced the old `distance` (address proximity) check - optional because a
+     * breakdown computed before this change is still stored in the old `distance`-only shape until
+     * the application is next edited/reverted (re-triggers classification). */
+    employment?: PreQualificationCheck;
   };
   /** Same figure the income check's own `detail` text already describes in words - a raw number
    * too (2026-07-20, Underwriting rework) so the Debt-to-Income ratio can be computed without

@@ -37,6 +37,8 @@ export class UpdateLoanApplicationSelfServiceUseCase {
       requestedTermMonths: props.requestedTermMonths,
       requestedCategory: props.requestedCategory,
       applicantAddressText: props.address,
+      occupation: props.occupation,
+      employer: props.employer,
     });
     application.applySystemClassification(classification);
 

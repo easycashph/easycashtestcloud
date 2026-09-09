@@ -77,6 +77,8 @@ export class CreateLoanApplicationUseCase {
       requestedTermMonths: input.requestedTermMonths,
       requestedCategory: input.requestedCategory,
       applicantAddressText: input.address,
+      occupation: input.occupation,
+      employer: input.employer,
     });
 
     const application = LoanApplication.create({
