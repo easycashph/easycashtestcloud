@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T13:03:36+08:00",
-    "commitMessage":  "Replace address-proximity decision check with employment/occupation",
-    "commit":  "2b2b464d",
-    "builtAt":  "2026-09-09T05:12:30.2161620Z"
+    "commitDate":  "2026-09-09T13:15:21+08:00",
+    "commitMessage":  "Add \"Preview CRM Report\" - printable PDF of the Credit Evaluation Report",
+    "commit":  "b057c169",
+    "builtAt":  "2026-09-09T05:27:30.2664408Z"
 }

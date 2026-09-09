@@ -86,11 +86,9 @@ export class CrmReportPdfBuilder {
       this.y -= 6;
     }
 
-    if (report.creditBureauBorrower || report.creditBureauCoBorrower) {
-      this.drawSectionHeader('CREDIT BUREAU CHECK');
-      this.drawPartyCheckTable(report.creditBureauBorrower, report.creditBureauCoBorrower);
-      this.y -= 10;
-    }
+    this.drawSectionHeader('CREDIT BUREAU CHECK');
+    this.drawPartyCheckTable(report.creditBureauBorrower, report.creditBureauCoBorrower);
+    this.y -= 10;
 
     const verifications = Object.entries(report.documentVerifications ?? {});
     if (verifications.length > 0) {
@@ -103,81 +101,69 @@ export class CrmReportPdfBuilder {
       this.y -= 6;
     }
 
-    if (report.mitigation && Object.values(report.mitigation).some(Boolean)) {
-      this.drawSectionHeader('MODE OF PAYMENT & MITIGATION');
-      this.drawFieldGrid(
-        [
-          { label: 'Bank', value: text(report.mitigation.bank) },
-          { label: 'Branch', value: text(report.mitigation.branch) },
-          { label: 'Account Name', value: text(report.mitigation.accountName) },
-          { label: 'Account Number', value: text(report.mitigation.accountNumber) },
-          { label: 'ATM Card Number', value: text(report.mitigation.atmCardNumber) },
-          { label: 'Allotment Amount', value: text(report.mitigation.allotmentAmount) },
-          {
-            label: 'Account Owner',
-            value: report.mitigation.accountOwner === 'CO_BORROWER' ? 'Co-Borrower' : report.mitigation.accountOwner === 'BORROWER' ? 'Borrower' : '—',
-          },
-        ],
-        3,
-      );
-      this.y -= 10;
-    }
+    this.drawSectionHeader('MODE OF PAYMENT & MITIGATION');
+    this.drawFieldGrid(
+      [
+        { label: 'Bank', value: text(report.mitigation?.bank) },
+        { label: 'Branch', value: text(report.mitigation?.branch) },
+        { label: 'Account Name', value: text(report.mitigation?.accountName) },
+        { label: 'Account Number', value: text(report.mitigation?.accountNumber) },
+        { label: 'ATM Card Number', value: text(report.mitigation?.atmCardNumber) },
+        { label: 'Allotment Amount', value: text(report.mitigation?.allotmentAmount) },
+        {
+          label: 'Whose Name Is This Account Under?',
+          value: report.mitigation?.accountOwner === 'CO_BORROWER' ? 'Co-Borrower' : report.mitigation?.accountOwner === 'BORROWER' ? 'Borrower' : '—',
+        },
+      ],
+      3,
+    );
+    this.y -= 10;
 
     const agency = report.agencyVerification;
-    if (agency && Object.values(agency).some(Boolean)) {
-      this.drawSectionHeader('AGENCY / CONTRACT / ALLOTMENT VERIFICATION');
-      this.drawFieldGrid(
-        [
-          { label: 'Agency Name', value: text(agency.agencyName) },
-          { label: 'Agency Address', value: text(agency.agencyAddress) },
-          { label: 'Agency Contact No.', value: text(agency.agencyContactNumbers) },
-          { label: 'Years With Agency', value: text(agency.yearsWithAgency) },
-          { label: 'Position', value: text(agency.position) },
-          { label: 'Vessel', value: text(agency.vessel) },
-          { label: 'Basic Monthly Salary', value: text(agency.basicMonthlySalary) },
-          { label: 'Monthly Salary (Net)', value: text(agency.monthlySalary) },
-          { label: 'Contract Duration', value: text(agency.contractDuration) },
-          { label: 'Joining Port', value: text(agency.joiningPort) },
-          { label: 'Date of Departure', value: text(agency.dateOfDeparture) },
-          { label: 'Departure Status', value: text(agency.departureStatus) },
-          { label: 'Expected Sign-off Date', value: text(agency.expectedSignOffDate) },
-          { label: 'Payroll Schedule', value: text(agency.payrollSchedule) },
-          { label: 'First Full Allotment Date', value: text(agency.firstFullAllotmentDate) },
-          { label: 'Cash Advance', value: text(agency.cashAdvance) },
-          { label: 'Manner of Deduction', value: text(agency.mannerOfDeduction) },
-        ],
-        3,
-      );
-      this.y -= 10;
-      if (agency.allottee1Name || agency.allottee2Name) {
-        this.drawFieldGrid(
-          [
-            { label: 'Allottee 1', value: text(agency.allottee1Name) },
-            { label: 'Allottee 1 Bank', value: text(agency.allottee1Bank) },
-            { label: 'Allottee 1 Account No.', value: text(agency.allottee1AccountNumber) },
-            { label: 'Allottee 1 Amount', value: text(agency.allottee1Amount) },
-            { label: 'Allottee 2', value: text(agency.allottee2Name) },
-            { label: 'Allottee 2 Bank', value: text(agency.allottee2Bank) },
-            { label: 'Allottee 2 Account No.', value: text(agency.allottee2AccountNumber) },
-            { label: 'Allottee 2 Amount', value: text(agency.allottee2Amount) },
-          ],
-          4,
-        );
-        this.y -= 10;
-      }
-    }
+    this.drawSectionHeader('AGENCY / CONTRACT / ALLOTMENT VERIFICATION');
+    this.drawFieldGrid(
+      [
+        { label: 'Agency Name', value: text(agency?.agencyName) },
+        { label: 'Agency Address', value: text(agency?.agencyAddress) },
+        { label: 'Agency Contact No.', value: text(agency?.agencyContactNumbers) },
+        { label: 'Years With Agency', value: text(agency?.yearsWithAgency) },
+        { label: 'Position', value: text(agency?.position) },
+        { label: 'Vessel', value: text(agency?.vessel) },
+        { label: 'Basic Monthly Salary', value: text(agency?.basicMonthlySalary) },
+        { label: 'Monthly Salary (Net)', value: text(agency?.monthlySalary) },
+        { label: 'Contract Duration', value: text(agency?.contractDuration) },
+        { label: 'Joining Port', value: text(agency?.joiningPort) },
+        { label: 'Date of Departure', value: text(agency?.dateOfDeparture) },
+        { label: 'Departure Status', value: text(agency?.departureStatus) },
+        { label: 'Expected Sign-off Date', value: text(agency?.expectedSignOffDate) },
+        { label: 'Payroll Schedule', value: text(agency?.payrollSchedule) },
+        { label: 'First Full Allotment Date', value: text(agency?.firstFullAllotmentDate) },
+        { label: 'Cash Advance', value: text(agency?.cashAdvance) },
+        { label: 'Manner of Deduction', value: text(agency?.mannerOfDeduction) },
+      ],
+      3,
+    );
+    this.y -= 10;
+    this.drawFieldGrid(
+      [
+        { label: 'Allottee 1', value: text(agency?.allottee1Name) },
+        { label: 'Allottee 1 Bank', value: text(agency?.allottee1Bank) },
+        { label: 'Allottee 1 Account No.', value: text(agency?.allottee1AccountNumber) },
+        { label: 'Allottee 1 Amount', value: text(agency?.allottee1Amount) },
+        { label: 'Allottee 2', value: text(agency?.allottee2Name) },
+        { label: 'Allottee 2 Bank', value: text(agency?.allottee2Bank) },
+        { label: 'Allottee 2 Account No.', value: text(agency?.allottee2AccountNumber) },
+        { label: 'Allottee 2 Amount', value: text(agency?.allottee2Amount) },
+      ],
+      4,
+    );
+    this.y -= 10;
 
-    if (report.conditionsForApproval) {
-      this.drawSectionHeader('CONDITIONS FOR APPROVAL');
-      this.drawParagraph(report.conditionsForApproval);
-      this.y -= 6;
-    }
-
-    if (report.crmRecommendation) {
-      this.drawSectionHeader('CRM RECOMMENDATION');
-      this.drawParagraph(report.crmRecommendation);
-      this.y -= 6;
-    }
+    this.drawSectionHeader('CONDITIONS AND RECOMMENDATION');
+    this.drawSubheading('Conditions for Approval');
+    this.drawParagraph(text(report.conditionsForApproval));
+    this.drawSubheading('CRM Recommendation');
+    this.drawParagraph(text(report.crmRecommendation));
 
     this.ensureSpace(70);
     this.y -= 20;
@@ -238,6 +224,12 @@ export class CrmReportPdfBuilder {
       }
       this.y -= 28;
     }
+  }
+
+  private drawSubheading(label: string): void {
+    this.ensureSpace(18);
+    this.page.drawText(label.toUpperCase(), { x: MARGIN, y: this.y, size: 7, font: this.fontBold, color: MUTED });
+    this.y -= 14;
   }
 
   private drawParagraph(value: string): void {

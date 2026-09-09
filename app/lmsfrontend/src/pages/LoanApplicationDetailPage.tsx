@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   CreditCard,
+  Download,
   Flag,
   Heart,
   Home,
@@ -76,7 +77,7 @@ import { TermTip } from '@/components/TermTip';
 import { LoanAccountForm } from '@/pages/LoanAccountCreatePage';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { apiClient, fetchAllPages, fetchFileBlob } from '@/lib/apiClient';
+import { apiClient, downloadFile, fetchAllPages, fetchFileBlob } from '@/lib/apiClient';
 import type { Attachment } from '@/lib/documentApiTypes';
 import { classifyProductType } from '@/lib/productTypeClassification';
 import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
@@ -1365,6 +1366,21 @@ const UnderwritingCard = React.forwardRef<
     },
   });
 
+  /** 2026-09-09 (user request): separate "Download" action, straight to disk instead of a preview
+   * tab - same generate step as the Preview button above, just handed to `downloadFile` instead of
+   * opened. `downloadFile` reads the real fileName off the response's Content-Disposition header
+   * (set from the Attachment's own `fileName`, i.e. GenerateCrmReportUseCase's
+   * `CRM-Report-<Applicant-Name>-<id8>.pdf` convention) - the name built here is only the fallback
+   * for the rare case that header is missing. */
+  const downloadCrmReportMutation = useMutation({
+    mutationFn: () => apiClient.post<Attachment>(`/loan-applications/${application.id}/crm-report`, {}),
+    onSuccess: async (attachment) => {
+      queryClient.invalidateQueries({ queryKey: ['attachments', 'LOAN_APPLICATION', application.id] });
+      const fallbackFileName = `CRM-Report-${application.applicantName.replace(/\s+/g, '-')}-${application.id.slice(0, 8)}.pdf`;
+      await downloadFile(`/attachments/${attachment.id}/download`, fallbackFileName);
+    },
+  });
+
   const [editingRisk, setEditingRisk] = React.useState(false);
   const [monthlyIncome, setMonthlyIncome] = React.useState(String(application.monthlyIncome ?? ''));
   const [creditScore, setCreditScore] = React.useState(String(application.creditScore ?? ''));
@@ -1993,6 +2009,19 @@ const UnderwritingCard = React.forwardRef<
               <Printer className="mr-1.5 h-3.5 w-3.5" />
             )}
             {generateCrmReportMutation.isPending ? 'Generating…' : 'Preview CRM Report'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={downloadCrmReportMutation.isPending}
+            onClick={() => downloadCrmReportMutation.mutate()}
+          >
+            {downloadCrmReportMutation.isPending ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {downloadCrmReportMutation.isPending ? 'Generating…' : 'Download CRM Report'}
           </Button>
         </div>
           </>
