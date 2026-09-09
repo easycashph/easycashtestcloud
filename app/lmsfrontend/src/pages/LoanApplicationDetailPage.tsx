@@ -1468,7 +1468,10 @@ const UnderwritingCard = React.forwardRef<
    * filled in or still needs attention. */
   const filledAgencyFieldsCount = AGENCY_VERIFICATION_FIELDS.filter((f) => agencyVerification[f.key]?.trim()).length;
   const agencyCoreFieldsIncomplete = isSeafarerLoan && AGENCY_CORE_FIELDS.some((f) => f.required && !agencyVerification[f.key]?.trim());
-  const [mitigationOpen, setMitigationOpen] = React.useState(hasMitigationData);
+  // 2026-09-09 (user request, same fix as agencyOpen below): always starts collapsed on every
+  // visit instead of auto-opening whenever hasMitigationData was true.
+  const [mitigationOpen, setMitigationOpen] = React.useState(false);
+  const filledMitigationFieldsCount = MITIGATION_FIELDS.filter((f) => mitigation[f.key]?.trim()).length;
   // 2026-08-13 (user request): Client Profile's read-only mitigation card links back here to edit -
   // deep-links via `?section=mitigation` so staff land straight on the section instead of having to
   // find it themselves on a long page.
@@ -1746,10 +1749,20 @@ const UnderwritingCard = React.forwardRef<
             <button
               type="button"
               onClick={() => setMitigationOpen((v) => !v)}
-              className="flex items-center gap-1 text-xs font-medium text-primary"
+              className="flex items-center gap-1.5 text-xs font-medium text-primary"
             >
               {mitigationOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
               {mitigationOpen ? 'Hide bank / ATM details' : 'Add bank / ATM details'}
+              {!mitigationOpen && mitigationOwnerMissing && (
+                <Badge variant="warning" className="text-[10px]">
+                  <AlertTriangle className="mr-1 h-2.5 w-2.5" /> Incomplete
+                </Badge>
+              )}
+              {!mitigationOpen && !mitigationOwnerMissing && hasMitigationData && (
+                <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+                  {filledMitigationFieldsCount} of {MITIGATION_FIELDS.length} filled
+                </Badge>
+              )}
             </button>
           )}
           {mitigationOpen && (

@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T14:36:00+08:00",
-    "commitMessage":  "Fix Revert button overflowing its card, drop \"AI\" from the label",
-    "commit":  "11a6a8fa",
-    "builtAt":  "2026-09-09T06:47:30.5815546Z"
+    "commitDate":  "2026-09-09T14:50:03+08:00",
+    "commitMessage":  "Agency verification section: always collapsed + status badge",
+    "commit":  "15df26c3",
+    "builtAt":  "2026-09-09T06:54:28.3881990Z"
 }
