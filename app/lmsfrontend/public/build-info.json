@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T14:05:52+08:00",
-    "commitMessage":  "Block CRM Report Preview/Download while there are unsaved edits",
-    "commit":  "7bc12310",
-    "builtAt":  "2026-09-09T06:16:44.7947162Z"
+    "commitDate":  "2026-09-09T14:19:47+08:00",
+    "commitMessage":  "Give \"Save bank / ATM details\" the same filled color as other Save buttons",
+    "commit":  "bff40564",
+    "builtAt":  "2026-09-09T06:26:23.0943311Z"
 }

@@ -16,6 +16,7 @@ import {
   ChevronUp,
   CreditCard,
   Download,
+  ExternalLink,
   Flag,
   Heart,
   Home,
@@ -2623,6 +2624,21 @@ export function LoanApplicationDetailPage() {
               <dd className="text-right font-medium">{application.email ?? '-'}</dd>
               <IconDt icon={Briefcase}>Employer</IconDt>
               <dd className="text-right font-medium">{application.employer ?? '-'}</dd>
+              <IconDt icon={ExternalLink}>Facebook</IconDt>
+              <dd className="text-right font-medium">
+                {application.facebookLink ? (
+                  <a
+                    href={application.facebookLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary underline-offset-2 hover:underline"
+                  >
+                    View profile
+                  </a>
+                ) : (
+                  '-'
+                )}
+              </dd>
             </dl>
           </CardContent>
         </Card>
@@ -2805,6 +2821,21 @@ export function LoanApplicationDetailPage() {
                   >
                     Decline Application
                   </Button>
+                  {/* 2026-09-09 (user request): same "Revert to AI Pre-Qualification" action already
+                      available once Approved/Declined, now also reachable from Under Review - the
+                      backend's revert() already supported this (it only blocks reverting FROM
+                      PREAPPROVED/PREDECLINED), the frontend just never surfaced a button for it
+                      here. Same MIS-only gate as the existing one below. */}
+                  {canRevertLoanApplicationDecision && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => setConfirmAction('REVERT')}
+                      disabled={revertMutation.isPending}
+                      title="Move this application back to AI Pre-Qualification"
+                    >
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to AI Pre-Qualification
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
