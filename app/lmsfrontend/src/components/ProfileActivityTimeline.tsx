@@ -6,11 +6,16 @@
  *
  * Shows: who, what action, when, and detailed information about the change.
  * Supports cursor pagination for large histories.
+ *
+ * 2026-09-09 (user request, "gawing high-end, advance sophisticated na design ... hindi malaki
+ * tignan"): redesigned from a tall dot-and-connecting-line timeline (2 lines + generous padding
+ * per entry) to compact single-line rows with a small colored icon per action type, grouped under
+ * date headers (Today/Yesterday/older) - same information, far less vertical space per entry.
  */
 
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { AlertCircle, Check, Circle, Eye, FilePlus, Loader2, Pencil, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import type { GetProfileActivityResponse, ProfileActivityLogRecord, ProfileType } from '@/lib/profileActivityApiTypes';
 import { apiClient } from '@/lib/apiClient';
 import { formatDateTime } from '@/lib/utils';
@@ -42,6 +47,49 @@ function formatRelativeOrAbsolute(dateString: string): string {
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays < 7) return `${diffDays}d ago`;
   return formatDateTime(dateString);
+}
+
+/** "Today" / "Yesterday" / an absolute date - used as the group header above a run of same-day
+ * entries. Calendar-day comparison (local time), not a 24h rolling window. */
+function dateGroupLabel(dateString: string): string {
+  const date = new Date(dateString);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  if (sameDay(date, today)) return 'Today';
+  if (sameDay(date, yesterday)) return 'Yesterday';
+  return date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+}
+
+type IconSpec = { Icon: React.ComponentType<{ className?: string }>; className: string };
+
+/** Small colored icon per action, so the compact single-line row still reads at a glance without
+ * needing to read the text. Loan application decision transitions (approve/decline/revert/tag/
+ * undo) all share the generic `decision_updated` action code server-side - `details.toStatus` (set
+ * by ProfileActivityLogService.actions.decisionUpdated) disambiguates those; everything else falls
+ * back to keyword-matching the snake_case `action` code, with a neutral dot as the final fallback. */
+function iconForActivity(activity: ProfileActivityLogRecord): IconSpec {
+  if (activity.action === 'decision_updated') {
+    const toStatus = typeof activity.details.toStatus === 'string' ? activity.details.toStatus : '';
+    if (toStatus === 'APPROVED' || toStatus === 'ACTIVE') return { Icon: Check, className: 'bg-success/15 text-success' };
+    if (toStatus === 'DECLINED') return { Icon: X, className: 'bg-destructive/15 text-destructive' };
+    if (toStatus === 'PRE_APPROVAL') return { Icon: Check, className: 'bg-success/15 text-success' };
+    if (toStatus === 'UNDER_REVIEW') return { Icon: Eye, className: 'bg-primary/15 text-primary' };
+    return { Icon: RotateCcw, className: 'bg-warning/15 text-warning' };
+  }
+  const action = activity.action.toLowerCase();
+  if (action.includes('delete')) return { Icon: Trash2, className: 'bg-destructive/15 text-destructive' };
+  if (action.includes('revert') || action.includes('undo')) return { Icon: RotateCcw, className: 'bg-warning/15 text-warning' };
+  if (action.includes('created') || action.includes('upload') || action.includes('recorded') || action.includes('generated')) {
+    return { Icon: FilePlus, className: 'bg-primary/15 text-primary' };
+  }
+  if (action.includes('updated') || action.includes('saved') || action.includes('edited')) {
+    return { Icon: Save, className: 'bg-muted text-muted-foreground' };
+  }
+  if (action.includes('review')) return { Icon: Eye, className: 'bg-primary/15 text-primary' };
+  if (action.includes('note')) return { Icon: Pencil, className: 'bg-muted text-muted-foreground' };
+  return { Icon: Circle, className: 'bg-muted text-muted-foreground' };
 }
 
 export function ProfileActivityTimeline({
@@ -119,75 +167,61 @@ export function ProfileActivityTimeline({
     );
   }
 
-  // 2026-09-09 (user request, "humahaba na kasi yung row"): capped height + internal scroll
-  // instead of letting the card grow without bound as more activity accumulates - the pipeline
-  // grew several new revert/undo/tag actions recently, each logging its own entry here. "Load
-  // more" (cursor pagination) stays reachable by scrolling to the bottom of this box, not a
-  // separate control outside it.
+  // 2026-09-09: capped height + internal scroll instead of letting the card grow without bound -
+  // "Load more" (cursor pagination) stays reachable by scrolling to the bottom of this box.
   return (
-    <div className="max-h-[420px] space-y-0 divide-y overflow-y-auto pr-1">
+    <div className="max-h-[420px] overflow-y-auto pr-1">
       {accumulated.map((activity, index) => {
         const isExpanded = expandedIds.has(activity.id);
         const hasDetails = Object.keys(activity.details).length > 0;
+        const { Icon, className: iconClassName } = iconForActivity(activity);
+        const group = dateGroupLabel(activity.createdAt);
+        const showGroupHeader = index === 0 || dateGroupLabel(accumulated[index - 1].createdAt) !== group;
 
         return (
-          <div key={activity.id} className={index === 0 ? 'py-4' : 'pt-6 pb-4'}>
-            <div className="flex gap-4">
-              <div className="flex flex-col items-center">
-                <div className="h-3 w-3 rounded-full bg-primary ring-2 ring-primary/20" />
-                {index < accumulated.length - 1 && <div className="mt-2 h-12 w-0.5 bg-border" />}
+          <React.Fragment key={activity.id}>
+            {showGroupHeader && (
+              <p className={`mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground ${index === 0 ? '' : 'mt-3'}`}>
+                {group}
+              </p>
+            )}
+            <div className="flex items-center gap-2.5 border-b py-1.5 last:border-0">
+              <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${iconClassName}`}>
+                <Icon className="h-3 w-3" />
               </div>
-
-              <div className="min-w-0 flex-1">
-                <div className="mb-2 flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-medium">{activity.formattedAction}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {activity.user.firstName} {activity.user.lastName}
-                    </p>
-                  </div>
-                  <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">
-                    {formatRelativeOrAbsolute(activity.createdAt)}
-                  </span>
-                </div>
-
-                {showDetailsToggle && hasDetails && (
-                  <button
-                    type="button"
-                    onClick={() => toggleExpanded(activity.id)}
-                    className="mt-2 flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-                  >
-                    {isExpanded ? (
-                      <>
-                        <ChevronUp className="h-3 w-3" /> Hide details
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="h-3 w-3" /> Show details
-                      </>
-                    )}
-                  </button>
-                )}
-
-                {showDetailsToggle && isExpanded && (
-                  <div className="mt-3 rounded-md border bg-secondary/30 p-3">
-                    <pre className="max-h-64 overflow-auto font-mono text-xs text-muted-foreground">
-                      {JSON.stringify(activity.details, null, 2)}
-                    </pre>
-                  </div>
-                )}
-
-                {activity.deletedByMisAt && (
-                  <p className="mt-2 text-xs text-destructive">Deleted by MIS at {formatDateTime(activity.deletedByMisAt)}</p>
-                )}
-              </div>
+              <p className="min-w-0 flex-1 truncate text-sm">
+                {activity.formattedAction}
+                <span className="text-muted-foreground"> · {activity.user.firstName} {activity.user.lastName}</span>
+              </p>
+              {showDetailsToggle && hasDetails && (
+                <button
+                  type="button"
+                  onClick={() => toggleExpanded(activity.id)}
+                  className="shrink-0 text-xs font-medium text-primary hover:underline"
+                >
+                  {isExpanded ? 'Hide' : 'Details'}
+                </button>
+              )}
+              <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">{formatRelativeOrAbsolute(activity.createdAt)}</span>
             </div>
-          </div>
+
+            {showDetailsToggle && isExpanded && (
+              <div className="mb-1.5 rounded-md border bg-secondary/30 p-3">
+                <pre className="max-h-64 overflow-auto font-mono text-xs text-muted-foreground">
+                  {JSON.stringify(activity.details, null, 2)}
+                </pre>
+              </div>
+            )}
+
+            {activity.deletedByMisAt && (
+              <p className="mb-1.5 text-xs text-destructive">Deleted by MIS at {formatDateTime(activity.deletedByMisAt)}</p>
+            )}
+          </React.Fragment>
         );
       })}
 
       {data?.cursor && (
-        <div className="mt-6 border-t pt-4">
+        <div className="mt-3 border-t pt-3">
           <button
             type="button"
             onClick={() => setCursor(data.cursor)}

@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T16:00:44+08:00",
-    "commitMessage":  "Cap Activity Timeline height with internal scroll instead of growing unbounded",
-    "commit":  "b0b76dc0",
-    "builtAt":  "2026-09-09T08:10:21.7754728Z"
+    "commitDate":  "2026-09-09T16:17:23+08:00",
+    "commitMessage":  "Redesign Credit Bureau Check as two per-party cards instead of a table",
+    "commit":  "3185ba21",
+    "builtAt":  "2026-09-09T08:20:16.0225927Z"
 }
