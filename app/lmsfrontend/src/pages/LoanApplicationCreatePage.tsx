@@ -378,6 +378,55 @@ const APPLICATION_FIELD_BADGE_KIND: Record<string, 'same' | 'verify' | 'starting
   loanPurpose: 'starting',
 };
 
+/**
+ * 2026-09-10 (user-reported bug): selecting an existing client with no Loan Application on file
+ * (e.g. a legacy client migrated straight in without ever going through this LMS's own intake
+ * flow - no `borrowerId`/`createdBorrowerId` match for `latestApplication` to find) left the form
+ * completely blank, silently, because prefill only ever read from a previous application. This
+ * builds an equivalent prefill straight from the Client Profile itself, which every existing
+ * client has - used as the fallback whenever `latestApplication` isn't found. Loan-specific fields
+ * (type/amount/term/purpose), co-borrower, and references have no equivalent on Borrower and are
+ * deliberately left unset either way - the officer encodes those fresh for this request. */
+function borrowerToApplicationPrefill(borrower: Borrower): Partial<LoanApplication> {
+  const presentAddress = borrower.addresses.find((a) => a.addressType === 'PRESENT') ?? borrower.addresses[0];
+  const ref1 = borrower.characterReferences[0];
+  const ref2 = borrower.characterReferences[1];
+  return {
+    applicantName: borrower.fullName,
+    gender: borrower.gender,
+    civilStatus: borrower.civilStatus,
+    birthDate: borrower.birthDate,
+    placeOfBirth: borrower.placeOfBirth,
+    nationality: borrower.nationality,
+    homeOwnership: borrower.homeOwnership,
+    houseUnitNumber: presentAddress?.houseUnitNumber ?? null,
+    street: presentAddress?.street ?? null,
+    barangay: presentAddress?.barangay ?? null,
+    cityMunicipality: presentAddress?.cityMunicipality ?? null,
+    province: presentAddress?.province ?? null,
+    zipCode: presentAddress?.zipCode ?? null,
+    address: presentAddress
+      ? [presentAddress.houseUnitNumber, presentAddress.street, presentAddress.barangay, presentAddress.cityMunicipality, presentAddress.province]
+          .filter(Boolean)
+          .join(', ')
+      : null,
+    monthlyIncome: borrower.incomeDetail?.monthlyIncome ?? null,
+    employer: borrower.incomeDetail?.employerName ?? null,
+    occupation: borrower.incomeDetail?.position ?? null,
+    officeAddress: borrower.incomeDetail?.employerAddress ?? null,
+    tinNumber: borrower.governmentId?.tinNumber ?? null,
+    sssNumber: borrower.governmentId?.sssNumber ?? null,
+    mobilePhone: borrower.mobilePhone1,
+    email: borrower.email,
+    facebookLink: borrower.facebookLink,
+    dependants: borrower.dependants,
+    reference1Name: ref1 ? `${ref1.firstName} ${ref1.lastName}`.trim() : null,
+    reference1Mobile: ref1?.phoneNumber ?? null,
+    reference2Name: ref2 ? `${ref2.firstName} ${ref2.lastName}`.trim() : null,
+    reference2Mobile: ref2?.phoneNumber ?? null,
+  };
+}
+
 const BADGE_STYLE: Record<'same' | 'verify' | 'starting', { className: string; label: string }> = {
   same: { className: 'bg-primary/10 text-primary', label: 'same as before' },
   verify: { className: 'bg-warning/10 text-warning', label: 'verify' },
@@ -436,21 +485,19 @@ export function LoanApplicationEntry({
         .filter((a) => a.createdBorrowerId === selectedBorrower.id || a.borrowerId === selectedBorrower.id)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
     : undefined;
+  // 2026-09-10 (user-reported bug, "dapat pag select ko lalabas ang mga details niya... pero
+  // walang lumabas"): a client with no Loan Application on file (e.g. a legacy client migrated
+  // straight in - see borrowerToApplicationPrefill's own doc comment) used to fall through to a
+  // silently blank form. The Client Profile itself is always available for an existing client, so
+  // it's now the fallback prefill source whenever there's no previous application to offer instead.
+  const borrowerPrefill = selectedBorrower ? borrowerToApplicationPrefill(selectedBorrower) : undefined;
+  const effectivePrefill = latestApplication ?? borrowerPrefill;
 
   const reset = () => {
     setSelectedBorrower(null);
     setClientSearch('');
     setReviewResolved(null);
   };
-
-  // Once a client is picked and their history has loaded, resolve straight through if there's
-  // nothing to review (no past application to offer as a prefill) - the review step only earns its
-  // place when there's an actual choice to make.
-  React.useEffect(() => {
-    if (selectedBorrower && !applicationsQuery.isLoading && !latestApplication && reviewResolved === null) {
-      setReviewResolved('blank');
-    }
-  }, [selectedBorrower, applicationsQuery.isLoading, latestApplication, reviewResolved]);
 
   if (skipSearchEntirely) {
     return <LoanApplicationForm showChrome={showChrome} onCreated={onCreated} onCancel={onCancel} />;
@@ -459,7 +506,7 @@ export function LoanApplicationEntry({
   if (selectedBorrower && reviewResolved) {
     return (
       <LoanApplicationForm
-        prefillFrom={reviewResolved === 'accepted' ? latestApplication : undefined}
+        prefillFrom={reviewResolved === 'accepted' ? effectivePrefill : undefined}
         lockedBorrowerId={selectedBorrower.id}
         showChrome={showChrome}
         onCreated={onCreated}
@@ -547,60 +594,73 @@ export function LoanApplicationEntry({
         <CardHeader>
           <CardTitle className="text-base">{selectedBorrower.fullName}</CardTitle>
           <CardDescription>
-            {applicationsQuery.isLoading || !latestApplication
+            {applicationsQuery.isLoading
               ? 'Fetching their most recent application…'
-              : `Prefilled from their most recent application (${formatDate(latestApplication.createdAt)}, ${latestApplication.requestedCategory}).`}
+              : latestApplication
+                ? `Prefilled from their most recent application (${formatDate(latestApplication.createdAt)}, ${latestApplication.requestedCategory}).`
+                : 'No previous Loan Application on file for this client (likely a legacy record) - prefilled from their Client Profile instead.'}
           </CardDescription>
         </CardHeader>
-        {!applicationsQuery.isLoading && latestApplication && (
+        {!applicationsQuery.isLoading && effectivePrefill && (
           <CardContent className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Personal details are copied directly - still verify the fields tagged "verify" before submitting, since these may have
-              changed since then. Loan details are only a starting point for this new request, not something to leave unchanged.
+              {latestApplication
+                ? 'Personal details are copied directly - still verify the fields tagged "verify" before submitting, since these may have changed since then. Loan details are only a starting point for this new request, not something to leave unchanged.'
+                : 'Personal details are copied directly from the Client Profile - still verify before submitting, since these may have changed since the profile was last updated.'}
             </p>
             {(
               [
                 [
                   'Personal & contact details',
                   [
-                    ['applicantName', 'Full name', latestApplication.applicantName],
-                    ['birthDate', 'Date of birth', latestApplication.birthDate ? formatDate(latestApplication.birthDate) : '—'],
-                    ['gender', 'Gender / Civil status', [latestApplication.gender, latestApplication.civilStatus].filter(Boolean).join(' · ') || '—'],
-                    ['nationality', 'Nationality', latestApplication.nationality ?? '—'],
-                    ['address', 'Present address', latestApplication.address ?? '—'],
-                    ['employer', 'Employer', latestApplication.employer ?? '—'],
-                    ['monthlyIncome', 'Monthly income', latestApplication.monthlyIncome ? formatPeso(latestApplication.monthlyIncome) : '—'],
-                    ['mobilePhone', 'Contact number', latestApplication.mobilePhone ?? '—'],
+                    ['applicantName', 'Full name', effectivePrefill.applicantName ?? '—'],
+                    ['birthDate', 'Date of birth', effectivePrefill.birthDate ? formatDate(effectivePrefill.birthDate) : '—'],
+                    ['gender', 'Gender / Civil status', [effectivePrefill.gender, effectivePrefill.civilStatus].filter(Boolean).join(' · ') || '—'],
+                    ['nationality', 'Nationality', effectivePrefill.nationality ?? '—'],
+                    ['address', 'Present address', effectivePrefill.address ?? '—'],
+                    ['employer', 'Employer', effectivePrefill.employer ?? '—'],
+                    ['monthlyIncome', 'Monthly income', effectivePrefill.monthlyIncome ? formatPeso(effectivePrefill.monthlyIncome) : '—'],
+                    ['mobilePhone', 'Contact number', effectivePrefill.mobilePhone ?? '—'],
                   ],
                 ],
-                [
-                  'Loan details (previous request)',
-                  [
-                    ['requestedCategory', 'Type of loan', latestApplication.requestedCategory || '—'],
-                    ['requestedAmount', 'Requested amount', latestApplication.requestedAmount ? formatPeso(latestApplication.requestedAmount) : '—'],
-                    ['requestedTermMonths', 'Term', latestApplication.requestedTermMonths ? `${latestApplication.requestedTermMonths} months` : '—'],
-                    ['loanPurpose', 'Loan purpose', latestApplication.loanPurpose ?? '—'],
-                  ],
-                ],
-                [
-                  'References',
-                  [
-                    ['reference1', 'Reference 1', [latestApplication.reference1Name, latestApplication.reference1Mobile].filter(Boolean).join(' · ') || '—'],
-                    ['reference2', 'Reference 2', [latestApplication.reference2Name, latestApplication.reference2Mobile].filter(Boolean).join(' · ') || '—'],
-                  ],
-                ],
+                ...(latestApplication
+                  ? ([
+                      [
+                        'Loan details (previous request)',
+                        [
+                          ['requestedCategory', 'Type of loan', latestApplication.requestedCategory || '—'],
+                          ['requestedAmount', 'Requested amount', latestApplication.requestedAmount ? formatPeso(latestApplication.requestedAmount) : '—'],
+                          ['requestedTermMonths', 'Term', latestApplication.requestedTermMonths ? `${latestApplication.requestedTermMonths} months` : '—'],
+                          ['loanPurpose', 'Loan purpose', latestApplication.loanPurpose ?? '—'],
+                        ],
+                      ],
+                    ] as const)
+                  : []),
+                ...(effectivePrefill.reference1Name || effectivePrefill.reference2Name
+                  ? ([
+                      [
+                        'References',
+                        [
+                          ['reference1', 'Reference 1', [effectivePrefill.reference1Name, effectivePrefill.reference1Mobile].filter(Boolean).join(' · ') || '—'],
+                          ['reference2', 'Reference 2', [effectivePrefill.reference2Name, effectivePrefill.reference2Mobile].filter(Boolean).join(' · ') || '—'],
+                        ],
+                      ],
+                    ] as const)
+                  : []),
               ] as const
             ).map(([section, fields]) => (
               <div key={section} className="space-y-2">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{section}</p>
                 <div className="grid gap-2.5 sm:grid-cols-2">
                   {fields.map(([field, label, value]) => {
-                    const badge = BADGE_STYLE[APPLICATION_FIELD_BADGE_KIND[field] ?? 'verify'];
+                    const badge = latestApplication ? BADGE_STYLE[APPLICATION_FIELD_BADGE_KIND[field] ?? 'verify'] : null;
                     return (
                       <div key={field} className="rounded-md border bg-secondary/30 p-2.5">
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}>{badge.label}</span>
+                          {badge && (
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}>{badge.label}</span>
+                          )}
                         </div>
                         <p className="text-sm font-medium">{value}</p>
                       </div>
@@ -611,19 +671,19 @@ export function LoanApplicationEntry({
             ))}
           </CardContent>
         )}
-        <CardContent className={applicationsQuery.isLoading || !latestApplication ? '' : 'pt-0'}>
+        <CardContent className={applicationsQuery.isLoading || !effectivePrefill ? '' : 'pt-0'}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={reset}>
               Search someone else
             </Button>
             <div className="flex gap-2">
-              {latestApplication && (
+              {effectivePrefill && (
                 <Button type="button" variant="outline" onClick={() => setReviewResolved('blank')}>
                   Start with a blank form
                 </Button>
               )}
               <Button type="button" onClick={() => setReviewResolved('accepted')} disabled={applicationsQuery.isLoading}>
-                {latestApplication ? 'Accept and continue to form' : 'Continue to form'}
+                {effectivePrefill ? 'Accept and continue to form' : 'Continue to form'}
               </Button>
             </div>
           </div>
@@ -650,7 +710,12 @@ export function LoanApplicationForm({
   onCreated,
   onCancel,
 }: {
-  prefillFrom?: LoanApplication;
+  /** 2026-09-10: relaxed from `LoanApplication` to `Partial<LoanApplication>` - `LoanApplicationEntry`
+   * now also passes a prefill built straight from a Client Profile (`borrowerToApplicationPrefill`)
+   * when the client has no previous Loan Application on file, which has no loan-specific/co-borrower/
+   * account fields to offer. Every field read below already falls back to a blank default via `?.`,
+   * so this is a type-only relaxation. */
+  prefillFrom?: Partial<LoanApplication>;
   lockedBorrowerId?: string;
   showChrome?: boolean;
   /** 2026-08-12 (user request/bug fix): when set, this is LMS staff correcting an application
@@ -662,7 +727,11 @@ export function LoanApplicationForm({
   onCreated: (application: LoanApplication, failedDocumentLabels?: string[]) => void;
   onCancel: () => void;
 }) {
-  const { canAccessLoanApplications, currentAccount } = useRole();
+  const { canAccessLoanApplications, currentAccount, hasPermission } = useRole();
+  // 2026-09-10 (user-reported bug): this card was never gated by `ai_extraction.use` - toggling
+  // the permission off in Roles & Permissions had no effect on it. Every other AI Auto-fill
+  // trigger below (extractMutation, aiExtractedFile upload) stays reachable only through this card.
+  const canUseAiExtraction = hasPermission('ai_extraction.use');
   useLogPageView('Loan Applications', showChrome ? 'create-application-form' : 'create-application-dialog');
   const productTypeLabelsQuery = useProductTypeLabels();
 
@@ -697,7 +766,7 @@ export function LoanApplicationForm({
   const [requestedTermMonths, setRequestedTermMonths] = React.useState(prefillFrom ? String(prefillFrom.requestedTermMonths) : '');
   const [loanPurpose, setLoanPurpose] = React.useState(prefillFrom?.loanPurpose ?? '');
   // §3 - personal information
-  const prefillName = React.useMemo(() => (prefillFrom ? splitFullName(prefillFrom.applicantName) : null), [prefillFrom]);
+  const prefillName = React.useMemo(() => (prefillFrom ? splitFullName(prefillFrom.applicantName ?? '') : null), [prefillFrom]);
   const [firstName, setFirstName] = React.useState(prefillName?.firstName ?? '');
   const [middleName, setMiddleName] = React.useState(prefillName?.middleName ?? '');
   const [lastName, setLastName] = React.useState(prefillName?.lastName ?? '');
@@ -739,7 +808,7 @@ export function LoanApplicationForm({
   const [sss, setSss] = React.useState(prefillFrom?.sssNumber ?? '');
   // §5 - dependants
   const [dependants, setDependants] = React.useState<DependantRow[]>(
-    prefillFrom?.dependants.map((d) => ({ name: d.name, age: d.age ?? '', relationship: d.relationship ?? '' })) ?? [],
+    prefillFrom?.dependants?.map((d) => ({ name: d.name, age: d.age ?? '', relationship: d.relationship ?? '' })) ?? [],
   );
   // §6 - spouse
   const [spouseName, setSpouseName] = React.useState('');
@@ -1201,6 +1270,7 @@ export function LoanApplicationForm({
         </div>
       )}
 
+      {canUseAiExtraction && (
       <Card className="border-primary/30 bg-primary/5">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -1283,6 +1353,7 @@ export function LoanApplicationForm({
           </Button>
         </CardContent>
       </Card>
+      )}
 
       <Dialog open={!!aiReview} onOpenChange={(open) => !open && dismissAiReview()}>
         <DialogContent className="sm:max-w-lg">
