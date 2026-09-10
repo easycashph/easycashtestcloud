@@ -30,7 +30,7 @@ import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels'
 import { apiClient, fetchAllPages, uploadFile } from '@/lib/apiClient';
 import type { CreateLoanApplicationRequest, LoanApplication } from '@/lib/loanApplicationApiTypes';
 import type { ExtractedLoanApplicationFields } from '@/lib/aiExtractionApiTypes';
-import type { Borrower, PaginatedResponse } from '@/lib/loanApiTypes';
+import type { Borrower, CoBorrower, PaginatedResponse } from '@/lib/loanApiTypes';
 import {
   ATTACHMENT_ACCEPTED_MIME,
   ATTACHMENT_ACCEPTED_TYPES,
@@ -837,8 +837,32 @@ export function LoanApplicationForm({
     queryFn: () => fetchAllPages<LoanApplication>('/loan-applications'),
     enabled: Boolean(lockedBorrowerId),
   });
+  // 2026-09-10 (user request, following up on the §141 prefill fix): a client's co-borrower is
+  // stored directly on the Borrower itself (ADR-015 - "per-Borrower, applies to every one of their
+  // loans", see ClientProfilePage.tsx's CoBorrowersCard) via a dedicated endpoint, not embedded in
+  // the search result used above - fetched here so it's offered too, not just co-borrowers parsed
+  // out of past applications (the only source before this, which - like the client's own personal
+  // details - came up empty for a legacy client with no application on file).
+  const borrowerCoBorrowersQuery = useQuery({
+    queryKey: ['co-borrowers', lockedBorrowerId],
+    queryFn: () => apiClient.get<{ items: CoBorrower[] }>(`/borrowers/${lockedBorrowerId}/co-borrowers`),
+    enabled: Boolean(lockedBorrowerId),
+  });
   const previousCoBorrowers = React.useMemo(() => {
     const seen = new Map<string, { name: string; relationship: string; contactNumber: string; email: string; address: string }>();
+    for (const cb of borrowerCoBorrowersQuery.data?.items ?? []) {
+      if (!cb.fullName || seen.has(cb.fullName)) continue;
+      const addr = cb.addresses[0];
+      seen.set(cb.fullName, {
+        name: cb.fullName,
+        relationship: cb.relationship ?? '',
+        contactNumber: cb.phoneNumber ?? '',
+        email: cb.emailAddress ?? '',
+        address: addr
+          ? [addr.houseUnitNumber, addr.street, addr.barangay, addr.cityMunicipality, addr.province, addr.zipCode].filter(Boolean).join(', ')
+          : '',
+      });
+    }
     for (const app of previousApplicationsQuery.data ?? []) {
       if (app.borrowerId !== lockedBorrowerId) continue;
       if (!app.coBorrowerName) continue;
@@ -853,7 +877,7 @@ export function LoanApplicationForm({
       });
     }
     return [...seen.values()];
-  }, [previousApplicationsQuery.data]);
+  }, [borrowerCoBorrowersQuery.data, previousApplicationsQuery.data, lockedBorrowerId]);
 
   const applyPreviousCoBorrower = (name: string) => {
     const match = previousCoBorrowers.find((c) => c.name === name);
