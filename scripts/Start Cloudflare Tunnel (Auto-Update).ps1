@@ -234,17 +234,14 @@ function Update-PagesProject($label, $projectName) {
     }
 }
 
-# --- Step 3: update + redeploy both Pages projects ---
+# --- Step 3: update + redeploy the LMS Pages project ---
 Write-Step '[3/4] Updating Cloudflare Pages projects...'
 $lmsOk = Update-PagesProject 'LMS' $ProjectName
-# 2026-09-10 (user request): Portal re-enabled - restored the update-and-redeploy call disabled on
-# 2026-09-08 while the Portal was taken offline behind an "Under Development" placeholder.
+# 2026-09-10 (user request): Portal taken offline again - the update-and-redeploy call is disabled
+# here on purpose, same as the original 2026-09-08 takedown, reversing the 2026-09-10 re-enable.
+# Portal must stop receiving fresh tunnel URLs / redeploys from this script. LMS above is untouched.
+# To re-enable Portal later, restore the `Update-PagesProject 'Portal' $PortalProjectName` call.
 $portalOk = $true
-if ([string]::IsNullOrWhiteSpace($PortalProjectName)) {
-    Write-Warn2 "      CLOUDFLARE_PAGES_PROJECT_PORTAL not set in local/tunnel-autoupdate.env - skipping the Portal update. Add it (e.g. easycash-portal) to include the Portal in this script."
-} else {
-    $portalOk = Update-PagesProject 'Portal' $PortalProjectName
-}
 
 # --- Step 4: summary ---
 Write-Step '[4/4] Done.'
