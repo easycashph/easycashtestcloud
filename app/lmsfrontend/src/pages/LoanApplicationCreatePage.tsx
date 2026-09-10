@@ -388,7 +388,10 @@ const APPLICATION_FIELD_BADGE_KIND: Record<string, 'same' | 'verify' | 'starting
  * (type/amount/term/purpose), co-borrower, and references have no equivalent on Borrower and are
  * deliberately left unset either way - the officer encodes those fresh for this request. */
 function borrowerToApplicationPrefill(borrower: Borrower): Partial<LoanApplication> {
-  const presentAddress = borrower.addresses.find((a) => a.addressType === 'PRESENT') ?? borrower.addresses[0];
+  // addressType casing is inconsistent across records ('PRESENT' from this app's own
+  // ClientCreatePage.tsx vs 'Present' from legacy-imported data) - match case-insensitively rather
+  // than assuming one convention.
+  const presentAddress = borrower.addresses.find((a) => a.addressType?.toUpperCase() === 'PRESENT') ?? borrower.addresses[0];
   const ref1 = borrower.characterReferences[0];
   const ref2 = borrower.characterReferences[1];
   return {
