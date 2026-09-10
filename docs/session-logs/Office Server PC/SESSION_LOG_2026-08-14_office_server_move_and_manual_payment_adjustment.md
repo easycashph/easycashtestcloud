@@ -6560,3 +6560,192 @@ malfunction.
   recommended leaving it disabled since the placeholder doesn't call the backend at all, so
   updating its env var would just add an unnecessary extra build/API-call cycle every tunnel run
   for zero benefit - re-enable only when reverting the placeholder back to the real Portal app.
+
+## §131 — 2026-09-09: Loan Application detail page - Add Co-Borrower, icons, card reorder
+
+User asked for a dedicated "Add Co-Borrower" action on the Loan Application detail page, same
+pattern as ClientProfilePage's `CoBorrowersCard`. Investigation found the backend already fully
+supported this (`PATCH /loan-applications/:id/intake` already accepted every `coBorrower*` field,
+added 2026-08-12 for the "Edit Application" full-form flow) - the gap was purely a discoverable UI:
+staff had to open the whole intake edit form just to add one co-borrower. Built a new
+`CoBorrowerDetailsCard` component with its own focused Add/Edit dialog, gated on the same
+PREAPPROVED/PREDECLINED/UNDER_REVIEW statuses `updateStaffIntake()` enforces.
+
+Also, per user request: added icons to the Requested Loan card's fields (matching Applicant
+Details' existing icon treatment), and reordered the default card layout (bumped
+`lms.loanApplicationDetailCardOrder` to `.v3` then `.v4`) so Co-Borrower Details sits below
+Personal & Household Information (previously above it), and Recent Loan Application Activity Logs
+moved to the very bottom of the page, past Activity Timeline.
+
+## §132 — 2026-09-09: Full-page visual polish - pipeline stepper, DTI gauge, document-card attachments
+
+User asked for the whole page to feel "high-end, advanced, sophisticated" - iterated through several
+mockups (via the visualize tool) before implementing:
+
+- **Pipeline stepper** in the header (Pre-qualified → Under Review → Pre-approval →
+  Approved/Declined), replacing the status badge as the only progress indicator - checkmarks on
+  completed stages, a red X on the final stage if declined.
+- **DTI gauge**: the Underwriting card's Debt-to-Income figure now renders as a colored circular
+  SVG gauge (green/amber/red by band) instead of plain text.
+- **AttachmentsPanel redesign** (shared component - also used by LoanDetailPage): flat filename list
+  → document-card grid, category name as the primary label (fallback to filename), a PDF/image icon,
+  hover-visible preview/download icon pair. Files uploaded before this change still display fine
+  (icon derived from `fileType`, label falls back to `fileName` when no `documentCategory`).
+
+## §133 — 2026-09-09: Redesigned "Personal & Household Information" into labeled, scannable sections
+
+User flagged the card as hard to scan - 11+ fields in one flat two-column `<dl>` with no grouping.
+Redesigned into three labeled sections (Personal / Residence / Employment & IDs) with an icon per
+row and zebra-striped background (`odd:bg-muted/40`), and turned Dependants/Character
+References/Note into distinct `bg-muted/40` mini-cards on the side instead of a plain stacked list.
+New reusable `PersonalInfoGroup`/`PersonalInfoRow` helper components.
+
+## §134 — 2026-09-09: Split a dedicated permission for "AI-assisted document review"
+
+User asked why they couldn't find "AI-assisted document review" as its own toggle in Roles &
+Permissions. Root cause: the card (and its `POST /ai-document-review` endpoint) had only ever been
+gated on the general `loan_application.manage` permission - there was no dedicated permission for
+it at all (a *different*, similarly-named `ai_extraction.use` permission exists for an unrelated
+feature - the Create Loan Application form's document-auto-fill). Added a new
+`loan_application.ai_review` permission, split out of `loan_application.manage` on both the
+frontend gate (`canUseAiDocumentReview`) and the backend route. Per explicit user instruction
+("gawin mong default OFF sa lahat ng users"), deliberately **not** added to any role's default
+grant in `seed.ts` - every role except MIS (the super-user role, which gets every permission by
+definition) starts without it; MIS grants it per-role explicitly via the Roles & Permissions screen.
+
+## §135 — 2026-09-09: Replaced the "Address proximity to branch" decision-scoring check with "Employment / occupation"
+
+User asked what could replace this check, since it almost never had real data - free Nominatim
+geocoding rarely resolves informal Philippine barangay addresses, so it showed "could not be
+verified - treated as passing" on nearly every application (confirmed via the running test
+application). Replaced it with an employment/occupation check (`input.occupation`/`input.employer`
+non-empty) in `LoanApplicationPreQualificationService.evaluateCriteria()` - always populated at
+intake, a real signal instead of a near-always-unverifiable one. Updated all 5 call sites that
+classify/re-classify an application (Create, Update, UpdateIntake, UpdateSelfService, Revert) to
+pass `occupation`/`employer` through. `distanceFromBranchKm` itself is still resolved and stored
+for the header's informational "X km from branch" line - it just no longer gates
+PREAPPROVED/PREDECLINED. `PreQualificationBreakdown.checks.employment` is optional on the frontend
+type since a breakdown computed before this change is technically still `distance`-shaped until
+re-evaluated - moot in practice since `loanApplicationController.buildBreakdown()` recomputes fresh
+on every read (no I/O), so every application shows the new check immediately regardless of when it
+was last edited.
+
+## §136 — 2026-09-09: "CRM Report" - a proper, downloadable/printable PDF of the Credit Evaluation Report
+
+User asked for a "preview feature" for a "CRM Report" - clarified this meant a formal, well-designed
+export of everything captured in the Underwriting card's Credit Evaluation Report section (CI/credit
+bureau checks, document checklist, mitigation, agency verification, conditions/recommendation),
+which previously only ever existed as on-screen form fields with no export at all.
+
+Built `CrmReportPdfBuilder` (new multi-page pdf-lib service, paginating unlike the single-page
+`LoanApplicationFormPdfBuilder` it mirrors stylistically) and `GenerateCrmReportUseCase`, wired to a
+new `POST /loan-applications/:id/crm-report` endpoint (same `loan_application.manage` gate as the
+review report itself). Saved as an Attachment on the application (auto-shows in Attachments, no
+manual upload), same `documentCategory: null` reasoning as Print Application. Frontend got two
+buttons - "Preview CRM Report" (opens in a new tab, same synchronous-`window.open`-before-await
+pattern as the existing Print Application feature) and "Download CRM Report" (straight to disk via
+`downloadFile`, same `CRM-Report-<Applicant>-<id8>.pdf` naming convention).
+
+Iterated through several user-reported gaps after the first version:
+- **Sections were hidden entirely when empty** (Credit Bureau Check, Mode of Payment & Mitigation
+  incl. "Whose name is this account under?", Agency/Contract/Allotment Verification, Conditions/CRM
+  Recommendation) - read as the report being incomplete rather than the data being unfilled. Fixed:
+  these five sections now always render, showing "—" for blank fields.
+- **Regenerating on every Preview/Download click created a new Attachment each time** - clicking
+  Preview a few times while reviewing a draft piled up several near-identical files (found and
+  cleaned up 4 duplicates from this feature's own testing). Fixed: `GenerateCrmReportUseCase` now
+  deletes any existing attachment(s) whose `fileName` exactly matches its own naming convention
+  (file + DB row) before uploading the fresh one. Required adding `IAttachmentRepository.delete()`
+  (no prior delete capability existed on that port at all) and its Prisma implementation.
+- **Staff could Preview/Download a report that silently didn't match unsaved on-screen edits** - the
+  PDF reads the *saved* review report from the DB, not the card's live draft state. Fixed:
+  Preview/Download are now `disabled` (not just warned) whenever `isReviewReportDirty` (a
+  `JSON.stringify` snapshot comparison, mitigation fields excluded since those save immediately
+  through their own separate endpoints) - with an explanatory tooltip and inline note.
+- **"Save Underwriting Details" didn't guarantee the report was attached** - user wanted certainty
+  without a separate manual step. Fixed: saving now also silently (re)generates and attaches the
+  report (`autoAttachCrmReportMutation`, no preview tab, failures don't block/error the save since
+  the review report itself is already persisted by that point). Extended the same auto-attach to the
+  separate "Save bank / ATM details" button too (mitigation saves through its own endpoint,
+  independent of Save Underwriting Details, so it needed its own trigger).
+
+## §137 — 2026-09-09: Pipeline "undo/revert" actions for every stage, each behind its own scope
+
+Building out from the existing MIS-only "Revert to Pre-Qualification" (Approved/Declined → a
+freshly recomputed system pre-qualification, `loan_application.revert`), added two more one-step-
+back actions so every stage has a way to correct a stage transition without the broader detour:
+
+- **"Revert to Under Review"** (Pre-Approval → Under Review): new domain method
+  `undoPreApproval()`, `UndoLoanApplicationPreApprovalUseCase`,
+  `POST /loan-applications/:id/undo-pre-approval` - same `loan_application.manage` gate as Tag as
+  Pre Approval itself. (Initially labeled "Undo to Under Review"; renamed to "Revert to Under
+  Review" for naming consistency with the other revert actions on this page, per user request.)
+- **"Revert to Pre-Approval"** (Approved/Declined → Pre-Approval, one step back instead of all the
+  way to pre-qualification): new domain method `revertToPreApproval()`,
+  `RevertLoanApplicationToPreApprovalUseCase`,
+  `POST /loan-applications/:id/revert-to-pre-approval`. Per explicit user instruction ("ilagay din
+  natin ito sa permission... i default mo lang na toggle off sa lahat maliban sa MIS"), gated on its
+  own **new dedicated permission** (`loan_application.revert_to_pre_approval`), same "default OFF
+  for everyone but MIS" pattern as `loan_application.ai_review` (§134) - deliberately not added to
+  any role's default grant in `seed.ts`.
+
+Also dropped a stray "AI pre-qualification" wording left over in the no-permission helper text next
+to the original Revert button, for consistency with §135's terminology cleanup.
+
+**Recurring deploy gotcha this session**: `docker compose up -d --build <service>` sometimes reports
+"Built"/"Recreated" without the running container actually switching to the freshly built image
+(confirmed by comparing `docker inspect <container> --format='{{.Image}}'` against
+`docker images` - they didn't match after at least two `--build` runs this session, most likely a
+race between the build finishing and compose's own recreate-decision check). Fix each time was an
+explicit `docker compose build <service>` followed by `docker compose up -d --force-recreate
+<service>`, then re-verifying the image IDs match. Worth remembering for future rebuilds if a
+just-pushed change doesn't seem to be live despite a "successful" `--build` run.
+
+## §138 — 2026-09-09: More UI polish - default-collapsed sections with status badges, Activity Timeline, Credit Bureau Check
+
+- **Agency Verification / Mode of Payment & Mitigation sections default to collapsed on every page
+  visit** - previously auto-opened whenever `hasAgencyData`/`isSeafarerLoan` (or
+  `hasMitigationData`) was true, which read as the section "remembering" a manual expand across
+  navigation (it wasn't - fresh `useState` on every mount, the same auto-open condition just kept
+  re-triggering for the same application). Since collapsing unconditionally would hide whether a
+  section needs attention, added a small badge next to the collapsed toggle: amber "Incomplete" if
+  a Seafarer Loan's core Agency fields (or a required mitigation account owner) are missing, or
+  neutral "X of Y filled" if it already has data - visible without expanding.
+- **"Save bank / ATM details" button recolored** to match "Save Underwriting Details" (was
+  `variant="outline"`, easy to miss next to the plain-colored fields around it).
+- **Activity Timeline redesigned** (shared `ProfileActivityTimeline` component - Loan Application/
+  Loan Account/Client Profile all pick it up): first capped its height with an internal scroll
+  (`max-h-[420px] overflow-y-auto`, "Load more" pagination reachable by scrolling to the bottom)
+  since it was growing unbounded as the pipeline gained several new revert/undo/tag actions this
+  session, each logging its own entry. Then fully redesigned per user request from a tall
+  dot-and-connecting-line timeline into compact single-line rows: a small colored icon per action
+  type + action/user on one line + relative time right-aligned, grouped under date headers
+  (Today/Yesterday/older). Icon/color derived from the activity's `action` code, with loan
+  application decision transitions (approve/decline/revert/tag/undo all sharing the generic
+  `decision_updated` action server-side) disambiguated via `details.toStatus`; everything else
+  falls back to keyword-matching the action string.
+- **Credit Bureau Check redesigned** from a Borrower/Co-Borrower table (CMAP/KYC/MyScore rows, wide
+  same-looking input boxes repeated per column) into two per-party cards, each with an initial
+  badge and its own compact label-value fields - "everything about this one party" instead of a
+  grid. Iterated to a second mockup adding a colored top accent bar per card (blue for Borrower,
+  pink for Co-Borrower) for a quicker at-a-glance distinction, keeping the initial badge neutral so
+  it reads cleanly against either accent.
+
+### Current state after §138
+
+- Loan Application detail page has a materially richer/more scannable UI than at the start of this
+  session: pipeline stepper, DTI gauge, document-card attachments, grouped Personal & Household
+  info, per-party Credit Bureau cards, a compact date-grouped Activity Timeline, and a dedicated
+  Add Co-Borrower action.
+- Two new granular permissions exist (`loan_application.ai_review`,
+  `loan_application.revert_to_pre_approval`), both intentionally defaulted OFF for every role except
+  MIS - MIS grants them per-role via Roles & Permissions when ready.
+- The pipeline now has a one-step-back "undo" action at every stage (Under Review → Pre-Qual,
+  Pre-Approval → Under Review, Approved/Declined → Pre-Approval, Approved/Declined → Pre-Qual),
+  each independently permission-gated.
+- CRM Report generation is solid: always shows the full CER structure (no more silently-hidden
+  sections), never duplicates on repeated generation, can't be generated against unsaved edits, and
+  auto-attaches on both of the two places review-report data gets saved.
+- The "Address proximity to branch" check is gone from decision scoring across every application,
+  replaced by employment/occupation - takes effect immediately on next page load for every
+  application regardless of when it was last edited (breakdown is recomputed fresh on every read).

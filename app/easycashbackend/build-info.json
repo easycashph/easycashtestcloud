@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T15:13:48+08:00",
-    "commitMessage":  "Also auto-attach the CRM Report on \"Save bank / ATM details\"",
-    "commit":  "0eadf06f",
-    "builtAt":  "2026-09-09T07:30:30.5782637Z"
+    "commitDate":  "2026-09-09T16:21:52+08:00",
+    "commitMessage":  "Redesign Activity Timeline: compact single-line rows, icons, date groups",
+    "commit":  "d5885dac",
+    "builtAt":  "2026-09-09T08:40:53.7061950Z"
 }

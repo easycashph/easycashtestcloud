@@ -1,17 +1,15 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
-import UnderDevelopment from './UnderDevelopment';
+import App from './App';
 import './index.css';
 
-// 2026-09-08 (user request): Portal is being taken offline for rework - rendering the plain
-// placeholder instead of `<App />` so visitors see "Under Development" instead of a UI that would
-// otherwise fail every backend call (the tunnel that used to back this deployment is down and no
-// longer being refreshed - see `Start Cloudflare Tunnel (Auto-Update).ps1`). Swap `<App />` back in
-// here when the Portal returns; nothing else in this app was touched.
+// 2026-09-10 (user request): Portal re-enabled - swapped back from the temporary "Under
+// Development" placeholder (2026-09-08) to the real app. `UnderDevelopment.tsx` is left in place,
+// unused, in case the Portal needs to go offline again later.
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <UnderDevelopment />
+    <App />
   </React.StrictMode>,
 );
 
