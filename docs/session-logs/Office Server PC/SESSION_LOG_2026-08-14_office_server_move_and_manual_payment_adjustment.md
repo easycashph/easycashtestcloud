@@ -6841,7 +6841,47 @@ Both reported by the user while testing a walk-in Renewal application (client: J
 
 Both fixes shipped together in one lmsfrontend rebuild, committed and pushed as `65387f83`.
 
-### Current state after §141
+## §142 — 2026-09-10: §141 prefill fix, address casing bug
+
+User asked "nakuha ba lahat ng details ni Soriano?" right after §141 shipped - spot-checked his
+actual profile data in psql to answer honestly instead of assuming, which surfaced a real bug in
+the new prefill code itself: `borrowerToApplicationPrefill()`'s present-address lookup matched
+`addressType === 'PRESENT'` (exact, uppercase), but real `addresses` rows use inconsistent casing
+across records - `'Present'`/`'Permanent'` from legacy-imported data vs `'PRESENT'` from this app's
+own `ClientCreatePage.tsx`. For Joel Soriano specifically his Present and Permanent addresses
+happen to hold identical values, so the exact-match miss (falling through to `addresses[0]`)
+produced the right answer anyway - but for any client whose two addresses differ, this would have
+silently prefilled the wrong one. Fixed: matches case-insensitively
+(`a.addressType?.toUpperCase() === 'PRESENT'`) instead. Rebuilt, force-recreated, verified,
+committed and pushed as `d17ceef8`.
+
+Answered the user's original question with what's actually on file for Joel Soriano (from psql, not
+assumed): personal/contact/address/employer/occupation prefill correctly; place of birth,
+nationality, home ownership, Facebook, dependants, monthly income, and character references are
+genuinely blank in his record (not a bug - his profile just doesn't have them); SSS/TIN show as a
+literal `"0"` placeholder from the legacy import, not a real value.
+
+## §143 — 2026-09-10: §141 prefill fix, missing co-borrower
+
+Immediate follow-up question: "nakuha din ba ang co-borrower?" Answer at the time was no - and for
+Joel Soriano specifically it didn't matter (he has zero `CoBorrower` rows on file), but investigating
+surfaced a real gap for any client who *does* have one. `Borrower.coBorrowers` exists as its own
+relation (ADR-015, resolved 2026-07-16: a client's co-borrower belongs to them directly, applies to
+every one of their loans, not scoped to a single application) with its own dedicated endpoint
+(`GET /borrowers/:id/co-borrowers`) - but `LoanApplicationCreatePage.tsx`'s existing "Select
+previous co-borrower" picker (`previousCoBorrowers`) only ever parsed co-borrowers out of past Loan
+Applications' `coBorrowerName` text, never read this endpoint. Same shape of bug as §141/§142 -
+the client's own real Borrower-side data going unused because the code only ever looked at
+application history.
+
+Fixed: added a `useQuery` for `GET /borrowers/:id/co-borrowers` (enabled whenever `lockedBorrowerId`
+is set, mirroring the existing pattern), merged into the same `previousCoBorrowers` list the
+"Select previous co-borrower" dropdown already renders - so a client's on-file co-borrower now
+shows up there regardless of whether they have a past application. User confirmed this should apply
+generically to every client, not just this one case. Rebuilt, force-recreated, verified, committed
+and pushed as `73519430`.
+
+### Current state after §143
 
 - Portal (`easycash-portal.pages.dev`) is back online with the real app, matching LMS's own status
   - both now live, neither behind an "Under Development" placeholder.
@@ -6849,8 +6889,12 @@ Both fixes shipped together in one lmsfrontend rebuild, committed and pushed as 
   Finance, Accounting, Collection Officer.
 - Loan Application create form: AI Auto-fill correctly respects its permission; searching an
   existing client for a Renewal always offers a prefill now (from their most recent application
-  when one exists, from their Client Profile otherwise) instead of ever silently going blank.
+  when one exists, from their Client Profile otherwise, address-type casing handled correctly)
+  instead of ever silently going blank, and a client's own on-file co-borrower (independent of
+  application history) is now offered in the co-borrower picker too.
 - Recurring gotchas now documented across sessions for next time: `docker compose up -d --build`
   not always swapping the running image (§137), a stale `wslrelay.exe` WSL2 port-forward surviving
-  a container recreate (§140, first seen this session), and a transient `npm error network` mid-build
-  being worth a plain retry before assuming something's actually broken (§140).
+  a container recreate (§140, first seen this session), a transient `npm error network` mid-build
+  being worth a plain retry before assuming something's actually broken (§140), and inconsistent
+  `addressType` casing across legacy-imported vs app-created address records (§142) - worth a
+  case-insensitive match, not an exact one, anywhere else this field gets read going forward.
