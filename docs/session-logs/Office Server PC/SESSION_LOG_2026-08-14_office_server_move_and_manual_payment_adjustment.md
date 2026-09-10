@@ -6731,8 +6731,6 @@ just-pushed change doesn't seem to be live despite a "successful" `--build` run.
   pink for Co-Borrower) for a quicker at-a-glance distinction, keeping the initial badge neutral so
   it reads cleanly against either accent.
 
-### Current state after §138
-
 - Loan Application detail page has a materially richer/more scannable UI than at the start of this
   session: pipeline stepper, DTI gauge, document-card attachments, grouped Personal & Household
   info, per-party Credit Bureau cards, a compact date-grouped Activity Timeline, and a dedicated
@@ -6749,3 +6747,110 @@ just-pushed change doesn't seem to be live despite a "successful" `--build` run.
 - The "Address proximity to branch" check is gone from decision scoring across every application,
   replaced by employment/occupation - takes effect immediately on next page load for every
   application regardless of when it was last edited (breakdown is recomputed fresh on every read).
+
+## §139 — 2026-09-10: Portal re-enabled (reverses §[Under Development takedown, 2026-09-08])
+
+User: "i enable mo muna yung easycash portal. remvoe under development temporary" - reverses the
+temporary offline placeholder from two sessions ago.
+
+- `app/portalfrontend/src/main.tsx`: swapped back from rendering `<UnderDevelopment />` to the real
+  `<App />`. `UnderDevelopment.tsx` left in place, unused, in case the Portal needs to go offline
+  again later.
+- `scripts/Start Cloudflare Tunnel (Auto-Update).ps1`: restored the Portal's
+  `Update-PagesProject` call (Step 3) that was hardcoded to skip in the takedown.
+- Rebuilt/force-recreated `portalfrontend`, verified healthy, committed and pushed
+  (`b819ab46`) - this push triggers Cloudflare Pages' git-integrated auto-deploy of the real Portal
+  app back to `easycash-portal.pages.dev`. Noted for the user: the Portal's live backend
+  connectivity (its `VITE_API_BASE_URL` pointing at the current tunnel URL) still depends on them
+  running the tunnel script themselves - not automatic from the git push alone.
+
+## §140 — 2026-09-10: New "Super Admin" role, full parity with MIS
+
+User wants a second super-user role for people other than MIS staff (e.g. an owner/executive
+account) with **identical** access to MIS, not a partial permission set. Investigation surfaced
+that this needed two layers, not one:
+
+1. **DB-backed permissions** (`seed.ts`): added `'Super Admin'` to the seeded role list, granted
+   every permission code on creation. Required a new `isNewRole` tracking flag alongside the
+   existing `isNewPermission` one - the existing "only auto-grant a code the first time it's
+   created" logic (added in an earlier session to stop the seed from re-asserting MIS's
+   *customized* grants on every run) would otherwise have left a **brand-new role** with zero
+   grants, since none of the 54 permission codes are "new" on a normal seed run. Fix: a role
+   created THIS run gets its full default set regardless of `isNewPermission`.
+2. **Hard-coded `requireRole('MIS')` checks** - six backend routers bypass the permission system
+   entirely for a handful of sensitive actions (Portal account provisioning, the Roles &
+   Permissions screen itself, Role Classes, Product Type Labels, and two bulk document downloads).
+   A Super Admin with every DB permission would still have been locked out of all of these. Added
+   `'Super Admin'` alongside `'MIS'` in every one of these checks
+   (`borrowerRouter.ts`/`documentRouter.ts`/`loanDocumentRouter.ts`/`RoleClassRouter.ts`/
+   `AccessControlRouter.ts`/`ProductTypeLabelRouter.ts`). Two more equivalent hard-coded frontend
+   guards (`AppLayout.tsx`'s `/admin/system` nav visibility, `SystemPage.tsx`'s own page guard)
+   updated the same way, plus the role type/lists (`staticConfig.ts`, `roleContext.tsx`,
+   `MemberListPage.tsx`) so the role is assignable and selectable at all.
+
+Deployed (backend + lmsfrontend rebuild, force-recreate, seed re-run) and verified via psql: **Super
+Admin now has 54/54 permissions** - actually one ahead of MIS's own 52/54, since MIS had 2
+permissions deliberately turned off via the live Roles & Permissions screen at some point in the
+past (left untouched, per the standing "never re-assert a pre-existing code's grants" rule).
+Committed and pushed as `d1b2ea7d` (after a `git pull --rebase` around an unrelated concurrent
+docs commit from another machine). **No user has the Super Admin role assigned yet** - assignable
+via Administration > System > User Accounts once MIS decides who should have it.
+
+Build note: the first rebuild attempt for this feature failed outright on a transient `npm error
+network` during `npm install` inside the backend build stage (registry unreachable mid-build,
+unrelated to any code change) - host-level and in-container connectivity were both confirmed fine
+moments later, and a plain retry of the same `docker compose build` succeeded. Also hit the
+already-documented stale-`wslrelay.exe`-port-forward gotcha again after this rebuild (see §137)
+- `netstat` showed a second, stale listener on `[::1]:4000` left over from before the container was
+recreated, causing the `/health` curl to intermittently hang; killing that `wslrelay.exe` process
+(identified via `Get-Process -Id <pid>`) immediately fixed it.
+
+## §141 — 2026-09-10: Two Loan Application create-form bugs
+
+Both reported by the user while testing a walk-in Renewal application (client: Joel Soriano).
+
+- **"AI Auto-fill (optional)" card ignored its own permission toggle.** The card
+  (`LoanApplicationCreatePage.tsx`) was never wired to `ai_extraction.use` at all - it rendered
+  unconditionally regardless of what MIS set in Roles & Permissions. Fixed: the whole card is now
+  gated behind `hasPermission('ai_extraction.use')`.
+- **Selecting an existing client with no Loan Application on file silently produced a blank
+  form.** Root cause: the "search existing client" flow's prefill only ever reads from that
+  client's *most recent Loan Application* (`LoanApplicationEntry`'s `latestApplication` lookup,
+  matched via `createdBorrowerId`/`borrowerId`). Joel Soriano - like every legacy client migrated
+  straight in with a `legacyId` and no `sourceApplicationId` - has never had a Loan Application
+  created through this LMS, so the lookup always came up empty and the review step silently
+  auto-resolved to a blank form with no explanation. Confirmed via psql before fixing (`legacyId`
+  set, `sourceApplicationId` empty, zero matching rows in `loan_applications`).
+
+  User's direction once the cause was clear: prefill from the Client Profile itself whenever there's
+  no previous application, covering every field with a Borrower-side equivalent ("dapat lahat ng
+  client details... kahit walang application dapat makuha din ang details ni client sa client
+  account"). Implemented `borrowerToApplicationPrefill()` mapping personal/contact info, present
+  address, employment (`incomeDetail`), TIN/SSS (`governmentId`), dependants, and the first two
+  character references onto the same shape `LoanApplicationForm` already reads from `prefillFrom`
+  - loan-specific fields (type/amount/term/purpose), co-borrower, and the rest of the reference set
+  have no Borrower-side equivalent and are deliberately left blank either way, same as before.
+  `LoanApplicationForm`'s `prefillFrom` prop relaxed from `LoanApplication` to
+  `Partial<LoanApplication>` to accept this synthetic object (every existing field read already
+  used `?.`/`??`, so purely a type-level change plus two now-optional-chained reads that needed
+  it). The review step (Search → select → review → accept/blank) no longer auto-skips to blank when
+  there's no previous application - it now shows the same review card sourced from the Client
+  Profile instead, with the description text and section list (badges, "Loan details" / "References"
+  visibility) adjusted so it doesn't misleadingly frame profile data as "from their most recent
+  application."
+
+Both fixes shipped together in one lmsfrontend rebuild, committed and pushed as `65387f83`.
+
+### Current state after §141
+
+- Portal (`easycash-portal.pages.dev`) is back online with the real app, matching LMS's own status
+  - both now live, neither behind an "Under Development" placeholder.
+- Roles: MIS, **Super Admin** (new, full parity with MIS, unassigned), Loan Operation Manager, CRM,
+  Finance, Accounting, Collection Officer.
+- Loan Application create form: AI Auto-fill correctly respects its permission; searching an
+  existing client for a Renewal always offers a prefill now (from their most recent application
+  when one exists, from their Client Profile otherwise) instead of ever silently going blank.
+- Recurring gotchas now documented across sessions for next time: `docker compose up -d --build`
+  not always swapping the running image (§137), a stale `wslrelay.exe` WSL2 port-forward surviving
+  a container recreate (§140, first seen this session), and a transient `npm error network` mid-build
+  being worth a plain retry before assuming something's actually broken (§140).
