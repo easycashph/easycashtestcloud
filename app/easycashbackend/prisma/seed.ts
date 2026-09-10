@@ -34,6 +34,12 @@ async function main() {
   // Officer/Cashier/Collection Officer/Viewer).
   const roleNames = [
     'MIS',
+    // 2026-09-10 (user request): a second, full-parity super-user role for people other than MIS
+    // staff (e.g. an owner/executive account) - granted every permission below exactly like MIS,
+    // and added alongside every hard-coded `requireRole('MIS')` check in the HTTP layer (see each
+    // router's own comment) so it is a true equal, not just "sees everything in Roles &
+    // Permissions but locked out of a few screens".
+    'Super Admin',
     'Loan Operation Manager',
     'CRM',
     'Finance',
@@ -42,7 +48,10 @@ async function main() {
   ] as const;
 
   const roles: Record<string, { id: string }> = {};
+  const isNewRole: Record<string, boolean> = {};
   for (const name of roleNames) {
+    const existingRole = await prisma.role.findUnique({ where: { name } });
+    isNewRole[name] = existingRole === null;
     roles[name] = await prisma.role.upsert({
       where: { name },
       update: {},
@@ -194,6 +203,7 @@ async function main() {
   // this block's own doc comment above for the full rationale).
   const defaultRolePermissions: Record<string, string[]> = {
     MIS: permissionCodes, // super-user role (ADR-038 §1/§3.2) - every permission.
+    'Super Admin': permissionCodes, // 2026-09-10: second super-user role, same as MIS - every permission.
     'Loan Operation Manager': [
       'loan_application.manage',
       'loan_application.final_approve',
@@ -267,7 +277,10 @@ async function main() {
       // Only ever auto-grant a permission code THIS run just created for the first time - see
       // isNewPermission's own doc comment above. A pre-existing code's role grants are exclusively
       // MIS's to configure from here on (Roles & Permissions screen), never re-asserted by seed.
-      if (!isNewPermission[code]) continue;
+      // Exception: a role THIS run just created (e.g. Super Admin, 2026-09-10) has no prior grants
+      // to preserve, so it gets its full default set on creation, same as every other role did the
+      // first time it was seeded.
+      if (!isNewPermission[code] && !isNewRole[roleName]) continue;
       await prisma.rolePermission.upsert({
         where: { roleId_permissionId: { roleId: role.id, permissionId: permissions[code].id } },
         update: {},

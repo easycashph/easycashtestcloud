@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-09T16:21:52+08:00",
-    "commitMessage":  "Redesign Activity Timeline: compact single-line rows, icons, date groups",
-    "commit":  "d5885dac",
-    "builtAt":  "2026-09-09T08:40:53.7061950Z"
+    "commitDate":  "2026-09-10T09:44:40+08:00",
+    "commitMessage":  "Re-enable Portal app (revert Under Development placeholder)",
+    "commit":  "b819ab46",
+    "builtAt":  "2026-09-10T06:38:58.2912135Z"
 }

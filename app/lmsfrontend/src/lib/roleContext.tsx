@@ -178,7 +178,7 @@ interface RoleContextValue {
 
 const RoleContext = React.createContext<RoleContextValue | undefined>(undefined);
 
-const KNOWN_ROLES: LmsRole[] = ['MIS', 'Loan Operation Manager', 'CRM', 'Finance', 'Accounting', 'Collection Officer'];
+const KNOWN_ROLES: LmsRole[] = ['MIS', 'Super Admin', 'Loan Operation Manager', 'CRM', 'Finance', 'Accounting', 'Collection Officer'];
 
 function toAccount(user: AuthenticatedUserView): AuthenticatedAccount {
   const roles = user.roles.filter((r): r is LmsRole => (KNOWN_ROLES as string[]).includes(r));

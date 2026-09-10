@@ -29,7 +29,7 @@ export function createDocumentRouter(deps: DocumentControllerDeps, tokenService:
   // ZIP, instead of downloading each file one at a time. Uses `requireRole('MIS')` rather than the
   // DB-backed `requirePermission`, matching every other hard-restricted-to-MIS route in this
   // codebase (e.g. borrowerRouter's portal-account routes) - not a `Permission` row, deliberately.
-  router.get('/borrowers/:id/documents/download-all', requireAuth, requireRole('MIS'), controller.downloadAllForBorrower);
+  router.get('/borrowers/:id/documents/download-all', requireAuth, requireRole('MIS', 'Super Admin'), controller.downloadAllForBorrower);
 
   return router;
 }

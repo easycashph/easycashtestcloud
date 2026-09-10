@@ -10,7 +10,7 @@ import { updateProductTypeLabelSchema } from './productTypeLabelSchemas';
 export function createProductTypeLabelRouter(controller: ProductTypeLabelController, tokenService: ITokenService): Router {
   const router = Router();
   const requireAuth = createRequireAuth(tokenService);
-  const requireMis = requireRole('MIS');
+  const requireMis = requireRole('MIS', 'Super Admin');
 
   router.get('/product-type-labels', requireAuth, controller.list);
   router.patch('/product-type-labels/:id', requireAuth, requireMis, validateBody(updateProductTypeLabelSchema), controller.update);

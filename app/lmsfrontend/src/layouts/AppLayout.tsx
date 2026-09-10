@@ -124,8 +124,10 @@ const NAV_VISIBILITY: Partial<Record<string, (permissions: ReturnType<typeof use
   // 2026-08-06 (user request): Administration > System is MIS-only, full stop - unlike every
   // other nav-visibility entry above, not tied to one configurable permission code, since the
   // whole System hub (Messaging & Alerts, User Accounts, Loan Products, Activity Logs) is itself
-  // the screen MIS uses to configure everyone else's access.
-  '/admin/system': (permissions) => permissions.currentAccount.roles.includes('MIS'),
+  // the screen MIS uses to configure everyone else's access. 2026-09-10: Super Admin added as a
+  // second, full-parity super-user role (user request) - same access as MIS everywhere.
+  '/admin/system': (permissions) =>
+    permissions.currentAccount.roles.includes('MIS') || permissions.currentAccount.roles.includes('Super Admin'),
 };
 
 function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {

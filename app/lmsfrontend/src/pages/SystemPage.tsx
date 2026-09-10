@@ -417,12 +417,12 @@ export function SystemPage() {
     initialTab && (SYSTEM_TABS as string[]).includes(initialTab) ? (initialTab as SystemTab) : 'reminders',
   );
 
-  if (!currentAccount.roles.includes('MIS')) {
+  if (!currentAccount.roles.includes('MIS') && !currentAccount.roles.includes('Super Admin')) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
           <Lock className="h-6 w-6 text-muted-foreground" />
-          <p className="text-sm font-medium">Restricted to MIS accounts</p>
+          <p className="text-sm font-medium">Restricted to MIS/Super Admin accounts</p>
           <p className="text-sm text-muted-foreground">
             Signed in as <span className="font-medium text-foreground">{currentAccount.name}</span> ({currentAccount.role}).
           </p>

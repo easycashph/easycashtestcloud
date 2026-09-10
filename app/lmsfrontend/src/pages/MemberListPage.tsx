@@ -30,7 +30,7 @@ import type { SessionView } from '@/lib/authTypes';
 import { cn, describeUserAgent, formatDate, formatDateTime } from '@/lib/utils';
 import { avatarColorClasses } from '@/lib/avatarColor';
 
-const LMS_ROLES: LmsRole[] = ['MIS', 'Loan Operation Manager', 'CRM', 'Finance', 'Accounting', 'Collection Officer'];
+const LMS_ROLES: LmsRole[] = ['MIS', 'Super Admin', 'Loan Operation Manager', 'CRM', 'Finance', 'Accounting', 'Collection Officer'];
 const PAGE_SIZE = 100;
 
 function getSortValue(user: User, key: string): string | number | Date | null | undefined {
@@ -765,7 +765,7 @@ export function MemberListPage() {
                     </button>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={user.roles.includes('MIS') ? 'default' : 'outline'}>{user.roleClassName ?? 'Not set'}</Badge>
+                    <Badge variant={user.roles.includes('MIS') || user.roles.includes('Super Admin') ? 'default' : 'outline'}>{user.roleClassName ?? 'Not set'}</Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{user.branchName}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{user.email}</TableCell>

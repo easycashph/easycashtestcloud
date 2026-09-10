@@ -34,7 +34,7 @@ export function createLoanDocumentRouter(deps: LoanDocumentControllerDeps, token
   // 2026-08-20 (user request): MIS-only bulk export - every attachment, generated document, and
   // signed document for one loan account as a single organized ZIP. `requireRole('MIS')` rather
   // than `requirePermission`, matching every other hard-restricted-to-MIS route in this codebase.
-  router.get('/loan-accounts/:id/documents/download-all', requireAuth, requireRole('MIS'), controller.downloadAll);
+  router.get('/loan-accounts/:id/documents/download-all', requireAuth, requireRole('MIS', 'Super Admin'), controller.downloadAll);
 
   return router;
 }

@@ -27,13 +27,13 @@ export function createBorrowerRouter(deps: BorrowerControllerDeps, tokenService:
   // Bind existing Client data to Portal (2026-08-06) - MIS-only, mirrors "Only MIS may
   // add/edit LMS member accounts" (canManageMembers on the frontend): creating/linking a client's
   // portal login is the same class of sensitive account-provisioning action.
-  router.get('/borrowers/:id/portal-account', requireAuth, requireRole('MIS'), controller.getPortalAccountStatus);
-  router.post('/borrowers/:id/portal-account', requireAuth, requireRole('MIS'), controller.createPortalAccount);
+  router.get('/borrowers/:id/portal-account', requireAuth, requireRole('MIS', 'Super Admin'), controller.getPortalAccountStatus);
+  router.post('/borrowers/:id/portal-account', requireAuth, requireRole('MIS', 'Super Admin'), controller.createPortalAccount);
   // 2026-08-13 (user request): staff-triggered password reset for a client locked out of/unable
   // to recover their own Portal account - same MIS-only gate as the rest of this account-
   // provisioning group.
-  router.post('/borrowers/:id/portal-account/reset-password', requireAuth, requireRole('MIS'), controller.resetPortalAccountPassword);
-  router.post('/borrowers/:id/portal-account/bind', requireAuth, requireRole('MIS'), controller.bindPortalAccount);
+  router.post('/borrowers/:id/portal-account/reset-password', requireAuth, requireRole('MIS', 'Super Admin'), controller.resetPortalAccountPassword);
+  router.post('/borrowers/:id/portal-account/bind', requireAuth, requireRole('MIS', 'Super Admin'), controller.bindPortalAccount);
   router.get('/borrowers', requireAuth, controller.list);
   router.patch(
     '/borrowers/:id',

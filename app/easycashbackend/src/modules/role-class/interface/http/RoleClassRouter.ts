@@ -10,7 +10,7 @@ import { createRoleClassSchema, updateRoleClassSchema } from './roleClassSchemas
 export function createRoleClassRouter(controller: RoleClassController, tokenService: ITokenService): Router {
   const router = Router();
   const requireAuth = createRequireAuth(tokenService);
-  const requireMemberManagement = requireRole('MIS');
+  const requireMemberManagement = requireRole('MIS', 'Super Admin');
 
   router.get('/role-classes', requireAuth, controller.list);
   router.post('/role-classes', requireAuth, requireMemberManagement, validateBody(createRoleClassSchema), controller.create);

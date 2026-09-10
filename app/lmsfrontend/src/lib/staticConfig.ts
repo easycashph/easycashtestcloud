@@ -60,4 +60,4 @@ export function isDiscontinuedPaymentMethod(code: string): boolean {
   return ALL_PAYMENT_METHODS.find((m) => m.code === code)?.isActive === false;
 }
 
-export type LmsRole = 'MIS' | 'Loan Operation Manager' | 'CRM' | 'Finance' | 'Accounting' | 'Collection Officer';
+export type LmsRole = 'MIS' | 'Super Admin' | 'Loan Operation Manager' | 'CRM' | 'Finance' | 'Accounting' | 'Collection Officer';
