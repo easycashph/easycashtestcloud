@@ -6881,10 +6881,103 @@ shows up there regardless of whether they have a past application. User confirme
 generically to every client, not just this one case. Rebuilt, force-recreated, verified, committed
 and pushed as `73519430`.
 
-### Current state after §143
+## §144 — 2026-09-10: Portal taken offline again (reverses §139)
 
-- Portal (`easycash-portal.pages.dev`) is back online with the real app, matching LMS's own status
-  - both now live, neither behind an "Under Development" placeholder.
+User: "i disable na ulit natin yung Under Development na sinabi ko kangina" - reverses §139's
+re-enable, back to the same state as the original 2026-09-08 takedown.
+
+- `app/portalfrontend/src/main.tsx`: swapped back from `<App />` to `<UnderDevelopment />` (exact
+  same code as the original 6825d92b takedown commit, re-applied).
+- `scripts/Start Cloudflare Tunnel (Auto-Update).ps1`: disabled the Portal `Update-PagesProject`
+  call again (reverting §139's restoration of it).
+- Rebuilt/force-recreated `portalfrontend`, verified healthy, committed and pushed (`cd7b4fb6`).
+
+User then asked whether the tunnel script edit was actually necessary - could the placeholder work
+without it, or would skipping it risk a white screen instead? Checked `UnderDevelopment.tsx`: it's
+a fully static component with no API calls, no env var reads, no backend dependency at all - so
+whether `VITE_API_BASE_URL` gets refreshed by the tunnel script or not is irrelevant to what
+renders. Confirmed it would be safe to leave the tunnel script untouched (the only downside of
+leaving it enabled is a wasted Pages redeploy each tunnel run, not a broken page). User's call:
+"huwag na muna" - leave the tunnel script edit as already pushed.
+
+## §145 — 2026-09-11: Backup tag for the live-Portal state
+
+User: "pwede mo ba i backup lang muna yung easycash portal page. In case gusto namin i revert
+pabalik dito?" - wanted a safe, easy way back to the real Portal app from before §144, without
+digging through commit history, and specifically wanted assurance that a future push from another
+machine couldn't overwrite or lose that backup point.
+
+Nothing needed reconstructing - the real-app version of `main.tsx` already exists unmodified in git
+history (git commits are immutable; §144 only added a new commit on top, it didn't rewrite or
+delete anything). Created and pushed an annotated tag, `portal-live-backup-2026-09-10`, pointing at
+`80fbaeba` (the last commit before §144's re-takedown, i.e. the tip of §139-§143's work with the
+Portal live). A tag is a fixed pointer to that exact commit SHA - future commits/pushes to `main`
+from any machine move `main` forward but never touch or overwrite an already-created tag, which
+directly answered the user's "hindi ma-overwrite ng ibang device" concern. To actually revert Portal
+back to live later: restore `app/portalfrontend/src/main.tsx` from this tag (`git show
+portal-live-backup-2026-09-10:app/portalfrontend/src/main.tsx`) and redeploy.
+
+## §146 — 2026-09-11: Cloudflare tunnel died after this morning's auto-start, diagnosed and manually restarted
+
+User: "naka open ba ngayon ang tunnel. Hindi ko ma open ang live na link?" - `easycash-lms.pages.dev`
+wasn't loading. Diagnosis, in order:
+
+- `cloudflared` process: not running.
+- Local backend itself: healthy (`curl localhost:4000/health` fine) - so the problem was purely the
+  tunnel exposing it, not the backend.
+- The "Easycash LMS - Cloudflare Tunnel AutoStart" scheduled task's `Get-ScheduledTaskInfo`:
+  `LastRunTime` = 8:06am today, `LastTaskResult` = `3221225786` (`0xC000013A`,
+  `STATUS_CONTROL_C_EXIT` - the process was abruptly terminated, not a clean exit or a script
+  error). Machine boot time was 8:04am and the Admin RDP logon was 8:06am - so the task's
+  `LogonTrigger` fired correctly on logon, but the tunnel process died shortly after starting.
+- Root cause: the task's principal was `LogonType: Interactive`, tied to that specific interactive
+  (RDP) logon session - if that session hiccups/reconnects/disconnects, everything spawned under it
+  can be torn down with it. `RestartCount: 3` / `RestartInterval: 1 min` existed but had already
+  exhausted by the time the user noticed, hours later - nothing was left actively retrying.
+
+Fix for the moment: manually launched the script in a new window - `cloudflared` came up
+immediately (confirmed via `Get-Process`), and the live URL returned `HTTP 200` within seconds.
+
+## §147 — 2026-09-11: Hardened the tunnel auto-start to run as SYSTEM, independent of any session
+
+User, once the Interactive-logon fragility was explained: "oo, gawin mo na" - wanted it hardened so
+this can't happen again from a session hiccup.
+
+- Windows requires elevation to change a scheduled task's principal, which this non-elevated
+  session didn't have (`Set-ScheduledTask` / `schtasks.exe` both returned "Access is denied").
+  Rather than attempt to escalate around that (modifying this kind of system-level configuration
+  without the right privileges is exactly the class of action that needs the user's own hands),
+  handed the user a ready-to-run PowerShell block and asked them to run it themselves in an
+  elevated ("Run as Administrator") window - which they did.
+- New configuration: `Principal` = `NT AUTHORITY\SYSTEM` / `ServiceAccount` logon type (no password
+  needed - a benefit of SYSTEM over a stored-credential user account) / `Highest` run level;
+  `Trigger` swapped from `LogonTrigger` to a `BootTrigger` with a 1-minute delay (gives Docker's own
+  startup sequence room before the script's existing 5-minute backend-health poll takes over).
+  Confirmed safe to run under SYSTEM first: the script only ever invokes
+  `cloudflared tunnel --url http://localhost:4000` (an anonymous "quick tunnel" - no login, no
+  `~/.cloudflared/cert.pem`, no user-profile-specific state at all) and reads its Cloudflare API
+  config from an absolute project path (`local/tunnel-autoupdate.env`), so nothing about it depends
+  on a specific user's profile/session.
+- Verified with `Start-ScheduledTask` (manual trigger, no reboot needed): the SYSTEM-owned
+  `cloudflared.exe` came up in Session 0 ("Services") within seconds. Found - and cleaned up - a
+  brief duplicate: the earlier §146 manually-launched instance (tied to the interactive session)
+  was still running at the same time, which would have raced two different tunnel URLs against
+  each other; stopped that one, leaving only the SYSTEM-owned instance. Confirmed reachable again
+  (`HTTP 200`) with only the one tunnel running.
+- `Get-ScheduledTaskInfo`'s `LastTaskResult` reads `267009` (`SCHED_S_TASK_RUNNING`) by design, not
+  a stuck/failed state - the script's own last line is `Wait-Process -Id $proc.Id`, so it
+  deliberately blocks for as long as the tunnel itself stays up. "Running" forever *is* the correct
+  steady state for this task now.
+
+### Current state after §147
+
+- Portal (`easycash-portal.pages.dev`) is offline again behind the "Under Development" placeholder,
+  matching its original 2026-09-08 state - LMS is unaffected and remains fully live throughout.
+  A one-command way back to the live Portal exists via the `portal-live-backup-2026-09-10` tag.
+- The Cloudflare tunnel auto-start is now hardened: runs as `NT AUTHORITY\SYSTEM` on a boot trigger,
+  independent of any interactive/RDP logon session - the exact fragility that caused it to silently
+  die this morning (§146) no longer applies. Verify after any future reboot that the SYSTEM-owned
+  `cloudflared.exe` (Session 0/"Services") comes up on its own with no one needing to log in first.
 - Roles: MIS, **Super Admin** (new, full parity with MIS, unassigned), Loan Operation Manager, CRM,
   Finance, Accounting, Collection Officer.
 - Loan Application create form: AI Auto-fill correctly respects its permission; searching an
@@ -6895,6 +6988,8 @@ and pushed as `73519430`.
 - Recurring gotchas now documented across sessions for next time: `docker compose up -d --build`
   not always swapping the running image (§137), a stale `wslrelay.exe` WSL2 port-forward surviving
   a container recreate (§140, first seen this session), a transient `npm error network` mid-build
-  being worth a plain retry before assuming something's actually broken (§140), and inconsistent
+  being worth a plain retry before assuming something's actually broken (§140), inconsistent
   `addressType` casing across legacy-imported vs app-created address records (§142) - worth a
-  case-insensitive match, not an exact one, anywhere else this field gets read going forward.
+  case-insensitive match, not an exact one, anywhere else this field gets read going forward - and
+  an `Interactive`-logon scheduled task silently dying with the session it's tied to (§146/§147) -
+  prefer a `SYSTEM`/`BootTrigger` setup for anything that must survive unattended.
