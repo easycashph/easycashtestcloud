@@ -7142,6 +7142,95 @@ Rebuilt, force-recreated, verified, committed and pushed as `61b691a5`.
 - Loan Application Detail page's Underwriting card now shows an advisory 0-100 Internal Credit
   Score (income/DTI/payment history/employment) alongside the existing Decision scoring breakdown -
   purely informational, doesn't affect the Approve/Decline decision itself.
+## §152 — 2026-09-11: SDevTech loan-account sync, hardened with a preview step + .bat wrapper
+
+User: "i sync mo ang loan account only dito sa lms galing sa bagon sdev database" -
+`legacy/mongodb/20260911_103504.zip`. Extracted into `legacy/mongodb/extracted/20260911_103504/`
+(picked up automatically by `legacyDumpPath.ts`'s newest-by-mtime resolution). Diffed the dump's
+`loan_accounts` against Postgres by `legacyId` before touching `--only` at all (a throwaway
+`scratch-diff-new-loan-accounts.ts`, deleted once its job was done) - found 20 loan codes not yet
+migrated.
+
+User then asked to see the applicant names behind those 20 codes before migrating anything - a
+first attempt guessed the wrong Mongo field name for the borrower reference (tried `client_id`/
+`borrower_id`, got "borrower not found" for all 20), so read one raw doc in full and found the
+actual field is `accountHolderKey`. Corrected, re-ran, and the real list surfaced two anomalies
+worth flagging rather than migrating blind: `SML-PDC_00009` appears **twice** in the same dump for
+two entirely different borrowers/amounts, and `REL-REG_00001`'s ₱10,152,284.26 is roughly 100x
+every other loan in the batch. Reported both to the user rather than guessing past them - user's
+call was to proceed only with the one unambiguous loan, `SML-REG_00391` (Joel Soriano's loan,
+₱117,342.70), leaving the other 19 (including both anomalies) for a later, separately-reviewed run.
+
+Per user's own follow-up ("idagdag mo nalang sa script na gawan muna ng list bago mo i migrate"),
+built that preview permanently into `sync-loan-accounts-only.ts` itself instead of leaving it a
+one-off: `printPreview()` now runs before Phase 1 in both dry-run and `--apply` mode, resolving
+each in-scope loan's borrower name via `accountHolderKey` against `client_accounts.bson`, plus a
+duplicate-loan-code flag and a batch-level 10x-median outlier check - so the next person to run
+this script (with or without Claude in the loop) gets the same safety net by default. Also added a
+`.bat` wrapper (`Sync Loan Accounts Only From SDevTech.bat`, same shape as the existing "Update
+Database From SDevTech.bat") that finds the latest zip, extracts it, prompts for the loan code(s)
+to sync, dry-runs first, and asks for confirmation before `--apply`.
+
+Migrated `SML-REG_00391` (`--apply`), verified in Postgres. Committed and pushed as `19e8afcf`
+(preview feature) and `330caf7e` (.bat wrapper).
+
+## §153 — 2026-09-11: Attached September 2026 loan-release documents from Google Drive
+
+User: "i check at i attach ito dito sa lms officer server pc itong mga attachment ng loan releases
+ng september 2026" + a Google Drive folder link ("9 SEPTEMBER 2026"). Used the Drive connector
+(`get_file_metadata`/`search_files` by `parentId`) to confirm access and list the folder's three
+per-applicant subfolders: `SML-REG_00389 ROMEL YABUT MAGLONZO`, `SML-REG_00390 RAFAEL BAGUIO`,
+`SML-REG_00391 SML JOEL SORIANO` - the last one is the exact loan just migrated in §152, a nice
+confirmation the two tasks lined up. Verified via psql that all three loan accounts already existed
+in Postgres with zero attachments each before touching anything.
+
+Downloaded all 48 files (24 + 10 + 14) via `download_file_content` - most came back "too large for
+inline" and were saved by the harness as JSON-with-base64 result files instead; decoded those with
+small Node one-liners into per-loan staging folders under the session scratchpad, matching
+`fileSize` against Drive's own metadata as a decode-correctness check throughout. Per user request
+("pwede mo ba ayos mga file name nit bago i attach?"), normalized every filename before attaching -
+dropped repeated `"Lastname, Firstname - "` prefixes, `"Archive (...)"` wrapping, and inconsistent
+spacing/casing, down to clean names like `CRM Report.docx`, `Selfie Photo.jpeg`, `Passport (2).jpeg`
+(disambiguated where a client had two of the same document type).
+
+Wrote `scratch-attach-september-releases.ts` (same storageKey/DB pattern as the existing
+`attach-drive-staged-documents.ts` template - `loan_account/<ownerId>/<uuid><ext>`), dry-ran it,
+reviewed the per-loan file lists, then `--apply`'d. Verified via psql (24/10/14 attachment counts,
+matching exactly) and confirmed the physical files landed under
+`app/easycashbackend/storage/loan_account/<id>/` - the same host path Docker Compose already
+volume-mounts into the running backend container, so no rebuild/restart was needed for them to
+become visible. Committed and pushed as `e35836eb`.
+
+### Current state after §153
+
+- Portal (`easycash-portal.pages.dev`) is offline again behind the "Under Development" placeholder,
+  matching its original 2026-09-08 state - LMS is unaffected and remains fully live throughout.
+  A one-command way back to the live Portal exists via the `portal-live-backup-2026-09-10` tag.
+- The Cloudflare tunnel auto-start is hardened: runs as `NT AUTHORITY\SYSTEM` on a boot trigger,
+  independent of any interactive/RDP logon session - the exact fragility that caused it to silently
+  die on 2026-09-11 morning (§146) no longer applies. Verify after any future reboot that the
+  SYSTEM-owned `cloudflared.exe` (Session 0/"Services") comes up on its own with no one needing to
+  log in first.
+- Roles: MIS, **Super Admin** (full parity with MIS, still unassigned), Loan Operation Manager,
+  CRM, Finance, Accounting, Collection Officer.
+- Loan Application create form: AI Auto-fill correctly respects its permission; searching an
+  existing client for a Renewal always offers a prefill now (from their most recent application
+  when one exists, from their Client Profile otherwise, address-type casing handled correctly)
+  instead of ever silently going blank, and a client's own on-file co-borrower (independent of
+  application history) is now offered in the co-borrower picker too.
+- Loan Applications list page: shows *why* a Declined/Pre Declined application is in that state
+  directly in the table (wraps instead of truncating, contained in its own horizontal scroll), and
+  can now be filtered by Submitted date range (server-side, with quick presets).
+- Loan Application Detail page's Underwriting card now shows an advisory 0-100 Internal Credit
+  Score (income/DTI/payment history/employment) alongside the existing Decision scoring breakdown -
+  purely informational, doesn't affect the Approve/Decline decision itself.
+- `sync-loan-accounts-only.ts` now always previews (borrower name, amount, duplicate/outlier flags)
+  before writing, in both dry-run and `--apply`; a `.bat` wrapper exists for running it without
+  Claude in the loop. `SML-REG_00391` (Joel Soriano) is migrated; 19 other new SDevTech loan codes
+  from the 2026-09-11 dump remain unmigrated pending review (two flagged anomalies among them - a
+  duplicated loan code and a 100x-median outlier amount).
+  `SML-REG_00389`/`SML-REG_00390`/`SML-REG_00391` all have their September 2026 loan-release
+  documents attached (24/10/14 files respectively) with cleaned-up filenames.
 - Recurring gotchas now documented across sessions for next time: `docker compose up -d --build`
   not always swapping the running image (§137), a stale `wslrelay.exe` WSL2 port-forward surviving
   a container recreate (§140, first seen this session), a transient `npm error network` mid-build
@@ -7149,6 +7238,8 @@ Rebuilt, force-recreated, verified, committed and pushed as `61b691a5`.
   `addressType` casing across legacy-imported vs app-created address records (§142) - worth a
   case-insensitive match, not an exact one, anywhere else this field gets read going forward - an
   `Interactive`-logon scheduled task silently dying with the session it's tied to (§146/§147) -
-  prefer a `SYSTEM`/`BootTrigger` setup for anything that must survive unattended - and a new table
+  prefer a `SYSTEM`/`BootTrigger` setup for anything that must survive unattended - a new table
   column that can widen past the viewport needs its own `overflow-x-auto` wrapper, not left to the
-  page (§149).
+  page (§149) - and a legacy dump's raw Mongo field names are worth confirming against one real
+  document before writing lookup logic against them, not assumed from a sibling collection's naming
+  convention (§152).
