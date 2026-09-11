@@ -300,6 +300,11 @@ export function LoanApplicationsPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* 2026-09-11 (user-reported: adding the Reason column widened the table past the
+              viewport, and with no scroll container of its own, the WHOLE page - including the
+              Search & Filter header above - scrolled sideways with it. Contained here instead, so
+              only the table itself scrolls horizontally if it ever needs to. */}
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -363,7 +368,7 @@ export function LoanApplicationsPage() {
                       })()
                     )}
                   </TableCell>
-                  <TableCell className="max-w-[220px] cursor-pointer truncate text-xs text-muted-foreground" title={declineReason(app) ?? undefined} onClick={() => navigate(`/applications/${app.id}`)}>
+                  <TableCell className="max-w-[200px] cursor-pointer whitespace-normal break-words text-xs text-muted-foreground" onClick={() => navigate(`/applications/${app.id}`)}>
                     {declineReason(app) ?? '—'}
                   </TableCell>
                   <TableCell>
@@ -401,6 +406,7 @@ export function LoanApplicationsPage() {
               )}
             </TableBody>
           </Table>
+          </div>
           <PaginationControls
             pageNumber={pageNumber}
             hasNext={hasNext}
