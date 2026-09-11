@@ -45,6 +45,25 @@ function applicantInitials(name: string) {
   return name.split(' ').filter(Boolean).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
 
+/** 2026-09-11 (user request): the "Reason" column's text - DECLINED is a human decision, so its
+ * reason is whatever the reviewer typed into `decisionNote` when declining. PREDECLINED is purely
+ * system-computed (LoanApplicationPreQualificationService, advisory only - see this type's own doc
+ * comment on `preQualificationBreakdown`), so there's no human-entered note for it; the reason is
+ * built from whichever check(s) in the breakdown failed instead. Every other status has no
+ * "reason" concept at all. */
+function declineReason(app: LoanApplication): string | null {
+  if (app.status === 'DECLINED') {
+    return app.decisionNote?.trim() || null;
+  }
+  if (app.status === 'PREDECLINED' && app.preQualificationBreakdown) {
+    const checks = app.preQualificationBreakdown.checks;
+    const failed = [checks.age, checks.income, checks.employment].filter((c): c is NonNullable<typeof c> => Boolean(c) && !c!.passed);
+    if (failed.length === 0) return null;
+    return failed.map((c) => c.detail || c.label).join('; ');
+  }
+  return null;
+}
+
 function getSortValue(app: LoanApplication, key: string): string | number | Date | null | undefined {
   switch (key) {
     case 'applicantName':
@@ -296,6 +315,7 @@ export function LoanApplicationsPage() {
                 <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
                   Decision Status
                 </SortableTableHead>
+                <TableHead>Reason</TableHead>
                 <TableHead>Loan Account</TableHead>
                 <SortableTableHead sortKey="createdAt" currentSort={sort} onSort={toggleSort} isDateColumn>
                   Submitted
@@ -343,6 +363,9 @@ export function LoanApplicationsPage() {
                       })()
                     )}
                   </TableCell>
+                  <TableCell className="max-w-[220px] cursor-pointer truncate text-xs text-muted-foreground" title={declineReason(app) ?? undefined} onClick={() => navigate(`/applications/${app.id}`)}>
+                    {declineReason(app) ?? '—'}
+                  </TableCell>
                   <TableCell>
                     {app.createdLoanAccountId ? (
                       <Link
@@ -367,7 +390,7 @@ export function LoanApplicationsPage() {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8">
+                  <TableCell colSpan={7} className="py-8">
                     {applicationsQuery.isLoading ? (
                       <ReportLoadingProgress stages={['Fetching applications', 'Resolving statuses']} />
                     ) : (
