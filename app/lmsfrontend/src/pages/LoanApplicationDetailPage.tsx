@@ -94,6 +94,7 @@ import type {
   UpdateLoanApplicationRequest,
 } from '@/lib/loanApplicationApiTypes';
 import type { Borrower, LoanProduct } from '@/lib/loanApiTypes';
+import type { BorrowerRiskSummary } from '@/lib/riskAssessmentApiTypes';
 import type { User } from '@/lib/userApiTypes';
 import { STATUS_DISPLAY_LABEL } from '@/lib/loanApplicationStatusLabels';
 import { cn, formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
@@ -915,6 +916,139 @@ function DtiGauge({ percent }: { percent: number }) {
   );
 }
 
+/** 2026-09-11 (user request): advisory-only internal score combining income, DTI, payment history,
+ * and employment into a single 0-100 figure - a quick read alongside the per-check "Decision
+ * scoring" breakdown below it, not a replacement for it. Deliberately excludes employment tenure
+ * (years/months employed) - unlike a Borrower's own incomeDetail, a LoanApplication only ever
+ * records occupation/employer, never tenure (that's only captured once a Client Profile exists,
+ * after approval) - so Employment here scores on occupation+employer presence only, same signal
+ * the existing pre-qualification employment check already uses.
+ *
+ * Payment history is only meaningful for a renewal application already linked to an existing
+ * client (`application.borrowerId` set - see LoanApplicationEntry's "existing client" flow); a
+ * brand-new applicant has no track record to score, so that factor is marked not applicable and
+ * the other three are rescaled to still fill the full 100 points. */
+interface InternalScoreFactor {
+  key: string;
+  label: string;
+  points: number | null;
+  max: number;
+  detail: string;
+}
+interface InternalScore {
+  total: number;
+  tier: 'Good' | 'Fair' | 'Poor';
+  factors: InternalScoreFactor[];
+}
+
+function computeInternalScore(
+  application: LoanApplication,
+  riskSummary: BorrowerRiskSummary | undefined,
+): InternalScore {
+  const breakdown = application.preQualificationBreakdown;
+  const amortization = breakdown?.estimatedMonthlyAmortization;
+  const income = application.monthlyIncome ?? undefined;
+  const incomeRatio = amortization && income ? income / amortization : undefined;
+
+  const incomePoints =
+    incomeRatio === undefined ? 0 : incomeRatio < 1 ? 0 : incomeRatio < 1.5 ? 10 : incomeRatio < 2 ? 18 : incomeRatio < 3 ? 22 : 25;
+  const incomeFactor: InternalScoreFactor = {
+    key: 'income',
+    label: 'Income',
+    points: incomePoints,
+    max: 25,
+    detail: income ? `₱${income.toFixed(2)}/month declared.` : 'Monthly income not yet recorded.',
+  };
+
+  const dtiPercent = amortization && income ? (amortization / income) * 100 : undefined;
+  const dtiPoints = dtiPercent === undefined ? 0 : dtiPercent <= 20 ? 25 : dtiPercent <= 30 ? 20 : dtiPercent <= 40 ? 12 : dtiPercent <= 50 ? 5 : 0;
+  const dtiFactor: InternalScoreFactor = {
+    key: 'dti',
+    label: 'Debt-to-income (DTI)',
+    points: dtiPoints,
+    max: 25,
+    detail: dtiPercent === undefined ? 'Not enough data to estimate DTI.' : `${dtiPercent.toFixed(1)}% estimated DTI.`,
+  };
+
+  const hasOccupation = Boolean(application.occupation?.trim());
+  const hasEmployer = Boolean(application.employer?.trim());
+  const employmentPoints = hasOccupation && hasEmployer ? 25 : hasOccupation || hasEmployer ? 12 : 0;
+  const employmentFactor: InternalScoreFactor = {
+    key: 'employment',
+    label: 'Employment',
+    points: employmentPoints,
+    max: 25,
+    detail:
+      hasOccupation || hasEmployer
+        ? `${application.occupation || 'Occupation not specified'}${application.employer ? ` at ${application.employer}` : ''}.`
+        : 'No occupation or employer on record.',
+  };
+
+  const onTimeRate = riskSummary?.onTimePaymentRate ?? null;
+  const paymentHistoryFactor: InternalScoreFactor = {
+    key: 'paymentHistory',
+    label: 'Payment history',
+    points: onTimeRate === null ? null : Math.round(onTimeRate * 25),
+    max: 25,
+    detail:
+      onTimeRate === null
+        ? 'Not applicable - no prior loan history on file for this client.'
+        : `${Math.round(onTimeRate * 100)}% on-time rate across their loan history.`,
+  };
+
+  const factors = [incomeFactor, dtiFactor, paymentHistoryFactor, employmentFactor];
+  const applicable = factors.filter((f) => f.points !== null);
+  const earned = applicable.reduce((sum, f) => sum + (f.points ?? 0), 0);
+  const maxApplicable = applicable.reduce((sum, f) => sum + f.max, 0);
+  const total = maxApplicable > 0 ? Math.round((earned / maxApplicable) * 100) : 0;
+  const tier: InternalScore['tier'] = total >= 70 ? 'Good' : total >= 40 ? 'Fair' : 'Poor';
+
+  return { total, tier, factors };
+}
+
+const SCORE_TIER_CLASS: Record<InternalScore['tier'], string> = {
+  Good: 'text-success',
+  Fair: 'text-warning',
+  Poor: 'text-destructive',
+};
+
+const SCORE_TIER_BADGE_VARIANT: Record<InternalScore['tier'], 'success' | 'warning' | 'destructive'> = {
+  Good: 'success',
+  Fair: 'warning',
+  Poor: 'destructive',
+};
+
+/** Same ring construction as `DtiGauge` above - `currentColor` picks up `SCORE_TIER_CLASS`. */
+function InternalScoreGauge({ score }: { score: number }) {
+  const radius = 38;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.max(0, Math.min(score, 100));
+  const offset = circumference * (1 - clamped / 100);
+  return (
+    <svg width="72" height="72" viewBox="0 0 90 90" role="img" aria-label={`Internal credit score ${score} out of 100`}>
+      <circle cx="45" cy="45" r={radius} fill="none" className="stroke-muted" strokeWidth="8" />
+      <circle
+        cx="45"
+        cy="45"
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="8"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        transform="rotate(-90 45 45)"
+      />
+      <text x="45" y="41" textAnchor="middle" fontSize="17" fontWeight="600" fill="currentColor">
+        {score}
+      </text>
+      <text x="45" y="55" textAnchor="middle" fontSize="8" className="fill-muted-foreground">
+        / 100
+      </text>
+    </svg>
+  );
+}
+
 const CREDIT_BUREAU_PARTY_FIELDS: { key: keyof CreditBureauPartyCheck; label: string }[] = [
   { key: 'cmap', label: 'CMAP' },
   { key: 'kyc', label: 'KYC' },
@@ -1585,6 +1719,16 @@ const UnderwritingCard = React.forwardRef<
   const dtiPercent =
     breakdown && application.monthlyIncome ? (breakdown.estimatedMonthlyAmortization / application.monthlyIncome) * 100 : null;
 
+  // 2026-09-11 (user request): only fetched for a renewal application already linked to an
+  // existing client (see computeInternalScore's own doc comment) - `application.borrowerId`, not
+  // `createdBorrowerId`, which stays null until well after a decision is made here.
+  const riskSummaryQuery = useQuery({
+    queryKey: ['borrower', application.borrowerId, 'risk-summary'],
+    queryFn: () => apiClient.get<BorrowerRiskSummary>(`/borrowers/${application.borrowerId}/risk-summary`),
+    enabled: Boolean(application.borrowerId),
+  });
+  const internalScore = computeInternalScore(application, riskSummaryQuery.data);
+
   return (
     <Card>
       <CardHeader>
@@ -1597,6 +1741,28 @@ const UnderwritingCard = React.forwardRef<
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {breakdown && (
+          <div className="rounded-md border bg-background p-3">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Internal credit score</p>
+              <Badge variant={SCORE_TIER_BADGE_VARIANT[internalScore.tier]}>{internalScore.tier}</Badge>
+            </div>
+            <div className={cn('flex items-center gap-4', SCORE_TIER_CLASS[internalScore.tier])}>
+              <InternalScoreGauge score={internalScore.total} />
+              <p className="text-xs text-muted-foreground">
+                Advisory only - combines income, DTI, payment history, and employment. Does not replace the reviewer's own judgment.
+              </p>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t pt-3 text-xs">
+              {internalScore.factors.map((f) => (
+                <div key={f.key} className="flex items-center justify-between gap-2" title={f.detail}>
+                  <span className="text-muted-foreground">{f.label}</span>
+                  <span className="font-medium">{f.points === null ? 'N/A' : `${f.points}/${f.max}`}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {breakdown && (
           <div className="rounded-md border p-3">
             <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Decision scoring</p>
