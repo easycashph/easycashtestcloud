@@ -517,6 +517,64 @@ async function syncLoanTransactions(
 
 // ----------------------------------------------------------------------------
 
+/**
+ * 2026-09-11 (user request): a human-readable preview - loan code, resolved borrower name, amount,
+ * account state - printed before any writes happen, in BOTH dry-run and --apply mode. Built after
+ * a manual review of a real dump turned up two real anomalies a bare loan-code list wouldn't have
+ * surfaced (see session log): a loan `id` appearing twice in the same dump for two entirely
+ * different borrowers, and one loan two orders of magnitude larger than every other loan in the
+ * batch. Neither is fabricated or auto-corrected here - both are just flagged, same "never guess,
+ * surface it" posture as everything else in this script.
+ */
+function printPreview(): void {
+  const allLoans = loadAll<Record<string, unknown>>('loan_accounts');
+  const scoped = ONLY_LOAN_CODES ? allLoans.filter((la) => ONLY_LOAN_CODES.has(String(la.id))) : allLoans;
+  if (scoped.length === 0) {
+    console.log('=== Preview ===\nNo loans match the given --only filter (or the dump is empty).\n');
+    return;
+  }
+
+  const idCounts = new Map<string, number>();
+  for (const la of allLoans) {
+    const id = String(la.id);
+    idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+  }
+
+  const clientsByKey = new Map<string, Record<string, unknown>>();
+  for (const c of iterDocs<Record<string, unknown>>('client_accounts')) {
+    clientsByKey.set(String(c.uid ?? c._id), c);
+  }
+
+  console.log(`=== Preview: ${scoped.length} loan(s) in scope ===`);
+  const amounts: number[] = [];
+  for (const la of scoped) {
+    const id = String(la.id);
+    const holderKey = String(la.accountHolderKey ?? '');
+    const client = clientsByKey.get(holderKey);
+    const name = client ? String(client.full_name ?? `${client.first_name ?? ''} ${client.last_name ?? ''}`.trim()) : null;
+    const amount = typeof la.loanAmount === 'number' ? la.loanAmount : null;
+    if (amount !== null) amounts.push(amount);
+
+    const flags: string[] = [];
+    if ((idCounts.get(id) ?? 0) > 1) flags.push('DUPLICATE loan code in dump - will be suffixed -LEGACY2/3/...');
+    if (!name) flags.push(`borrower not found in dump (accountHolderKey=${holderKey || 'blank'}) - will be SKIPPED`);
+
+    console.log(
+      `  ${id}  ->  ${name ?? '(unresolved)'}  [${la.accountState ?? 'n/a'}, ${amount !== null ? `₱${amount.toLocaleString()}` : 'n/a'}]` +
+        (flags.length ? `\n      ⚠ ${flags.join('; ')}` : ''),
+    );
+  }
+
+  if (amounts.length > 0) {
+    const median = [...amounts].sort((a, b) => a - b)[Math.floor(amounts.length / 2)]!;
+    const outliers = amounts.filter((a) => a > median * 10);
+    if (outliers.length > 0) {
+      console.log(`  ⚠ ${outliers.length} loan(s) are 10x+ the median amount (₱${median.toLocaleString()}) in this batch - double-check these are correct, not data errors.`);
+    }
+  }
+  console.log('');
+}
+
 async function main(): Promise<void> {
   console.log(`=== Loan account + schedule + payment history sync (${APPLY ? 'APPLY' : 'dry run'}) ===`);
   console.log(`Reading dump: ${DUMP_DIR}\n`);
@@ -526,6 +584,8 @@ async function main(): Promise<void> {
       ? `Loan filter: ONLY these loan codes will be touched: ${[...ONLY_LOAN_CODES].join(', ')}\n`
       : 'Loan filter: none - every loan in the dump will be (re-)considered. Pass --only=CODE1,CODE2 to restrict.\n',
   );
+
+  printPreview();
 
   const branch = await prisma.branch.findUnique({ where: { code: HQ_BRANCH_CODE } });
   if (!branch) {
