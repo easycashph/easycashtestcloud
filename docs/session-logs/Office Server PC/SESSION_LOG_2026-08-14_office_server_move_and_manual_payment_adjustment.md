@@ -7010,11 +7010,77 @@ Rebuilt, force-recreated, verified, committed and pushed as `c1a53828`.
   application history) is now offered in the co-borrower picker too.
 - Loan Applications list page now shows *why* a Declined/Pre Declined application is in that state
   (reviewer's note or the failed system check) directly in the table, no Detail-page click needed.
+## §149 — 2026-09-11: §148's Reason column widened the table past the viewport
+
+User-reported, with a screenshot: the Loan Applications page had started scrolling sideways as a
+*whole* - Search & Filter header included - not just the table. Root cause: §148's new Reason
+column had no scroll container of its own, so once it pushed the table past the viewport width,
+the overflow propagated to the whole page.
+
+Fixed: wrapped the `<Table>` in its own `overflow-x-auto` div (pagination controls stay outside it,
+unaffected). Per user's own follow-up suggestion ("or i wrap?"), also switched the Reason cell from
+truncate+tooltip to text wrapping (`whitespace-normal break-words`, `max-w-[200px]`) so a long
+reason no longer forces the table wider in the first place - tooltip discovery was a worse pattern
+here than just showing the text. Rebuilt, force-recreated, verified, committed and pushed as
+`efddbacf`.
+
+## §150 — 2026-09-11: Submitted date-range filter on the Loan Applications list
+
+User: "pwede ba natin lagyan ng date range na from and to para ma filter ang mga application base
+sa date submitted?" Mockup process went through two rounds - a plain from/to input row first, then
+(user: "ito na ba yung high end at advance na design mo?") an elevated calendar-popover mockup with
+a presets sidebar and click-to-select custom range, matching Linear/Notion-style pickers.
+
+At implementation time: no calendar or popover library existed anywhere in this project
+(`@radix-ui/react-popover`, `react-day-picker`, etc. all absent from `package.json`, confirmed
+before writing any code). Building a hand-rolled calendar grid + popover from scratch for one
+filter would have been a large chunk of new, one-off complexity for something native
+`<input type="date">` already solves - real calendar UI, keyboard support, accessibility, zero new
+dependencies - so implemented with that instead and told the user honestly that the fancier mockup
+was simplified for this reason, keeping the same functionality (custom range + presets).
+
+- Backend: `createdAfter`/`createdBefore` added to `FindManyLoanApplicationsOptions`
+  (`ILoanApplicationRepository.ts`), the Prisma `where` clause (`PrismaLoanApplicationRepository.ts`),
+  and parsed as new `GET /loan-applications` query params (`loanApplicationController.ts`) -
+  `createdBefore` is bumped to 23:59:59.999 of that date so picking the same date for both ends
+  still includes every application submitted that day, not just ones at/before midnight. Follows
+  the same server-side-filtering pattern as the existing search/status/category params (2026-07-16
+  fix - narrowing only the current fetched page instead of the full result set was a real bug back
+  then, not repeated here).
+- Frontend (`LoanApplicationsPage.tsx`): `dateFrom`/`dateTo` state wired into
+  `useCursorPagination`'s `extraParams`; two `<Input type="date">` fields plus three preset buttons
+  (Last 7 days / This month / Last month, each computing a `[from, to]` pair) and a "Clear dates"
+  button that only shows once a range is set.
+
+Rebuilt both services, force-recreated, verified, committed and pushed as `be058a9d`.
+
+### Current state after §150
+
+- Portal (`easycash-portal.pages.dev`) is offline again behind the "Under Development" placeholder,
+  matching its original 2026-09-08 state - LMS is unaffected and remains fully live throughout.
+  A one-command way back to the live Portal exists via the `portal-live-backup-2026-09-10` tag.
+- The Cloudflare tunnel auto-start is hardened: runs as `NT AUTHORITY\SYSTEM` on a boot trigger,
+  independent of any interactive/RDP logon session - the exact fragility that caused it to silently
+  die on 2026-09-11 morning (§146) no longer applies. Verify after any future reboot that the
+  SYSTEM-owned `cloudflared.exe` (Session 0/"Services") comes up on its own with no one needing to
+  log in first.
+- Roles: MIS, **Super Admin** (full parity with MIS, still unassigned), Loan Operation Manager,
+  CRM, Finance, Accounting, Collection Officer.
+- Loan Application create form: AI Auto-fill correctly respects its permission; searching an
+  existing client for a Renewal always offers a prefill now (from their most recent application
+  when one exists, from their Client Profile otherwise, address-type casing handled correctly)
+  instead of ever silently going blank, and a client's own on-file co-borrower (independent of
+  application history) is now offered in the co-borrower picker too.
+- Loan Applications list page: shows *why* a Declined/Pre Declined application is in that state
+  directly in the table (wraps instead of truncating, contained in its own horizontal scroll), and
+  can now be filtered by Submitted date range (server-side, with quick presets).
 - Recurring gotchas now documented across sessions for next time: `docker compose up -d --build`
   not always swapping the running image (§137), a stale `wslrelay.exe` WSL2 port-forward surviving
   a container recreate (§140, first seen this session), a transient `npm error network` mid-build
   being worth a plain retry before assuming something's actually broken (§140), inconsistent
   `addressType` casing across legacy-imported vs app-created address records (§142) - worth a
-  case-insensitive match, not an exact one, anywhere else this field gets read going forward - and
-  an `Interactive`-logon scheduled task silently dying with the session it's tied to (§146/§147) -
-  prefer a `SYSTEM`/`BootTrigger` setup for anything that must survive unattended.
+  case-insensitive match, not an exact one, anywhere else this field gets read going forward - an
+  `Interactive`-logon scheduled task silently dying with the session it's tied to (§146/§147) -
+  prefer a `SYSTEM`/`BootTrigger` setup for anything that must survive unattended - and a new table
+  column that can widen past the viewport needs its own `overflow-x-auto` wrapper, not left to the
+  page (§149).
