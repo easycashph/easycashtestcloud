@@ -7104,12 +7104,20 @@ each:
   three factors are rescaled to still fill the full 100 points in that case.
 - **Employment**: occupation+employer both present = 25, one = 12, neither = 0.
 
-Total is `earned / applicableMax * 100`, tiered Good (≥70) / Fair (≥40) / Poor. Rendered as a new
-section (circular gauge, matching `DtiGauge`'s construction, plus a 4-factor points grid) inside
+Total is `earned / applicableMax * 100`, tiered (≥70 / ≥40 / below). Rendered as a new section
+(circular gauge, matching `DtiGauge`'s construction, plus a 4-factor points grid) inside
 `UnderwritingCard`, right above the pre-existing "Decision scoring" box. No backend changes needed -
 reuses data already on the page (`preQualificationBreakdown`, `monthlyIncome`, `occupation`/
 `employer`) plus the one new risk-summary fetch. Rebuilt, force-recreated, verified, committed and
 pushed as `c87bef11`.
+
+Quick follow-up the same day: user asked for the tier labeled Low/Medium/High risk instead of the
+originally-shipped Good/Fair/Poor - relabeled (`InternalScore['tier']` type, `SCORE_TIER_CLASS`/
+`SCORE_TIER_BADGE_VARIANT` maps, badge text) to match this project's existing `RiskLevel`
+terminology (`riskAssessmentApiTypes.ts`/`BorrowerRiskSummaryService`) rather than a generic
+quality label - same 70/40 thresholds, just renamed, with the higher-score-is-lower-risk direction
+called out in `InternalScore`'s own doc comment so it doesn't get inverted by mistake later.
+Rebuilt, force-recreated, verified, committed and pushed as `61b691a5`.
 
 ### Current state after §151
 
