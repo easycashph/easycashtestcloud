@@ -937,7 +937,10 @@ interface InternalScoreFactor {
 }
 interface InternalScore {
   total: number;
-  tier: 'Good' | 'Fair' | 'Poor';
+  /** 2026-09-11 (user request): relabeled from Good/Fair/Poor to this project's existing risk
+   * terminology (matches `RiskLevel` in riskAssessmentApiTypes.ts/BorrowerRiskSummaryService) - a
+   * higher score means lower risk, so `total >= 70` maps to 'Low', not 'High'. */
+  tier: 'Low' | 'Medium' | 'High';
   factors: InternalScoreFactor[];
 }
 
@@ -1001,21 +1004,21 @@ function computeInternalScore(
   const earned = applicable.reduce((sum, f) => sum + (f.points ?? 0), 0);
   const maxApplicable = applicable.reduce((sum, f) => sum + f.max, 0);
   const total = maxApplicable > 0 ? Math.round((earned / maxApplicable) * 100) : 0;
-  const tier: InternalScore['tier'] = total >= 70 ? 'Good' : total >= 40 ? 'Fair' : 'Poor';
+  const tier: InternalScore['tier'] = total >= 70 ? 'Low' : total >= 40 ? 'Medium' : 'High';
 
   return { total, tier, factors };
 }
 
 const SCORE_TIER_CLASS: Record<InternalScore['tier'], string> = {
-  Good: 'text-success',
-  Fair: 'text-warning',
-  Poor: 'text-destructive',
+  Low: 'text-success',
+  Medium: 'text-warning',
+  High: 'text-destructive',
 };
 
 const SCORE_TIER_BADGE_VARIANT: Record<InternalScore['tier'], 'success' | 'warning' | 'destructive'> = {
-  Good: 'success',
-  Fair: 'warning',
-  Poor: 'destructive',
+  Low: 'success',
+  Medium: 'warning',
+  High: 'destructive',
 };
 
 /** Same ring construction as `DtiGauge` above - `currentColor` picks up `SCORE_TIER_CLASS`. */
@@ -1745,7 +1748,7 @@ const UnderwritingCard = React.forwardRef<
           <div className="rounded-md border bg-background p-3">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Internal credit score</p>
-              <Badge variant={SCORE_TIER_BADGE_VARIANT[internalScore.tier]}>{internalScore.tier}</Badge>
+              <Badge variant={SCORE_TIER_BADGE_VARIANT[internalScore.tier]}>{internalScore.tier} risk</Badge>
             </div>
             <div className={cn('flex items-center gap-4', SCORE_TIER_CLASS[internalScore.tier])}>
               <InternalScoreGauge score={internalScore.total} />
