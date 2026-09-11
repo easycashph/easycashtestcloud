@@ -9,6 +9,10 @@ export interface FindManyLoanApplicationsOptions {
   search?: string;
   status?: LoanApplicationStatus;
   requestedCategory?: string;
+  /** 2026-09-11 (user request): filter by `createdAt` (Submitted date) - both inclusive, matching
+   * the Loan Applications list page's date-range filter. */
+  createdAfter?: Date;
+  createdBefore?: Date;
 }
 
 export interface ILoanApplicationRepository {

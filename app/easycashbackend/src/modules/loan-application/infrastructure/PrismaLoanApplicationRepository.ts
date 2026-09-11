@@ -269,6 +269,14 @@ export class PrismaLoanApplicationRepository implements ILoanApplicationReposito
         ...(options.status ? { status: options.status } : {}),
         ...(options.requestedCategory ? { requestedCategory: options.requestedCategory } : {}),
         ...(options.search ? { applicantName: { contains: options.search, mode: 'insensitive' } } : {}),
+        ...(options.createdAfter || options.createdBefore
+          ? {
+              createdAt: {
+                ...(options.createdAfter ? { gte: options.createdAfter } : {}),
+                ...(options.createdBefore ? { lte: options.createdBefore } : {}),
+              },
+            }
+          : {}),
       },
       orderBy: { createdAt: 'desc' },
       take: options.limit,

@@ -184,6 +184,12 @@ export class LoanApplicationController {
       const search = parseSearchParam(req.query);
       const status = typeof req.query.status === 'string' ? (req.query.status as LoanApplication['status']) : undefined;
       const requestedCategory = typeof req.query.requestedCategory === 'string' ? req.query.requestedCategory : undefined;
+      // 2026-09-11 (user request): "Submitted" date-range filter on the Loan Applications list -
+      // createdBefore is treated as end-of-day so picking the same date for both ends still
+      // includes every application submitted that day, not just ones at/before midnight.
+      const createdAfter = typeof req.query.createdAfter === 'string' ? new Date(req.query.createdAfter) : undefined;
+      const createdBeforeRaw = typeof req.query.createdBefore === 'string' ? new Date(req.query.createdBefore) : undefined;
+      const createdBefore = createdBeforeRaw ? new Date(createdBeforeRaw.setHours(23, 59, 59, 999)) : undefined;
       const applications = await this.deps.listLoanApplicationsUseCase.execute({
         limit,
         cursor,
@@ -191,6 +197,8 @@ export class LoanApplicationController {
         search,
         status,
         requestedCategory,
+        createdAfter,
+        createdBefore,
       });
       const presented = await this.presentMany(applications);
       res.status(200).json(toPaginatedResponse(presented, limit, (item) => item.id));

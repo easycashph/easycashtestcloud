@@ -41,6 +41,40 @@ const PAGE_SIZE = 25;
  * option available in the filter regardless of what's actually been paginated in yet. */
 const CATEGORY_OPTIONS = ['ALL', 'Business Loan', 'Salary Loan', 'Seafarer Loan'];
 
+function toDateInputValue(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** 2026-09-11 (user request): quick presets for the "Submitted" date-range filter below - each
+ * returns the [from, to] pair as `<input type="date">`-compatible strings. */
+const DATE_RANGE_PRESETS: { label: string; range: () => [string, string] }[] = [
+  {
+    label: 'Last 7 days',
+    range: () => {
+      const to = new Date();
+      const from = new Date();
+      from.setDate(from.getDate() - 6);
+      return [toDateInputValue(from), toDateInputValue(to)];
+    },
+  },
+  {
+    label: 'This month',
+    range: () => {
+      const now = new Date();
+      return [toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)), toDateInputValue(now)];
+    },
+  },
+  {
+    label: 'Last month',
+    range: () => {
+      const now = new Date();
+      const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const to = new Date(now.getFullYear(), now.getMonth(), 0);
+      return [toDateInputValue(from), toDateInputValue(to)];
+    },
+  },
+];
+
 function applicantInitials(name: string) {
   return name.split(' ').filter(Boolean).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
@@ -127,6 +161,8 @@ export function LoanApplicationsPage() {
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = React.useState<LoanApplicationStatus | 'FOR_DISBURSEMENT' | 'ALL'>('ALL');
   const [category, setCategory] = React.useState('ALL');
+  const [dateFrom, setDateFrom] = React.useState('');
+  const [dateTo, setDateTo] = React.useState('');
   const [createOpen, setCreateOpen] = React.useState(false);
 
   useLogPageView('List of Loan Applications');
@@ -147,6 +183,8 @@ export function LoanApplicationsPage() {
       search: debouncedSearch,
       status: status === 'ALL' ? undefined : status === 'FOR_DISBURSEMENT' ? 'APPROVED' : status,
       requestedCategory: category === 'ALL' ? undefined : category,
+      createdAfter: dateFrom || undefined,
+      createdBefore: dateTo || undefined,
     },
     PAGE_SIZE,
     canAccessLoanApplications,
@@ -297,6 +335,43 @@ export function LoanApplicationsPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Submitted</span>
+            <Input type="date" className="w-auto" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} />
+            <span className="text-xs text-muted-foreground">to</span>
+            <Input type="date" className="w-auto" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} />
+            <div className="mx-1 h-5 w-px bg-border" />
+            {DATE_RANGE_PRESETS.map((preset) => (
+              <Button
+                key={preset.label}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 rounded-full text-xs"
+                onClick={() => {
+                  const [from, to] = preset.range();
+                  setDateFrom(from);
+                  setDateTo(to);
+                }}
+              >
+                {preset.label}
+              </Button>
+            ))}
+            {(dateFrom || dateTo) && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground"
+                onClick={() => {
+                  setDateFrom('');
+                  setDateTo('');
+                }}
+              >
+                Clear dates
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
