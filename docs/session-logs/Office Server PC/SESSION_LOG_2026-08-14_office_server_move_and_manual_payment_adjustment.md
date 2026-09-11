@@ -7074,6 +7074,66 @@ Rebuilt both services, force-recreated, verified, committed and pushed as `be058
 - Loan Applications list page: shows *why* a Declined/Pre Declined application is in that state
   directly in the table (wraps instead of truncating, contained in its own horizontal scroll), and
   can now be filtered by Submitted date range (server-side, with quick presets).
+
+## §151 — 2026-09-11: Internal Credit Score on the Underwriting card
+
+User: "makaka gawa ka ba ng internal scoring dito sa lms?" Surveyed what already existed first
+(pre-qualification checks, DTI gauge, `BorrowerRiskSummaryService`, the raw `creditScore` field)
+before proposing anything new, then asked which factors to combine - user chose income, DTI,
+payment history, and employment. Two mockup rounds (plain breakdown, then - "ito na ba yung high
+end at advance na design mo?" - an elevated gauge-card version) before landing on where it should
+live: inside the Underwriting card, above the existing "Decision scoring" box, since both draw from
+the same review data.
+
+Before writing the score's employment rule, checked the actual `LoanApplication` schema rather than
+assuming it mirrored `Borrower.incomeDetail` (which has `yearsEmployed`/`monthsEmployed`) -
+confirmed a `LoanApplication` only ever records `occupation`/`employer`, never tenure (tenure is
+only captured once a Client Profile exists, post-approval). Flagged this to the user before coding
+so the mockup's invented "Employed 1 year 2 months" line wasn't quietly shipped as if it were real
+data; user confirmed scoring Employment on occupation+employer presence only, matching the existing
+pre-qualification employment check's own signal.
+
+`computeInternalScore()` (new, pure, frontend-only in `LoanApplicationDetailPage.tsx`) - 25 points
+each:
+- **Income**: `monthlyIncome / estimatedMonthlyAmortization` ratio, tiered 0/10/18/22/25.
+- **DTI**: the same estimate as a percentage, tiered 25/20/12/5/0 (lower DTI scores higher).
+- **Payment history**: `onTimePaymentRate` from `GET /borrowers/:id/risk-summary`, scaled to 25 -
+  only fetched when `application.borrowerId` is set (a renewal application already linked to an
+  existing client at creation - not `createdBorrowerId`, which stays null until well after a
+  decision is made here). Shows "N/A" for a brand-new applicant with no track record; the other
+  three factors are rescaled to still fill the full 100 points in that case.
+- **Employment**: occupation+employer both present = 25, one = 12, neither = 0.
+
+Total is `earned / applicableMax * 100`, tiered Good (≥70) / Fair (≥40) / Poor. Rendered as a new
+section (circular gauge, matching `DtiGauge`'s construction, plus a 4-factor points grid) inside
+`UnderwritingCard`, right above the pre-existing "Decision scoring" box. No backend changes needed -
+reuses data already on the page (`preQualificationBreakdown`, `monthlyIncome`, `occupation`/
+`employer`) plus the one new risk-summary fetch. Rebuilt, force-recreated, verified, committed and
+pushed as `c87bef11`.
+
+### Current state after §151
+
+- Portal (`easycash-portal.pages.dev`) is offline again behind the "Under Development" placeholder,
+  matching its original 2026-09-08 state - LMS is unaffected and remains fully live throughout.
+  A one-command way back to the live Portal exists via the `portal-live-backup-2026-09-10` tag.
+- The Cloudflare tunnel auto-start is hardened: runs as `NT AUTHORITY\SYSTEM` on a boot trigger,
+  independent of any interactive/RDP logon session - the exact fragility that caused it to silently
+  die on 2026-09-11 morning (§146) no longer applies. Verify after any future reboot that the
+  SYSTEM-owned `cloudflared.exe` (Session 0/"Services") comes up on its own with no one needing to
+  log in first.
+- Roles: MIS, **Super Admin** (full parity with MIS, still unassigned), Loan Operation Manager,
+  CRM, Finance, Accounting, Collection Officer.
+- Loan Application create form: AI Auto-fill correctly respects its permission; searching an
+  existing client for a Renewal always offers a prefill now (from their most recent application
+  when one exists, from their Client Profile otherwise, address-type casing handled correctly)
+  instead of ever silently going blank, and a client's own on-file co-borrower (independent of
+  application history) is now offered in the co-borrower picker too.
+- Loan Applications list page: shows *why* a Declined/Pre Declined application is in that state
+  directly in the table (wraps instead of truncating, contained in its own horizontal scroll), and
+  can now be filtered by Submitted date range (server-side, with quick presets).
+- Loan Application Detail page's Underwriting card now shows an advisory 0-100 Internal Credit
+  Score (income/DTI/payment history/employment) alongside the existing Decision scoring breakdown -
+  purely informational, doesn't affect the Approve/Decline decision itself.
 - Recurring gotchas now documented across sessions for next time: `docker compose up -d --build`
   not always swapping the running image (§137), a stale `wslrelay.exe` WSL2 port-forward surviving
   a container recreate (§140, first seen this session), a transient `npm error network` mid-build
