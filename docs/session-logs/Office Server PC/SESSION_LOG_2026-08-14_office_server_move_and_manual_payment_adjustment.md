@@ -6969,7 +6969,30 @@ this can't happen again from a session hiccup.
   deliberately blocks for as long as the tunnel itself stays up. "Running" forever *is* the correct
   steady state for this task now.
 
-### Current state after §147
+## §148 — 2026-09-11: "Reason" column on the Loan Applications list
+
+User (after a mockup, matched to the app's real palette): "pwede ba natin i dagdag dito yung reason
+kung bakit na pre declined or Declined yung application?" - wanted the "why" visible from the list
+without opening every Detail page to check.
+
+`DECLINED` and `PREDECLINED` turned out to need two different sources, not one - worth getting
+right since they look like siblings in the status badge but aren't:
+
+- `DECLINED` is a human decision (`LoanApplication.decline()`), so its reason is whatever the
+  reviewer typed into `decisionNote` at decline time.
+- `PREDECLINED` is purely system-computed (`LoanApplicationPreQualificationService`, advisory only,
+  re-derived on every read - see `preQualificationBreakdown`'s own doc comment) - there's no human
+  note for it at all. Its reason is built from whichever check(s) in the breakdown (age/income/
+  employment) actually have `passed: false`, joining their `detail` text.
+
+New `declineReason()` helper in `LoanApplicationsPage.tsx` branches on `app.status` accordingly;
+every other status shows "-" (no reason concept applies to Approved/Under Review/etc). No backend
+changes needed - both `decisionNote` and `preQualificationBreakdown` were already present in the
+list endpoint's existing DTO. New "Reason" column added between Decision Status and Loan Account,
+truncated with a `title` tooltip for long text, `colSpan` on the empty-state row bumped 6→7.
+Rebuilt, force-recreated, verified, committed and pushed as `c1a53828`.
+
+### Current state after §148
 
 - Portal (`easycash-portal.pages.dev`) is offline again behind the "Under Development" placeholder,
   matching its original 2026-09-08 state - LMS is unaffected and remains fully live throughout.
@@ -6985,6 +7008,8 @@ this can't happen again from a session hiccup.
   when one exists, from their Client Profile otherwise, address-type casing handled correctly)
   instead of ever silently going blank, and a client's own on-file co-borrower (independent of
   application history) is now offered in the co-borrower picker too.
+- Loan Applications list page now shows *why* a Declined/Pre Declined application is in that state
+  (reviewer's note or the failed system check) directly in the table, no Detail-page click needed.
 - Recurring gotchas now documented across sessions for next time: `docker compose up -d --build`
   not always swapping the running image (§137), a stale `wslrelay.exe` WSL2 port-forward surviving
   a container recreate (§140, first seen this session), a transient `npm error network` mid-build
