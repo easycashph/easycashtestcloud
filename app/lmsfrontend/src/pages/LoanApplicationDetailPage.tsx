@@ -928,7 +928,13 @@ function DtiGauge({ percent }: { percent: number }) {
  * Payment history is only meaningful for a renewal application already linked to an existing
  * client (`application.borrowerId` set - see LoanApplicationEntry's "existing client" flow); a
  * brand-new applicant has no track record to score, so that factor is marked not applicable and
- * the other three are rescaled to still fill the full 100 points. */
+ * the other three are rescaled to still fill the full 100 points.
+ *
+ * 2026-09-12: the DTI factor gets the same "not applicable, rescale" treatment while the
+ * application is INCOMPLETE (required documents not all uploaded - see
+ * LoanApplicationRiskAssessmentService) - it reads `application.dtiPercent`/`riskTier` directly
+ * (the same persisted values the Loan Applications list's Risk badge shows), not a separately
+ * re-derived number, so this card can never disagree with that badge. */
 interface InternalScoreFactor {
   key: string;
   label: string;
@@ -964,14 +970,26 @@ function computeInternalScore(
     detail: income ? `₱${income.toFixed(2)}/month declared.` : 'Monthly income not yet recorded.',
   };
 
-  const dtiPercent = amortization && income ? (amortization / income) * 100 : undefined;
-  const dtiPoints = dtiPercent === undefined ? 0 : dtiPercent <= 20 ? 25 : dtiPercent <= 30 ? 20 : dtiPercent <= 40 ? 12 : dtiPercent <= 50 ? 5 : 0;
+  // 2026-09-12 (user request, fixing a real inconsistency): uses the same persisted
+  // application.dtiPercent/riskTier the Loan Applications list's Risk badge shows, instead of
+  // re-deriving DTI independently from preQualificationBreakdown - two separately-computed DTI
+  // numbers on the same page invited confusion even though they happened to agree in most cases.
+  // dtiPercent is null while status is INCOMPLETE (required documents not all uploaded yet - see
+  // LoanApplicationRiskAssessmentService) - same "not applicable yet, rescale the other factors"
+  // treatment paymentHistoryFactor below already uses for a brand-new applicant.
+  const dtiPercent = application.dtiPercent ?? undefined;
+  const dtiPoints = dtiPercent === undefined ? null : dtiPercent <= 30 ? 25 : dtiPercent <= 40 ? 12 : 0;
   const dtiFactor: InternalScoreFactor = {
     key: 'dti',
     label: 'Debt-to-income (DTI)',
     points: dtiPoints,
     max: 25,
-    detail: dtiPercent === undefined ? 'Not enough data to estimate DTI.' : `${dtiPercent.toFixed(1)}% estimated DTI.`,
+    detail:
+      dtiPercent === undefined
+        ? application.status === 'INCOMPLETE'
+          ? 'Not yet computed - required documents are still incomplete.'
+          : 'Not enough data to estimate DTI.'
+        : `${dtiPercent.toFixed(1)}% DTI (${application.riskTier ?? '—'} risk).`,
   };
 
   const hasOccupation = Boolean(application.occupation?.trim());

@@ -507,7 +507,7 @@ export function LoanApplicationsPage() {
                   Applicant
                 </SortableTableHead>
                 <SortableTableHead sortKey="requestedCategory" currentSort={sort} onSort={toggleSort}>
-                  Requested Category
+                  Category
                 </SortableTableHead>
                 <SortableTableHead sortKey="requestedAmount" currentSort={sort} onSort={toggleSort} className="text-right">
                   Amount

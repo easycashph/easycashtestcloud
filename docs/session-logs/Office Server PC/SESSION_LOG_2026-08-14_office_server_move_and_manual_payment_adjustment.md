@@ -7617,3 +7617,56 @@ fresh INCOMPLETE application persisted as `DECLINED` correctly. Rebuilt all thre
   the Reason column doesn't have text for) - the Portal dashboard's own missing-docs indicator
   already surfaces this to the applicant, but staff-side visibility of "which category exactly is
   missing" from the LMS list itself is a reasonable follow-up if requested.
+
+## §160 — 2026-09-12: "Requested Category" → "Category" label; audited and fixed the pre-existing
+Internal Credit Score's alignment with the new DTI feature
+
+Two small user requests, the second of which surfaced a real bug: user asked to shorten the Loan
+Applications list's "Requested Category" column header to just "Category" (done, trivial), then
+asked whether the existing (2026-09-11) Internal Credit Score card on the Detail page was actually
+aligned with the new DTI/Risk feature from §156-§159.
+
+**Audited `computeInternalScore()` (`LoanApplicationDetailPage.tsx`) and found a real
+inconsistency**: its DTI factor independently re-derived `dtiPercent` from
+`preQualificationBreakdown.estimatedMonthlyAmortization` / `monthlyIncome` - a second, separately-
+computed DTI number living alongside the new persisted `application.dtiPercent`/`riskTier` that
+drives the Risk badge everywhere else. Two problems this caused:
+1. **Never accounted for INCOMPLETE status** - `preQualificationBreakdown` is always live-
+   recomputed on every read regardless of status, so an INCOMPLETE application (required documents
+   not all uploaded - §159) still showed a full Internal Credit Score with a real DTI factor and
+   an overall Low/Medium/High tier, even though the system's own new business rule says that
+   application isn't validly classified yet. The Risk badge elsewhere correctly showed "—" for the
+   same application - a visible contradiction on the very same page.
+2. Two independently-computed DTI numbers invite drift and staff confusion even where they happen
+   to agree (same underlying formula, but two separate code paths computing it).
+
+**Fix**: the DTI factor now reads `application.dtiPercent`/`riskTier` directly (the same
+persisted values used everywhere else), instead of re-deriving its own. When `dtiPercent` is null
+- true whenever status is INCOMPLETE, or in the (Milestone-era) case of missing income data - the
+DTI factor becomes not-applicable and the score rescales over the remaining three factors (Income,
+Employment, Payment History), reusing the exact "not applicable, rescale" pattern this same
+function already used for Payment History on a brand-new applicant with no track record. This
+guarantees the Internal Credit Score card can never disagree with the Risk badge again, since both
+now read from the same single persisted source.
+
+Deliberately left the Income factor's own `amortization`-based ratio untouched (still reads live
+from `preQualificationBreakdown`) - that's a genuinely different metric from DTI (income vs.
+amortization, not amortization vs. income as a percentage) with no persisted equivalent to align
+against, so there's nothing for it to drift out of sync with.
+
+Also noted for the user, not changed: the Internal Credit Score's own overall Low/Medium/High tier
+is a *blended* score (all four factors), by design different from the Risk badge's *pure-DTI*
+Low/Medium/High - the two can legitimately disagree on a given application without either being
+wrong. Flagged as a naming-overlap risk worth being aware of, not fixed this session (no request
+to rename/relabel either one).
+
+`tsc --noEmit` clean. Rebuilt `lmsfrontend`; healthy.
+
+### Current state after §160
+
+- Internal Credit Score and the Risk badge/list filter can no longer show contradictory DTI
+  figures for the same application - single persisted source of truth
+  (`application.dtiPercent`/`riskTier`) for both.
+- The blended-score-vs-pure-DTI naming overlap ("Low/Medium/High" meaning two different things in
+  two different UI elements on the same page) remains as-is - worth a rename/clarifying label if a
+  future session gets a report of a loan officer being confused by the two disagreeing.
