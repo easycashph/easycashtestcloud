@@ -70,13 +70,33 @@ partial fix could target safely, consider per-loan-account transaction-pattern m
 a system-wide day-count rule, and confirm with the user whether Salary/Seafarer products are
 contractually semi-monthly by design.
 
+## Resolved same day - user proposed the actual fix
+
+After this log's initial write-up, the user proposed a cleaner test: is a Salary Loan installment
+fully paid before the NEXT installment's own due date? Verified against Nomer Perez's full payment
+history via a `LEAD()` window-function query - **16 of 16 non-final installments** (excluding the
+final installment of each loan, which has no "next" due date to lean on) landed before the next
+installment's due date, confirming this is a reliable, non-arbitrary signal, unlike a flat day-count
+grace period (which the earlier system-wide bucket analysis in this log showed couldn't safely
+distinguish structural split-payment from genuine lateness).
+
+User explicitly scoped the fix to Salary Loan only (`loanCode` starting with `SL-`) rather than
+system-wide, since Seafarer/Business loans weren't confirmed to show the same reliable pattern.
+
+**Implemented** in `BorrowerRiskSummaryService.summarize()` (commit `9db46218`): for Salary Loan
+accounts, an installment counts as on-time if paid before the next installment's own due date
+(falling back to the original same-due-date check for a loan's last installment, which has no
+"next" to compare against). Verified before shipping:
+- Nomer Perez's on-time rate: 0% → 89.5% (17 of 19 settled installments) under the new rule.
+- A before/after comparison script confirmed byte-identical results for a Seafarer-loan-only
+  borrower (Brigido Magsanay, 9 loans) - no regression for non-Salary-Loan products.
+
 ## Current state
 
-- No code or data changed this session - purely diagnostic.
-- `task_41293745` pending, not yet started.
-- Worth flagging to any Loan Officer/CRM reviewing NOMER DELA CRUZ PEREZ or similar
-  salary/seafarer-loan renewal applications in the meantime: a low/zero Payment History score on
-  the Internal Credit Score may currently understate a borrower's real payment reliability if their
-  loan is repaid via semi-monthly allotment/payroll deduction - worth a manual look at the actual
-  transaction history rather than trusting the score at face value for these cases until the
-  follow-up investigation lands.
+- Fix live: `easycashbackend` rebuilt and redeployed, healthy.
+- Follow-up task withdrawn (resolved this session, not left pending).
+- Not yet extended to Seafarer Loan (`SML-`) even though the earlier bucket analysis showed a
+  similar (smaller) 10-19-day cluster there too - deliberately left alone since the same-day
+  verification (LEAD() check against real data) was only run against a Salary Loan borrower.
+  Worth the same verification exercise for a Seafarer borrower before extending the rule if this
+  comes up again.
