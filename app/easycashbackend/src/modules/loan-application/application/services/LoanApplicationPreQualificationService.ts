@@ -26,6 +26,10 @@ export interface PreQualificationInput {
 export interface PreQualificationResult {
   status: 'PREAPPROVED' | 'PREDECLINED';
   distanceFromBranchKm: number | null;
+  /** Same value as PreQualificationBreakdown.estimatedMonthlyAmortization - surfaced here too
+   * (2026-09-12, DTI risk-tier feature) so CreateLoanApplicationUseCase can compute an applicant's
+   * DTI at submission time without a second call into evaluateCriteria. */
+  estimatedMonthlyAmortization: number;
 }
 
 export interface PreQualificationCheck {
@@ -73,7 +77,7 @@ export class LoanApplicationPreQualificationService {
     // line - just no longer fed into evaluateCriteria below (see checks.employment's doc comment).
     const distanceFromBranchKm = await this.resolveDistanceKm(input.branchId, input.applicantAddressText);
     const breakdown = this.evaluateCriteria(input);
-    return { status: breakdown.status, distanceFromBranchKm };
+    return { status: breakdown.status, distanceFromBranchKm, estimatedMonthlyAmortization: breakdown.estimatedMonthlyAmortization };
   }
 
   /**

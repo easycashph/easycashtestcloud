@@ -3,7 +3,7 @@ import { prisma } from '@shared/database/prismaClient';
 import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
 import { LoanApplication, type DependantEntry, type LoanApplicationProps, type ReviewReport } from '../domain/LoanApplication';
-import type { FindManyLoanApplicationsOptions, ILoanApplicationRepository } from '../application/ports/ILoanApplicationRepository';
+import type { FindManyLoanApplicationsOptions, ILoanApplicationRepository, RiskTierCounts } from '../application/ports/ILoanApplicationRepository';
 
 type LoanApplicationRow = Prisma.LoanApplicationGetPayload<Record<string, never>>;
 type PrismaWriteClient = PrismaClient | Prisma.TransactionClient;
@@ -73,6 +73,8 @@ function toDomain(row: LoanApplicationRow): LoanApplication {
     encodedByUserId: row.encodedByUserId ?? undefined,
     status: row.status,
     distanceFromBranchKm: row.distanceFromBranchKm ? Number(row.distanceFromBranchKm) : undefined,
+    dtiPercent: row.dtiPercent ? Number(row.dtiPercent) : undefined,
+    riskTier: row.riskTier ?? undefined,
     submissionLatitude: row.submissionLatitude ? Number(row.submissionLatitude) : undefined,
     submissionLongitude: row.submissionLongitude ? Number(row.submissionLongitude) : undefined,
     assignedLoanProductVersionId: row.assignedLoanProductVersionId ?? undefined,
@@ -158,6 +160,8 @@ async function write(client: PrismaWriteClient, application: LoanApplication): P
       encodedByUserId: p.encodedByUserId,
       status: p.status,
       distanceFromBranchKm: p.distanceFromBranchKm,
+      dtiPercent: p.dtiPercent,
+      riskTier: p.riskTier,
       submissionLatitude: p.submissionLatitude,
       submissionLongitude: p.submissionLongitude,
       assignedLoanProductVersionId: p.assignedLoanProductVersionId,
@@ -260,6 +264,22 @@ export class PrismaLoanApplicationRepository implements ILoanApplicationReposito
     return row ? toDomain(row) : null;
   }
 
+  async countByRiskTier(branchId: string | undefined, ctx?: TransactionContext): Promise<RiskTierCounts> {
+    const client = resolveClient(ctx);
+    const where = branchId ? { branchId } : {};
+    const grouped = await client.loanApplication.groupBy({ by: ['riskTier'], where, _count: true });
+    const counts: RiskTierCounts = { low: 0, medium: 0, high: 0, unscored: 0, total: 0 };
+    for (const g of grouped) {
+      const n = typeof g._count === 'number' ? g._count : 0;
+      counts.total += n;
+      if (g.riskTier === 'LOW') counts.low += n;
+      else if (g.riskTier === 'MEDIUM') counts.medium += n;
+      else if (g.riskTier === 'HIGH') counts.high += n;
+      else counts.unscored += n;
+    }
+    return counts;
+  }
+
   /** Milestone 9.2 / mirrors PrismaBorrowerRepository.findMany: cursor pagination only, no search/filter beyond branch. */
   async findMany(options: FindManyLoanApplicationsOptions, ctx?: TransactionContext): Promise<LoanApplication[]> {
     const client = resolveClient(ctx);
@@ -268,6 +288,7 @@ export class PrismaLoanApplicationRepository implements ILoanApplicationReposito
         ...(options.branchId ? { branchId: options.branchId } : {}),
         ...(options.status ? { status: options.status } : {}),
         ...(options.requestedCategory ? { requestedCategory: options.requestedCategory } : {}),
+        ...(options.riskTier ? { riskTier: options.riskTier } : {}),
         ...(options.search ? { applicantName: { contains: options.search, mode: 'insensitive' } } : {}),
         ...(options.createdAfter || options.createdBefore
           ? {

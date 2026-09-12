@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, ExternalLink, FilePlus2, Lock, Search } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, ExternalLink, FilePlus2, Lock, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +22,7 @@ import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { STATUS_DISPLAY_LABEL } from '@/lib/loanApplicationStatusLabels';
 import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
 import { useQuery } from '@tanstack/react-query';
-import { fetchAllPages } from '@/lib/apiClient';
+import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicationApiTypes';
 import { LoanApplicationEntry } from '@/pages/LoanApplicationCreatePage';
 import { formatDate, formatPeso } from '@/lib/utils';
@@ -139,6 +139,47 @@ const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'secondary' | 'warning
   DECLINED: 'destructive',
 };
 
+/** 2026-09-12 (user request): Debt-to-Income risk triage, computed once at submission - see
+ * LoanApplicationRiskAssessmentService on the backend. Separate from STATUS_BADGE_VARIANT/
+ * decision status above - this is advisory risk, not a decision outcome, so it gets its own
+ * semantic-color scale (green/amber/red for Low/Medium/High) rather than reusing status colors. */
+const RISK_TIER_OPTIONS: { value: 'LOW' | 'MEDIUM' | 'HIGH' | 'ALL'; label: string }[] = [
+  { value: 'ALL', label: 'All risk tiers' },
+  { value: 'LOW', label: 'Low risk' },
+  { value: 'MEDIUM', label: 'Medium risk' },
+  { value: 'HIGH', label: 'High risk' },
+];
+
+const RISK_TIER_BADGE_CLASS: Record<'LOW' | 'MEDIUM' | 'HIGH', string> = {
+  LOW: 'border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+  MEDIUM: 'border-transparent bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+  HIGH: 'border-transparent bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
+};
+const RISK_TIER_LABEL: Record<'LOW' | 'MEDIUM' | 'HIGH', string> = { LOW: 'Low', MEDIUM: 'Medium', HIGH: 'High' };
+const RISK_TIER_TEXT_CLASS: Record<'LOW' | 'MEDIUM' | 'HIGH', string> = {
+  LOW: 'text-emerald-700 dark:text-emerald-400',
+  MEDIUM: 'text-amber-700 dark:text-amber-400',
+  HIGH: 'text-red-700 dark:text-red-400',
+};
+const RISK_TIER_DOT_CLASS: Record<'LOW' | 'MEDIUM' | 'HIGH', string> = {
+  LOW: 'bg-emerald-500',
+  MEDIUM: 'bg-amber-500',
+  HIGH: 'bg-red-500',
+};
+/** Scales a DTI% onto a 0-100% bar width - capped visually at 60% DTI so the bar doesn't look
+ * nearly-empty for the common <30% case (matches the mockup's own scaling). */
+function dtiBarWidth(dtiPercent: number): number {
+  return Math.max(4, Math.min(100, (dtiPercent / 60) * 100));
+}
+
+interface RiskTierCounts {
+  low: number;
+  medium: number;
+  high: number;
+  unscored: number;
+  total: number;
+}
+
 /**
  * Wired to the real backend Loan Applications module (`GET /loan-applications`). Every application
  * is system-classified PREAPPROVED/PREDECLINED at creation (and re-classified whenever the Detail
@@ -161,12 +202,32 @@ export function LoanApplicationsPage() {
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = React.useState<LoanApplicationStatus | 'FOR_DISBURSEMENT' | 'ALL'>('ALL');
   const [category, setCategory] = React.useState('ALL');
+  const [riskTier, setRiskTier] = React.useState<'LOW' | 'MEDIUM' | 'HIGH' | 'ALL'>('ALL');
   const [dateFrom, setDateFrom] = React.useState('');
   const [dateTo, setDateTo] = React.useState('');
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
 
   useLogPageView('List of Loan Applications');
   const productTypeLabelsQuery = useProductTypeLabels();
+
+  // 2026-09-12 (user request): risk-summary tiles above the table - branch-scoped only (see
+  // GetLoanApplicationRiskSummaryUseCase's own doc comment), so this deliberately does NOT depend
+  // on search/status/category/date filter state below - it always reflects the same stable count.
+  const riskSummaryQuery = useQuery({
+    queryKey: ['loan-applications', 'risk-summary'],
+    queryFn: () => apiClient.get<RiskTierCounts>('/loan-applications/risk-summary'),
+    enabled: canAccessLoanApplications,
+  });
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const {
     items: applications,
@@ -183,6 +244,7 @@ export function LoanApplicationsPage() {
       search: debouncedSearch,
       status: status === 'ALL' ? undefined : status === 'FOR_DISBURSEMENT' ? 'APPROVED' : status,
       requestedCategory: category === 'ALL' ? undefined : category,
+      riskTier: riskTier === 'ALL' ? undefined : riskTier,
       createdAfter: dateFrom || undefined,
       createdBefore: dateTo || undefined,
     },
@@ -268,6 +330,49 @@ export function LoanApplicationsPage() {
         </Button>
       </div>
 
+      {/* 2026-09-12 (user request): at-a-glance Debt-to-Income risk triage - who's Low/Medium/High
+          risk, without opening every application. See GetLoanApplicationRiskSummaryUseCase. */}
+      {riskSummaryQuery.data && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Card>
+            <CardContent className="flex flex-col gap-1 p-4">
+              <span className="text-xs font-medium text-muted-foreground">Total applications</span>
+              <span className="text-2xl font-bold tabular-nums text-primary">{riskSummaryQuery.data.total}</span>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex flex-col gap-1 p-4">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="text-xs font-medium text-muted-foreground">Low risk</span>
+              </div>
+              <span className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{riskSummaryQuery.data.low}</span>
+              <span className="text-[11px] text-muted-foreground">DTI ≤ 30%</span>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex flex-col gap-1 p-4">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                <span className="text-xs font-medium text-muted-foreground">Medium risk</span>
+              </div>
+              <span className="text-2xl font-bold tabular-nums text-amber-700 dark:text-amber-400">{riskSummaryQuery.data.medium}</span>
+              <span className="text-[11px] text-muted-foreground">DTI 31–40%</span>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex flex-col gap-1 p-4">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-red-500" />
+                <span className="text-xs font-medium text-muted-foreground">High risk</span>
+              </div>
+              <span className="text-2xl font-bold tabular-nums text-red-700 dark:text-red-400">{riskSummaryQuery.data.high}</span>
+              <span className="text-[11px] text-muted-foreground">DTI &gt; 40% — review first</span>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-h-[85vh] max-w-6xl overflow-y-auto">
           <DialogHeader>
@@ -335,6 +440,18 @@ export function LoanApplicationsPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={riskTier} onValueChange={(v) => setRiskTier(v as 'LOW' | 'MEDIUM' | 'HIGH' | 'ALL')}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {RISK_TIER_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">Submitted</span>
@@ -392,6 +509,8 @@ export function LoanApplicationsPage() {
                 <SortableTableHead sortKey="requestedAmount" currentSort={sort} onSort={toggleSort} className="text-right">
                   Amount
                 </SortableTableHead>
+                <TableHead>DTI</TableHead>
+                <TableHead>Risk</TableHead>
                 <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
                   Decision Status
                 </SortableTableHead>
@@ -404,7 +523,8 @@ export function LoanApplicationsPage() {
             </TableHeader>
             <TableBody>
               {sorted.map((app) => (
-                <TableRow key={app.id}>
+                <React.Fragment key={app.id}>
+                <TableRow>
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
                     <div className="flex items-center gap-2">
                       <ApplicantAvatar
@@ -422,6 +542,56 @@ export function LoanApplicationsPage() {
                   </TableCell>
                   <TableCell className="cursor-pointer text-right" onClick={() => navigate(`/applications/${app.id}`)}>
                     {formatPeso(app.requestedAmount)}
+                  </TableCell>
+                  <TableCell className="min-w-[90px]">
+                    {app.dtiPercent !== null ? (
+                      <button
+                        type="button"
+                        className="flex w-full flex-col gap-1 text-left"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleExpanded(app.id);
+                        }}
+                        aria-expanded={expandedIds.has(app.id)}
+                        aria-label={`Show how ${app.applicantName}'s DTI was computed`}
+                      >
+                        <span className="font-mono text-sm font-semibold tabular-nums">{app.dtiPercent.toFixed(1)}%</span>
+                        <span className="h-1 w-full overflow-hidden rounded-full bg-muted">
+                          <span
+                            className={`block h-full rounded-full ${app.riskTier ? RISK_TIER_DOT_CLASS[app.riskTier] : 'bg-muted-foreground'}`}
+                            style={{ width: `${dtiBarWidth(app.dtiPercent)}%` }}
+                          />
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {app.riskTier ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-full hover:opacity-80"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleExpanded(app.id);
+                        }}
+                        aria-expanded={expandedIds.has(app.id)}
+                        aria-label={`Show how ${app.applicantName}'s DTI was computed`}
+                      >
+                        <Badge className={`gap-1.5 ${RISK_TIER_BADGE_CLASS[app.riskTier]}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${RISK_TIER_DOT_CLASS[app.riskTier]}`} />
+                          {RISK_TIER_LABEL[app.riskTier]}
+                        </Badge>
+                        {expandedIds.has(app.id) ? (
+                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                        )}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
                     {/* Waits for loanAccountsQuery before showing For Disbursement/Disbursed for an
@@ -467,10 +637,74 @@ export function LoanApplicationsPage() {
                     {formatDate(app.createdAt)}
                   </TableCell>
                 </TableRow>
+                {expandedIds.has(app.id) && app.riskTier && app.dtiPercent !== null && (
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableCell colSpan={9} className="py-4">
+                      {/* 2026-09-12 (user request): "no black-box numbers" - every DTI figure traces
+                          back to something on the application. Amortization comes straight from
+                          preQualificationBreakdown (same value the system's own pre-qualification
+                          check uses), never re-derived here with a duplicated flat-rate constant. */}
+                      <div className="max-w-2xl pl-10">
+                        <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-primary">
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9.5px] text-primary-foreground">1</span>
+                          Estimated monthly amortization
+                        </div>
+                        <div className="grid gap-x-6 gap-y-3 text-xs sm:grid-cols-3">
+                          <div>
+                            <div className="text-muted-foreground">Requested loan amount</div>
+                            <div className="font-mono font-semibold tabular-nums">{formatPeso(app.requestedAmount)}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Requested term</div>
+                            <div className="font-mono font-semibold tabular-nums">{app.requestedTermMonths} months</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Category</div>
+                            <div className="font-mono font-semibold">{productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, app.requestedCategory)}</div>
+                          </div>
+                        </div>
+                        {app.preQualificationBreakdown && (
+                          <div className="mt-2 font-mono text-xs text-muted-foreground">
+                            = <span className="font-sans text-sm font-bold text-foreground">{formatPeso(app.preQualificationBreakdown.estimatedMonthlyAmortization)} / mo</span>
+                          </div>
+                        )}
+
+                        <div className="mb-2 mt-4 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-primary">
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9.5px] text-primary-foreground">2</span>
+                          Debt-to-income
+                        </div>
+                        <div className="grid gap-x-6 gap-y-3 text-xs sm:grid-cols-3">
+                          <div>
+                            <div className="text-muted-foreground">Declared monthly income</div>
+                            <div className="font-mono font-semibold tabular-nums">{app.monthlyIncome !== null ? formatPeso(app.monthlyIncome) : '—'}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">New loan amortization (step 1)</div>
+                            <div className="font-mono font-semibold tabular-nums">
+                              {app.preQualificationBreakdown ? formatPeso(app.preQualificationBreakdown.estimatedMonthlyAmortization) : '—'}
+                            </div>
+                          </div>
+                        </div>
+                        {app.preQualificationBreakdown && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-dashed pt-3 font-mono text-xs text-muted-foreground">
+                            <span>
+                              {formatPeso(app.preQualificationBreakdown.estimatedMonthlyAmortization)} ÷ {formatPeso(app.monthlyIncome ?? 0)} × 100
+                            </span>
+                            <span>=</span>
+                            <span className={`font-sans text-sm font-bold ${RISK_TIER_TEXT_CLASS[app.riskTier]}`}>
+                              {app.dtiPercent.toFixed(1)}% DTI → {RISK_TIER_LABEL[app.riskTier]} risk
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+                </React.Fragment>
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8">
+                  <TableCell colSpan={9} className="py-8">
                     {applicationsQuery.isLoading ? (
                       <ReportLoadingProgress stages={['Fetching applications', 'Resolving statuses']} />
                     ) : (

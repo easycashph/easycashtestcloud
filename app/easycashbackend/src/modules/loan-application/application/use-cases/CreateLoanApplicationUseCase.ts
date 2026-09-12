@@ -9,6 +9,7 @@ import type { NotificationService } from '@modules/notification/application/Noti
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { CreateLoanApplicationInput } from '../dtos/LoanApplicationDtos';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
+import { assessLoanApplicationRisk } from '../services/LoanApplicationRiskAssessmentService';
 
 const CLOSED_LOAN_ACCOUNT_STATUSES = new Set(['CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_REJECTED', 'CLOSED_RESTRUCTURED', 'CLOSED_ADJUSTED']);
 
@@ -81,10 +82,14 @@ export class CreateLoanApplicationUseCase {
       employer: input.employer,
     });
 
+    const riskAssessment = assessLoanApplicationRisk(input.monthlyIncome, classification.estimatedMonthlyAmortization);
+
     const application = LoanApplication.create({
       ...input,
       status: classification.status,
       distanceFromBranchKm: classification.distanceFromBranchKm ?? undefined,
+      dtiPercent: riskAssessment?.dtiPercent,
+      riskTier: riskAssessment?.riskTier,
     });
     await this.deps.loanApplicationRepository.save(application);
 

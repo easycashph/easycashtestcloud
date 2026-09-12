@@ -23,6 +23,7 @@ import type { UpdateLoanApplicationIntakeUseCase } from '../../application/use-c
 import type { DeleteLoanApplicationUseCase } from '../../application/use-cases/DeleteLoanApplicationUseCase';
 import type { GenerateLoanApplicationFormUseCase } from '../../application/use-cases/GenerateLoanApplicationFormUseCase';
 import type { GenerateCrmReportUseCase } from '../../application/use-cases/GenerateCrmReportUseCase';
+import type { GetLoanApplicationRiskSummaryUseCase } from '../../application/use-cases/GetLoanApplicationRiskSummaryUseCase';
 import type { LoanApplicationPreQualificationService } from '../../application/services/LoanApplicationPreQualificationService';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
@@ -59,6 +60,7 @@ export interface LoanApplicationControllerDeps {
   deleteLoanApplicationUseCase: DeleteLoanApplicationUseCase;
   generateLoanApplicationFormUseCase: GenerateLoanApplicationFormUseCase;
   generateCrmReportUseCase: GenerateCrmReportUseCase;
+  getLoanApplicationRiskSummaryUseCase: GetLoanApplicationRiskSummaryUseCase;
   preQualificationService: LoanApplicationPreQualificationService;
   borrowerRepository: IBorrowerRepository;
   loanAccountRepository: ILoanAccountRepository;
@@ -177,6 +179,19 @@ export class LoanApplicationController {
     }
   };
 
+  /** 2026-09-12 (user request): counts for the list's risk-summary tiles - branch-scoped only,
+   * not affected by the list's own search/status/category/date filters (see the use case's own
+   * doc comment for why). */
+  riskSummary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const counts = await this.deps.getLoanApplicationRiskSummaryUseCase.execute(resolveBranchFilter(scope));
+      res.status(200).json(counts);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
@@ -184,6 +199,10 @@ export class LoanApplicationController {
       const search = parseSearchParam(req.query);
       const status = typeof req.query.status === 'string' ? (req.query.status as LoanApplication['status']) : undefined;
       const requestedCategory = typeof req.query.requestedCategory === 'string' ? req.query.requestedCategory : undefined;
+      const riskTier =
+        typeof req.query.riskTier === 'string' && ['LOW', 'MEDIUM', 'HIGH'].includes(req.query.riskTier)
+          ? (req.query.riskTier as 'LOW' | 'MEDIUM' | 'HIGH')
+          : undefined;
       // 2026-09-11 (user request): "Submitted" date-range filter on the Loan Applications list -
       // createdBefore is treated as end-of-day so picking the same date for both ends still
       // includes every application submitted that day, not just ones at/before midnight.
@@ -197,6 +216,7 @@ export class LoanApplicationController {
         search,
         status,
         requestedCategory,
+        riskTier,
         createdAfter,
         createdBefore,
       });

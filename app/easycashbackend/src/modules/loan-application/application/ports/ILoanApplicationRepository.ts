@@ -13,10 +13,27 @@ export interface FindManyLoanApplicationsOptions {
    * the Loan Applications list page's date-range filter. */
   createdAfter?: Date;
   createdBefore?: Date;
+  /** 2026-09-12 (user request): filter by the computed DTI risk tier - see
+   * LoanApplicationRiskAssessmentService. */
+  riskTier?: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
+export interface RiskTierCounts {
+  low: number;
+  medium: number;
+  high: number;
+  /** Applications with no risk tier yet computed (predate this feature, or lack a declared
+   * monthlyIncome) - not the same as `low + medium + high` unless this is 0. */
+  unscored: number;
+  total: number;
 }
 
 export interface ILoanApplicationRepository {
   findById(id: string, ctx?: TransactionContext): Promise<LoanApplication | null>;
+  /** 2026-09-12 (user request): counts backing the Loan Applications list's risk-summary tiles -
+   * scoped by branch only (not by the list's other filters), a stable snapshot rather than one
+   * that shifts with search/category/date filters. */
+  countByRiskTier(branchId: string | undefined, ctx?: TransactionContext): Promise<RiskTierCounts>;
   findMany(options: FindManyLoanApplicationsOptions, ctx?: TransactionContext): Promise<LoanApplication[]>;
   findByBorrowerId(borrowerId: string, ctx?: TransactionContext): Promise<LoanApplication[]>;
   findByPortalAccountId(portalAccountId: string, ctx?: TransactionContext): Promise<LoanApplication[]>;

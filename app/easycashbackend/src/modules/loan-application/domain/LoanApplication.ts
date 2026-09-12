@@ -192,6 +192,10 @@ export interface LoanApplicationProps {
   /** Cached from LoanApplicationPreQualificationService's geocoding — null if unresolved (distance
    * rule fails open in that case). */
   distanceFromBranchKm?: number;
+  /** 2026-09-12 (user request) — computed once at submission via LoanApplicationRiskAssessmentService,
+   * never recomputed afterward. Undefined when monthlyIncome wasn't available to compute it. */
+  dtiPercent?: number;
+  riskTier?: 'LOW' | 'MEDIUM' | 'HIGH';
   /** 2026-07-24 — the applicant's device GPS coordinates at submission time (portal only,
    * optional/best-effort). See schema.prisma's doc comment. */
   submissionLatitude?: number;
@@ -279,6 +283,10 @@ export interface CreateLoanApplicationProps {
   distanceFromBranchKm?: number;
   submissionLatitude?: number;
   submissionLongitude?: number;
+  /** Computed by LoanApplicationRiskAssessmentService before construction, same reasoning as
+   * `status`/`distanceFromBranchKm` above. */
+  dtiPercent?: number;
+  riskTier?: 'LOW' | 'MEDIUM' | 'HIGH';
 }
 
 /**
@@ -360,6 +368,8 @@ export class LoanApplication {
       distanceFromBranchKm: input.distanceFromBranchKm,
       submissionLatitude: input.submissionLatitude,
       submissionLongitude: input.submissionLongitude,
+      dtiPercent: input.dtiPercent,
+      riskTier: input.riskTier,
       createdAt: now,
       updatedAt: now,
     });
@@ -540,10 +550,22 @@ export class LoanApplication {
   /** Re-applies a freshly computed system verdict — only valid while no human decision exists yet
    * (i.e. `status` is still PREAPPROVED/PREDECLINED). No-ops silently once APPROVED/DECLINED, so
    * callers don't need their own guard for "has this already been decided?" before calling it. */
-  applySystemClassification(result: { status: 'PREAPPROVED' | 'PREDECLINED'; distanceFromBranchKm: number | null }): void {
+  applySystemClassification(result: {
+    status: 'PREAPPROVED' | 'PREDECLINED';
+    distanceFromBranchKm: number | null;
+    /** 2026-09-12: re-derived alongside status/distance whenever this runs, since income/amount/
+     * term (the same inputs DTI depends on) can change via an intake edit - an unedited DTI would
+     * otherwise go stale and misrepresent the applicant's actual risk. Omitted by callers that
+     * haven't been updated for this yet - existing DTI/tier is left untouched in that case, not
+     * cleared, so a partial migration of call sites can't silently blank out real data. */
+    dtiPercent?: number;
+    riskTier?: 'LOW' | 'MEDIUM' | 'HIGH';
+  }): void {
     if (this.props.status !== 'PREAPPROVED' && this.props.status !== 'PREDECLINED') return;
     this.props.status = result.status;
     this.props.distanceFromBranchKm = result.distanceFromBranchKm ?? undefined;
+    if ('dtiPercent' in result) this.props.dtiPercent = result.dtiPercent;
+    if ('riskTier' in result) this.props.riskTier = result.riskTier;
     this.props.updatedAt = new Date();
   }
 
@@ -673,7 +695,7 @@ export class LoanApplication {
    * no concept of roles). `targetStatus` is a freshly recomputed system verdict (the calling use
    * case re-runs LoanApplicationPreQualificationService) rather than a memorized old value, so
    * revert always reflects current data. */
-  revert(targetStatus: 'PREAPPROVED' | 'PREDECLINED'): void {
+  revert(targetStatus: 'PREAPPROVED' | 'PREDECLINED', freshRisk?: { dtiPercent?: number; riskTier?: 'LOW' | 'MEDIUM' | 'HIGH' }): void {
     if (this.props.status === 'PREAPPROVED' || this.props.status === 'PREDECLINED') {
       throw new InvalidLoanApplicationTransitionError(this.props.status, 'revert');
     }
@@ -681,6 +703,10 @@ export class LoanApplication {
     this.props.reviewedByUserId = undefined;
     this.props.reviewedAt = undefined;
     this.props.decisionNote = undefined;
+    // 2026-09-12: same "always reflects current data" reasoning as the classification above -
+    // undefined (caller didn't pass it) leaves existing DTI/tier untouched, doesn't blank it.
+    if (freshRisk && 'dtiPercent' in freshRisk) this.props.dtiPercent = freshRisk.dtiPercent;
+    if (freshRisk && 'riskTier' in freshRisk) this.props.riskTier = freshRisk.riskTier;
     this.props.updatedAt = new Date();
   }
 

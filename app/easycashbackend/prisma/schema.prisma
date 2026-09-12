@@ -108,6 +108,15 @@ enum InterestCalculationMethod {
   DECLINING_BALANCE_DISCOUNTED
 }
 
+/// 2026-09-12 (user request): applicant risk triage at submission time. Thresholds confirmed by
+/// the user - LOW <= 30% DTI, MEDIUM 31-40%, HIGH > 40% - matching the existing (frontend-only)
+/// Internal Credit Score's own DTI bands. See LoanApplicationRiskAssessmentService.
+enum LoanApplicationRiskTier {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 enum InterestType {
   SIMPLE_INTEREST
 }
@@ -2787,6 +2796,13 @@ model LoanApplication {
   sssNumber                        String?
   propertiesOwned                  String[]  @default([])
   creditScore                      Int?
+  /// 2026-09-12 (user request): computed once at submission from the requested loan's own
+  /// estimated amortization (see loanCategoryFlatRates.ts) plus any of the applicant's other
+  /// active Easycash loans (renewal/existing-client applications only) - never recomputed after
+  /// save, so it reflects what was true when the applicant applied, not a live view. Null when
+  /// there wasn't enough data (no declared monthlyIncome) to compute it - never guessed.
+  dtiPercent                       Decimal?  @db.Decimal(6, 2)
+  riskTier                         LoanApplicationRiskTier?
   /// 2026-07-25: superseded by the structured coBorrowerFirstName/MiddleName/LastName fields below
   /// for new intake - kept read-only for older applications that only ever had this single
   /// combined "Name (relationship)" string, since re-parsing it apart is lossy/ambiguous (see

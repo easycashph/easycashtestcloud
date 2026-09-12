@@ -3,6 +3,7 @@ import { ProfileActivityLogService } from '@modules/profile-activity/application
 import type { LoanApplication } from '../../domain/LoanApplication';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
+import { assessLoanApplicationRisk } from '../services/LoanApplicationRiskAssessmentService';
 
 export interface UpdateLoanApplicationUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
@@ -40,7 +41,8 @@ export class UpdateLoanApplicationUseCase {
       occupation: props.occupation,
       employer: props.employer,
     });
-    application.applySystemClassification(classification);
+    const riskAssessment = assessLoanApplicationRisk(props.monthlyIncome, classification.estimatedMonthlyAmortization);
+    application.applySystemClassification({ ...classification, dtiPercent: riskAssessment?.dtiPercent, riskTier: riskAssessment?.riskTier });
 
     await this.deps.loanApplicationRepository.save(application);
 

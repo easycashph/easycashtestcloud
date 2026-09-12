@@ -35,6 +35,8 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
   const requireAiReviewAccess = requirePermission('loan_application.ai_review');
 
   router.post('/loan-applications', requireAuth, requireApplicationAccess, validateBody(createLoanApplicationSchema), controller.create);
+  // Registered before the `/:id` route below so "risk-summary" is never swallowed as an :id param.
+  router.get('/loan-applications/risk-summary', requireAuth, requireApplicationAccess, controller.riskSummary);
   router.get('/loan-applications/:id', requireAuth, requireApplicationAccess, controller.get);
   router.patch(
     '/loan-applications/:id',

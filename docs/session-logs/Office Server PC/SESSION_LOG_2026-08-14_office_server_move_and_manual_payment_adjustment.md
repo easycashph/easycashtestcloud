@@ -7332,3 +7332,141 @@ restore. `_prisma_migrations` latest entry unchanged, confirming schema compatib
   `pg_restore -l` before assuming its format or scope, back up the target's current DB first
   (`pg_dump -Fc`), stop the backend during the restore window, and verify `_prisma_migrations`
   and a couple of real row counts afterward rather than trusting a clean `pg_restore` exit alone.
+
+## §156 — 2026-09-12: New feature - applicant Debt-to-Income risk triage, computed at submission
+
+User's goal: an applicant's DTI and Low/Medium/High risk tier should be computed automatically the
+moment they apply (Portal or LMS), so staff can triage who needs a closer look without opening
+every application - not the existing (2026-09-11) Internal Credit Score gauge, which is
+frontend-only, on-demand (Detail page only), and never persisted.
+
+**Design pass before any code** (mockup first, per standing workflow): built and iterated an
+Artifact mockup of the Loan Applications list with a new Risk column/badges, summary tiles, a
+risk filter, and a click-to-expand "how this was computed" breakdown per row - the user asked
+specifically for that transparency ("paano na compute", "ano yung existing monthly debt") before
+approving anything. Also delivered a live-formula Excel workbook (DTI, then extended to the full
+principal->amortization->DTI chain with a VLOOKUP rate table) so the user could sanity-check the
+math independently of any mockup.
+
+**Scope decision, made explicit rather than assumed**: asked the user twice what "existing debt"
+should include (their own Easycash loans only vs. also a new self-declared "other lender debt"
+form field vs. none) - both times the user deferred/dismissed the question and said to implement
+the mockup. Investigated further and found the "include existing Easycash loans" path is NOT the
+simple flat-rate re-derivation it looked like: a real `LoanAccount`'s product (`LoanProduct.name`,
+e.g. "SML-REG") doesn't map onto the application's free-text `requestedCategory` (e.g. "Salary
+Loan") that `computeFlatRateAmortization` keys its rate lookup on - faking that mapping would be
+exactly the kind of fabricated financial logic CLAUDE.md rules out. **Shipped v1 as new-loan-only
+DTI** (existing debt of any kind excluded) rather than guess at that mapping, and told the user
+this before proceeding rather than silently narrowing scope.
+
+**Implementation** (all in `app/easycashbackend` unless noted):
+- Migration `20260912065356_add_loan_application_dti_risk_tier`: additive `LoanApplication.dtiPercent`
+  (`Decimal(6,2)`) + new `LoanApplicationRiskTier` enum (`LOW`/`MEDIUM`/`HIGH`) column `riskTier`.
+  Thresholds confirmed by the user: LOW <=30%, MEDIUM 31-40%, HIGH >40% - same bands the existing
+  frontend-only Internal Credit Score already uses, kept consistent rather than inventing new ones.
+- New `LoanApplicationRiskAssessmentService.ts` (`assessLoanApplicationRisk`) - pure function,
+  `dtiPercent = estimatedMonthlyAmortization / monthlyIncome * 100`, undefined (never guessed) when
+  there's no declared income. Doc comment explains the existing-debt scoping decision above in
+  full, for whoever revisits this.
+- `LoanApplicationPreQualificationService.classify()` extended to also return
+  `estimatedMonthlyAmortization` (it already computed this internally and discarded it) so callers
+  don't need a second, redundant `evaluateCriteria()` call.
+- Wired into **every** place that (re)classifies an application - not just creation - since
+  income/amount/term can change after submission via an intake edit, and a stale DTI would
+  misrepresent real risk: `CreateLoanApplicationUseCase` (new), `UpdateLoanApplicationIntakeUseCase`,
+  `UpdateLoanApplicationUseCase`, `UpdateLoanApplicationSelfServiceUseCase` (all via
+  `applySystemClassification`, extended to accept the risk fields), and
+  `RevertLoanApplicationDecisionUseCase` (via `LoanApplication.revert()`, similarly extended) -
+  found and fixed as a would-be staleness bug during design, not after a bug report.
+  `LoanApplication.ts`, `PrismaLoanApplicationRepository.ts`, and `LoanApplicationPresenter.ts` all
+  updated to carry the two new fields through create/save/load/JSON.
+  `riskTier` also added as a real server-side list filter
+  (`ILoanApplicationRepository.findMany`/`loanApplicationController.list`), not just a client-side
+  narrowing - consistent with how status/category/date-range already work on this list.
+- LMS (`app/lmsfrontend`): `loanApplicationApiTypes.ts` carries `dtiPercent`/`riskTier`;
+  `LoanApplicationsPage.tsx` gained a "Risk" column (colored badge, DTI% as a hover title) and a
+  risk-tier filter dropdown, wired into the same server-side pagination as every other filter here.
+  The mockup's summary tiles and per-row expandable breakdown panel were NOT built into the real
+  page this session - the list column + filter was the part explicitly asked to be implemented;
+  those two are natural follow-ups if the user wants the fuller mockup experience later.
+
+**Verification**: `tsc --noEmit` clean on both packages. Wrote a throwaway script
+(`verify-dti-feature.ts`, deleted after use - never committed) that ran the real
+`CreateLoanApplicationUseCase` against the actual local Postgres end-to-end: a ₱80,000/6-month
+Salary Loan application against ₱80,000 declared income produced `dtiPercent: 19.67`,
+`riskTier: LOW` - exactly matching the hand-computed walkthrough given to the user earlier in the
+conversation, confirming the shipped formula matches what was explained and agreed on. Test row
+deleted after. Rebuilt `easycashbackend` + `lmsfrontend` (`write-build-info.sh` +
+`docker compose up -d --build`), both healthy. Ran the full `vitest` suite: 41 failures, but zero
+overlap with any file touched this session (`CreateLoanApplicationUseCase.test.ts`,
+`RevertLoanApplicationDecisionUseCase.test.ts`, `UpdateLoanApplicationSelfServiceUseCase.test.ts`,
+`LoanApplication.test.ts` all pass) - the failures are pre-existing, unrelated (JWT invalid-
+signature, SMTP/M360 test-credential errors, a DB connection timeout, borrower/repayment/ledger
+suites), not introduced by this work.
+
+### Current state after §156
+
+- Every new loan application (Portal or LMS-encoded) now gets a real, persisted DTI% and Low/
+  Medium/High risk tier the moment it's created, visible as a badge/filter on the Loan Applications
+  list. Existing applications created before this change have `dtiPercent`/`riskTier` = null (never
+  backfilled - true to "this wasn't computed when they applied", not silently fabricated after the
+  fact) until they're next edited or reverted, which recomputes it.
+- **v1 explicitly excludes existing debt of any kind** (own Easycash loans or other lenders) from
+  the DTI numerator - flagged to the user as a real limitation, not hidden. Two follow-ups on the
+  table if the user wants a fuller version later: (1) including an applicant's other active
+  Easycash loans needs each one's real per-installment amount from its `RepaymentSchedule`, not a
+  flat-rate re-derivation (the product-category mismatch problem explained above); (2) a
+  self-declared "other lender debt" field would need new UI + a schema field and relies on the
+  applicant's own honesty - neither attempted this session.
+- Mockup-only pieces (summary tiles, per-row expandable "how this was computed" breakdown) were
+  never built into the real LMS - only the list column + filter shipped. Revisit the Artifact
+  mockup (published this session) if/when the user wants those too.
+
+## §157 — 2026-09-12: §156's remaining mockup pieces (summary tiles + expandable breakdown) built
+into the real LMS
+
+User asked for "lahat" (everything) from the mockup, closing the gap §156 left open.
+
+**Summary tiles** (Total/Low/Medium/High counts above the Loan Applications table):
+- New `RiskTierCounts` shape on `ILoanApplicationRepository` + `countByRiskTier()` (Prisma
+  `groupBy` on `riskTier`, mirrors the existing pattern in `PrismaDashboardRepository.ts`) -
+  branch-scoped only, deliberately NOT affected by the list's own search/status/category/date
+  filters (a stable snapshot, matching the mockup's framing).
+- New `GetLoanApplicationRiskSummaryUseCase` + `LoanApplicationController.riskSummary` + `GET
+  /loan-applications/risk-summary`, registered BEFORE the existing `/loan-applications/:id` route
+  (Express matches routes in order - after it, "risk-summary" would've been swallowed as the `:id`
+  param).
+- LMS: `riskSummaryQuery` (React Query) backs 4 new `Card` tiles above the table.
+
+**Per-row expandable "how this was computed" breakdown**: needed NO backend changes at all - every
+value it shows (`requestedAmount`, `requestedTermMonths`, `preQualificationBreakdown.
+estimatedMonthlyAmortization`, `monthlyIncome`, `dtiPercent`, `riskTier`) was already being sent to
+the frontend for every row (`presentMany()`'s existing `buildBreakdown()` call, originally added
+for the Reason column's PREDECLINED text). Clicking the Risk badge (now a button, chevron
+indicator) toggles a new full-width row showing those figures plus the exact arithmetic
+(`amortization ÷ income × 100 = X% DTI → tier`), colored to match the risk tier. Deliberately does
+NOT show the underlying flat-rate percentage or re-derive the amortization formula client-side -
+that would duplicate `loanCategoryFlatRates.ts`'s business rule in two places and risk silently
+drifting from it; the amortization figure itself comes straight from the backend's own
+pre-qualification computation instead.
+
+**Verification**: `tsc --noEmit` clean on both packages after each round of changes. Two more
+scratch, throwaway, never-committed scripts (`verify-dti-feature-2.ts`) exercised the real
+`GetLoanApplicationRiskSummaryUseCase` end-to-end against live Postgres: created a genuinely
+high-risk application (₱10,000 income, ₱30,000/6mo loan, no existing debt -> 59% DTI, confirmed
+HIGH), confirmed the summary counts incremented correctly, deleted it, confirmed counts reverted.
+One false alarm along the way: an earlier run of this script expected a HIGH result using the old
+mockup's *with-existing-debt* numbers (₱18,000 income + a ₱12,500 loan + a ₱7,000 "other debt") -
+got LOW (19.4%) instead, which is correct given v1's explicit new-loan-only scope (§156) - the
+test's own expectation was stale, not the code; fixed the test data, not the implementation.
+Route registration confirmed via `curl` (`401` on `/loan-applications/risk-summary` with no auth
+token, not `404` - proves it's reachable and not swallowed by `:id`). Rebuilt both containers,
+healthy.
+
+### Current state after §157
+
+- The DTI risk-triage feature (§156+§157) is now fully built out to match the mockup: risk column
+  + filter, summary tiles, and a per-row transparency breakdown - nothing left unimplemented from
+  what was shown to the user.
+- Same v1 scope limitation as §156 still applies: new-loan DTI only, no existing debt of any kind
+  included yet. Not revisited this session.

@@ -2,6 +2,7 @@ import { NotFoundError } from '@shared/errors/DomainError';
 import type { LoanApplication } from '../../domain/LoanApplication';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
+import { assessLoanApplicationRisk } from '../services/LoanApplicationRiskAssessmentService';
 
 export interface UpdateLoanApplicationIntakeUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
@@ -38,7 +39,8 @@ export class UpdateLoanApplicationIntakeUseCase {
       occupation: props.occupation,
       employer: props.employer,
     });
-    application.applySystemClassification(classification);
+    const riskAssessment = assessLoanApplicationRisk(props.monthlyIncome, classification.estimatedMonthlyAmortization);
+    application.applySystemClassification({ ...classification, dtiPercent: riskAssessment?.dtiPercent, riskTier: riskAssessment?.riskTier });
 
     await this.deps.loanApplicationRepository.save(application);
     return application;

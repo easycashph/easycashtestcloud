@@ -221,6 +221,7 @@ import { RevertLoanApplicationToPreApprovalUseCase } from '@modules/loan-applica
 import { DeleteLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/DeleteLoanApplicationUseCase';
 import { GenerateLoanApplicationFormUseCase } from '@modules/loan-application/application/use-cases/GenerateLoanApplicationFormUseCase';
 import { GenerateCrmReportUseCase } from '@modules/loan-application/application/use-cases/GenerateCrmReportUseCase';
+import { GetLoanApplicationRiskSummaryUseCase } from '@modules/loan-application/application/use-cases/GetLoanApplicationRiskSummaryUseCase';
 import { StartLoanApplicationReviewUseCase } from '@modules/loan-application/application/use-cases/StartLoanApplicationReviewUseCase';
 import { SubmitLoanApplicationReviewReportUseCase } from '@modules/loan-application/application/use-cases/SubmitLoanApplicationReviewReportUseCase';
 import { SetMitigationAccountOwnerUseCase } from '@modules/loan-application/application/use-cases/SetMitigationAccountOwnerUseCase';
@@ -1506,6 +1507,7 @@ export function createApp(): Express {
         attachmentRepository: new PrismaAttachmentRepository(),
         fileStorage: new LocalFileStorage(),
       }),
+      getLoanApplicationRiskSummaryUseCase: new GetLoanApplicationRiskSummaryUseCase({ loanApplicationRepository }),
       preQualificationService,
       borrowerRepository,
       loanAccountRepository,

@@ -4,6 +4,7 @@ import { ProfileActivityLogService } from '@modules/profile-activity/application
 import type { LoanApplication } from '../../domain/LoanApplication';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
+import { assessLoanApplicationRisk } from '../services/LoanApplicationRiskAssessmentService';
 
 export interface RevertLoanApplicationDecisionUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
@@ -38,7 +39,8 @@ export class RevertLoanApplicationDecisionUseCase {
       employer: props.employer,
     });
 
-    application.revert(classification.status);
+    const riskAssessment = assessLoanApplicationRisk(props.monthlyIncome, classification.estimatedMonthlyAmortization);
+    application.revert(classification.status, { dtiPercent: riskAssessment?.dtiPercent, riskTier: riskAssessment?.riskTier });
     await this.deps.loanApplicationRepository.save(application);
     await this.deps.auditLogger.log({
       userId: revertedByUserId,

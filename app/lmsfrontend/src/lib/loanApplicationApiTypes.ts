@@ -220,6 +220,11 @@ export interface LoanApplication {
   encodedByUserId: string | null;
   status: LoanApplicationStatus;
   distanceFromBranchKm: number | null;
+  /** 2026-09-12 (user request) — Debt-to-Income risk triage, computed once at submission (and
+   * re-derived on an intake edit/revert - see LoanApplicationRiskAssessmentService on the
+   * backend). Null when there wasn't enough data (no declared monthlyIncome) to compute it. */
+  dtiPercent: number | null;
+  riskTier: 'LOW' | 'MEDIUM' | 'HIGH' | null;
   /** 2026-07-24 — the applicant's device GPS coordinates at submission time (Easycash Portal
    * submissions only, optional/best-effort - null for staff-encoded walk-ins and for a portal
    * client who denied/lacks the browser's location permission). */
