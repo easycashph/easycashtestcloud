@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, ChevronDown, ChevronRight, Download, ExternalLink, FilePlus2, Lock, Search } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, ExternalLink, FilePlus2, FileSpreadsheet, Lock, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -433,10 +433,20 @@ export function LoanApplicationsPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">Search &amp; Filter</CardTitle>
             {/* 2026-09-12 (user request): exports exactly what's currently filtered/visible above -
-                same posture as the Reports hub's own .xlsx downloads (e.g. Loan Releases Report). */}
-            <Button variant="outline" size="sm" onClick={() => void handleDownloadExcel()} disabled={isDownloading}>
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              {isDownloading ? 'Preparing…' : 'Download Excel'}
+                same posture as the Reports hub's own .xlsx downloads (e.g. Loan Releases Report).
+                Relabeled to "Export" with a spreadsheet icon and an accent tint (2026-09-12
+                follow-up, user picked this from a set of mockups) - names the file format rather
+                than a generic download action, and the tint gives it a touch more presence than a
+                plain outline button without going full-primary. */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
+              onClick={() => void handleDownloadExcel()}
+              disabled={isDownloading}
+            >
+              <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+              {isDownloading ? 'Preparing…' : 'Export'}
             </Button>
           </div>
           <div className="flex flex-col flex-wrap gap-2 sm:flex-row">
