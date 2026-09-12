@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { ZipArchive } from 'archiver';
+import type { PrismaClient } from '@prisma/client';
 import { logger } from '@shared/logger/logger';
 import type { IFileStorage } from '@shared/application/ports/IFileStorage';
 import { buildUniqueZipEntryPath } from '@shared/application/buildUniqueZipEntryPath';
@@ -29,6 +30,10 @@ export interface ProcessBulkExportJobUseCaseDeps {
   /** 2026-08-25 (Cancel Export, user request): shared with `CancelBulkExportJobUseCase` - one
    * instance for the whole app, wired once in app.ts, same as any other singleton repository. */
   cancellationRegistry: BulkExportCancellationRegistry;
+  /** 2026-09-12 (progress display, user request): used only to count the target schema's tables
+   * before a DATABASE_DUMP starts, so its progress can be reported the same way as the attachment
+   * exports (processed/total). The dump itself still goes through `pg_dump`, not Prisma. */
+  prisma: PrismaClient;
 }
 
 /** Thrown internally when a cancellation signal is observed mid-job - caught once in `execute()`
@@ -156,7 +161,11 @@ export class ProcessBulkExportJobUseCase {
     // whether a collision could even happen (confirmed 2026-08-25: MIS found the ID fragment
     // confusing on an already-unique loan code folder).
     const folderNameOccurrences = new Map<string, number>();
-    for (const record of records) {
+    // 2026-09-12 (progress display, user request): persist processedRecords only when the whole-
+    // percent value actually changes, not on every record - a 1,800-record job would otherwise
+    // issue 1,800 UPDATEs for no visible benefit (the UI can't show finer than 1% anyway).
+    let lastReportedPercent = -1;
+    for (const [index, record] of records.entries()) {
       // Checked once per record (not per attachment) - a cancel signal doesn't need to interrupt
       // mid-record, just stop starting new ones, so this never fires mid-write of a single record's
       // files.
@@ -198,6 +207,14 @@ export class ProcessBulkExportJobUseCase {
           logger.error({ jobId: job.id, attachmentId: attachment.id, error }, '[ProcessBulkExportJobUseCase] skipping unreadable attachment');
         }
       }
+
+      const processed = index + 1;
+      const percent = Math.floor((processed / records.length) * 100);
+      if (percent !== lastReportedPercent) {
+        lastReportedPercent = percent;
+        job.updateProgress(processed);
+        await this.deps.bulkExportJobRepository.save(job);
+      }
     }
 
     await archive.finalize();
@@ -210,7 +227,24 @@ export class ProcessBulkExportJobUseCase {
   }
 
   private async runDatabaseDump(job: BulkExportJob, signal: AbortSignal): Promise<{ recordCount: number; fileCount: number }> {
-    job.markProcessing(1);
+    // Prisma's DATABASE_URL carries a `?schema=...` query param pg_dump's own URI parser rejects
+    // outright ("invalid URI query parameter") - strip it and pass the schema via pg_dump's own
+    // `-n` flag instead (confirmed via live testing: without this fix, every database export job
+    // failed immediately with that parse error).
+    const connectionUrl = new URL(this.deps.databaseUrl);
+    const schema = connectionUrl.searchParams.get('schema');
+    connectionUrl.searchParams.delete('schema');
+
+    // 2026-09-12 (progress display, user request): pg_dump has no built-in percentage, but its
+    // `--verbose` stream logs one "dumping contents of table ..." line per table as it goes -
+    // count those against the schema's total table count for the same processed/total progress
+    // the attachment exports show, instead of a plain indeterminate spinner for the whole dump.
+    const tableCountRows = await this.deps.prisma.$queryRawUnsafe<{ count: bigint }[]>(
+      `SELECT count(*)::bigint AS count FROM information_schema.tables WHERE table_schema = $1 AND table_type = 'BASE TABLE'`,
+      schema ?? 'public',
+    );
+    const tableCount = Number(tableCountRows[0]?.count ?? 0);
+    job.markProcessing(tableCount);
     await this.deps.bulkExportJobRepository.save(job);
 
     if (signal.aborted) throw new BulkExportCancelledError();
@@ -227,18 +261,25 @@ export class ProcessBulkExportJobUseCase {
     archive.pipe(writeStream);
 
     const dumpFileName = `easycash-database-${job.createdAt.toISOString().slice(0, 10)}.dump`;
-    // Prisma's DATABASE_URL carries a `?schema=...` query param pg_dump's own URI parser rejects
-    // outright ("invalid URI query parameter") - strip it and pass the schema via pg_dump's own
-    // `-n` flag instead (confirmed via live testing: without this fix, every database export job
-    // failed immediately with that parse error).
-    const connectionUrl = new URL(this.deps.databaseUrl);
-    const schema = connectionUrl.searchParams.get('schema');
-    connectionUrl.searchParams.delete('schema');
-    const pgDumpArgs = [connectionUrl.toString(), '-F', 'c', ...(schema ? ['-n', schema] : [])];
+    const pgDumpArgs = [connectionUrl.toString(), '-F', 'c', '--verbose', ...(schema ? ['-n', schema] : [])];
     const pgDump = spawn('pg_dump', pgDumpArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stderrOutput = '';
+    let processedTables = 0;
+    let lastReportedPercent = -1;
     pgDump.stderr.on('data', (chunk: Buffer) => {
-      stderrOutput += chunk.toString();
+      const text = chunk.toString();
+      stderrOutput += text;
+      if (tableCount <= 0) return;
+      const matches = text.match(/dumping contents of table/gi);
+      if (!matches) return;
+      processedTables = Math.min(processedTables + matches.length, tableCount);
+      const percent = Math.floor((processedTables / tableCount) * 100);
+      if (percent === lastReportedPercent) return;
+      lastReportedPercent = percent;
+      job.updateProgress(processedTables);
+      void this.deps.bulkExportJobRepository
+        .save(job)
+        .catch((err) => logger.warn({ jobId: job.id, err }, '[ProcessBulkExportJobUseCase] failed to persist dump progress'));
     });
     // Same unhandled-'error'-event crash risk as a missing attachment file (see
     // runAttachmentExport's own doc comment) - attach a listener before archiver reads from it, so

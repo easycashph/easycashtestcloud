@@ -16,6 +16,7 @@ function toDomain(row: BulkExportJobRow): BulkExportJob {
     endDate: row.endDate,
     status: row.status,
     recordCount: row.recordCount,
+    processedRecords: row.processedRecords,
     fileCount: row.fileCount,
     resultStorageKey: row.resultStorageKey,
     resultFileSize: row.resultFileSize,
@@ -50,6 +51,7 @@ export class PrismaBulkExportJobRepository implements IBulkExportJobRepository {
       data: {
         status: job.status,
         recordCount: job.recordCount,
+        processedRecords: job.processedRecords,
         fileCount: job.fileCount,
         resultStorageKey: job.resultStorageKey,
         resultFileSize: job.resultFileSize,

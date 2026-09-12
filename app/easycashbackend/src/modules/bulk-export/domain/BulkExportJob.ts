@@ -12,6 +12,7 @@ export interface BulkExportJobProps {
   endDate: Date;
   status: BulkExportStatus;
   recordCount: number | null;
+  processedRecords: number | null;
   fileCount: number | null;
   resultStorageKey: string | null;
   resultFileSize: number | null;
@@ -48,6 +49,7 @@ export class BulkExportJob {
       endDate: input.endDate,
       status: 'PENDING',
       recordCount: null,
+      processedRecords: null,
       fileCount: null,
       resultStorageKey: null,
       resultFileSize: null,
@@ -64,6 +66,14 @@ export class BulkExportJob {
   markProcessing(recordCount: number): void {
     this.props.status = 'PROCESSING';
     this.props.recordCount = recordCount;
+    this.props.processedRecords = 0;
+  }
+
+  /** 2026-09-12 (progress display, user request): called from the attachment-export loop as each
+   * record finishes, so staff watching the Exports page can see how far along a long-running job
+   * is instead of a plain "Processing…" spinner with no sense of scale. */
+  updateProgress(processedRecords: number): void {
+    this.props.processedRecords = processedRecords;
   }
 
   markCompleted(input: { resultStorageKey: string; resultFileSize: number; fileCount: number }): void {
@@ -71,6 +81,7 @@ export class BulkExportJob {
     this.props.resultStorageKey = input.resultStorageKey;
     this.props.resultFileSize = input.resultFileSize;
     this.props.fileCount = input.fileCount;
+    this.props.processedRecords = this.props.recordCount;
     this.props.completedAt = new Date();
   }
 
@@ -119,6 +130,9 @@ export class BulkExportJob {
   }
   get recordCount(): number | null {
     return this.props.recordCount;
+  }
+  get processedRecords(): number | null {
+    return this.props.processedRecords;
   }
   get fileCount(): number | null {
     return this.props.fileCount;

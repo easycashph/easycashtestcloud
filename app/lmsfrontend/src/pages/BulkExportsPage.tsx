@@ -45,6 +45,45 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatDuration(ms: number): string {
+  const totalMinutes = Math.round(ms / 60_000);
+  if (totalMinutes < 1) return 'less than a minute';
+  if (totalMinutes < 60) return `${totalMinutes} min`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+}
+
+/**
+ * Progress bar + ETA for a still-running export (2026-09-12 user request: "ilang percent na" /
+ * how much longer). `processedRecords`/`recordCount` mean "tables dumped so far" for a
+ * DATABASE_DUMP job and "records (borrowers/loan accounts) processed so far" for the two
+ * attachment export types - same shape either way, see ProcessBulkExportJobUseCase. The ETA is a
+ * simple linear projection from elapsed time and percent complete, so it's only shown once real
+ * progress exists (percent > 0) - meaningless, and worse than nothing, at 0%.
+ */
+function ExportProgress({ job }: { job: BulkExportJob }) {
+  if (job.status !== 'PROCESSING' || !job.recordCount) return null;
+  const processed = job.processedRecords ?? 0;
+  const percent = Math.min(100, Math.round((processed / job.recordCount) * 100));
+  let etaText: string | null = null;
+  if (percent > 0 && percent < 100) {
+    const elapsedMs = Date.now() - new Date(job.createdAt).getTime();
+    const estimatedTotalMs = (elapsedMs / percent) * 100;
+    etaText = `~${formatDuration(estimatedTotalMs - elapsedMs)} left`;
+  }
+  return (
+    <div className="mt-1.5 w-36">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${percent}%` }} />
+      </div>
+      <span className="mt-0.5 block text-[11px] tabular-nums text-muted-foreground">
+        {percent}%{etaText ? ` · ${etaText}` : ''}
+      </span>
+    </div>
+  );
+}
+
 const STATUS_META: Record<BulkExportStatus, { label: string; dot: string; text: string }> = {
   PENDING: { label: 'Pending', dot: 'bg-muted-foreground/50', text: 'text-muted-foreground' },
   PROCESSING: { label: 'Processing', dot: 'bg-accent animate-pulse', text: 'text-accent-foreground' },
@@ -233,6 +272,7 @@ export function BulkExportsPage({ embedded = false }: { embedded?: boolean } = {
                         </td>
                         <td className="px-3 py-2.5">
                           <StatusPill status={job.status} />
+                          <ExportProgress job={job} />
                           {job.status === 'FAILED' && job.errorMessage && (
                             <p className="mt-1 max-w-xs text-[11px] text-destructive">{job.errorMessage}</p>
                           )}

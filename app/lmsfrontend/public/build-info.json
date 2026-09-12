@@ -1,1 +1,6 @@
-{"commit":"99bc2c73","commitDate":"2026-09-12T17:36:11+08:00","commitMessage":"fix(loan-application): align Internal Credit Score's DTI factor with the persisted dtiPercent","builtAt":"2026-09-12T10:13:27.000Z"}
+﻿{
+    "commitDate":  "2026-09-12T14:38:34+08:00",
+    "commitMessage":  "Merge branch \u0027main\u0027 of https://github.com/easycashph/easycash-lms",
+    "commit":  "87c7a965",
+    "builtAt":  "2026-09-12T06:39:13.6223473Z"
+}
