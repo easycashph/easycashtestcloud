@@ -1,4 +1,4 @@
-import { writeTabularXlsx, type TabularColumn } from './writeTabularXlsx';
+import { writeTabularXlsx, type TabularColumn } from '@shared/infrastructure/writeTabularXlsx';
 import type {
   AccountsWithPastDueReportRow,
   AgingReportRow,

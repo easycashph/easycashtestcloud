@@ -19,11 +19,13 @@ export interface TabularXlsxOptions<Row> {
 }
 
 /**
- * 2026-07-17 (Reports): shared writer for every "one flat table -> one .xlsx sheet" report
+ * 2026-07-17 (Reports): shared writer for every "one flat table -> one .xlsx sheet" export
  * (Aging, Ending Balance, Accounts with Past Due, Collection, Expected Collection, First
- * Amortization, Daily Collection, Fully Paid Accounts) - factored out of
+ * Amortization, Daily Collection, Fully Paid Accounts, Loan Applications) - factored out of
  * `ExcelJsLoanReleasesReportWriter` (left as-is, it predates this and already works) so each new
- * report is just a column list, not a duplicated writer class.
+ * export is just a column list, not a duplicated writer class. Moved here from the `reporting`
+ * module (2026-09-12) once `loan-application` needed it too - this utility has no reporting-domain
+ * logic of its own, so it belongs in `shared`, not owned by one module the others reach into.
  */
 export async function writeTabularXlsx<Row>(options: TabularXlsxOptions<Row>): Promise<Buffer> {
   const { sheetName, columns, rows, totals } = options;

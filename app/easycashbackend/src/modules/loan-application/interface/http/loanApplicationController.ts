@@ -37,7 +37,64 @@ import type {
   UpdateLoanApplicationRequestBody,
   UpdateLoanApplicationIntakeRequestBody,
 } from './loanApplicationSchemas';
+import { writeTabularXlsx, type TabularColumn } from '@shared/infrastructure/writeTabularXlsx';
 import { presentLoanApplication, type LoanApplicationLinkage } from './presenters/LoanApplicationPresenter';
+
+/** 2026-09-12 (Download Excel, user request): mirrors `STATUS_DISPLAY_LABEL` in the frontend's
+ * `loanApplicationStatusLabels.ts` - PREAPPROVED/PREDECLINED read as the company's actual
+ * terminology ("Requirement Compliance"/"Pre Declined") everywhere a status is shown to staff, the
+ * .xlsx export included. Duplicated rather than shared across the frontend/backend boundary (no
+ * shared package between them in this codebase) - keep the two in sync if either changes. */
+const STATUS_DISPLAY_LABEL: Record<LoanApplication['status'], string> = {
+  INCOMPLETE: 'Incomplete',
+  PREAPPROVED: 'Requirement Compliance',
+  PREDECLINED: 'Pre Declined',
+  UNDER_REVIEW: 'Under Review',
+  PRE_APPROVAL: 'Pre Approval',
+  APPROVED: 'Approved',
+  DECLINED: 'Declined',
+};
+
+/** 2026-09-12: same "why" logic as the frontend list's own `declineReason` (LoanApplicationsPage.tsx)
+ * - DECLINED is a human decision (whatever the reviewer typed into decisionNote); PREDECLINED is
+ * purely system-computed (LoanApplicationPreQualificationService, advisory only), so its reason is
+ * built from whichever check(s) failed instead. Every other status has no "reason" concept. */
+function declineReason(app: ReturnType<typeof presentLoanApplication>): string | null {
+  if (app.status === 'DECLINED') {
+    return app.decisionNote?.trim() || null;
+  }
+  if (app.status === 'PREDECLINED' && app.preQualificationBreakdown) {
+    const checks = app.preQualificationBreakdown.checks;
+    const failed = [checks.age, checks.income, checks.employment].filter((c) => c && !c.passed);
+    if (failed.length === 0) return null;
+    return failed.map((c) => c.detail || c.label).join('; ');
+  }
+  return null;
+}
+
+interface LoanApplicationXlsxRow {
+  applicant: string;
+  category: string;
+  amount: number;
+  dtiPercent: number | null;
+  riskTier: string;
+  status: string;
+  reason: string | null;
+  loanAccount: string;
+  submitted: Date;
+}
+
+const LOAN_APPLICATION_XLSX_COLUMNS: TabularColumn<LoanApplicationXlsxRow>[] = [
+  { header: 'Applicant', key: 'applicant', width: 28 },
+  { header: 'Category', key: 'category', width: 16 },
+  { header: 'Amount', key: 'amount', width: 14, numFmt: '#,##0.00', isMoney: true },
+  { header: 'DTI %', key: 'dtiPercent', width: 10, numFmt: '0.0"%"' },
+  { header: 'Risk', key: 'riskTier', width: 10 },
+  { header: 'Decision Status', key: 'status', width: 20 },
+  { header: 'Reason', key: 'reason', width: 40 },
+  { header: 'Loan Account', key: 'loanAccount', width: 16 },
+  { header: 'Submitted', key: 'submitted', width: 14, numFmt: 'mm/dd/yyyy' },
+];
 
 export interface LoanApplicationControllerDeps {
   createLoanApplicationUseCase: CreateLoanApplicationUseCase;
@@ -192,36 +249,78 @@ export class LoanApplicationController {
     }
   };
 
+  /** Shared by `list` and `listXlsx` - the same search/status/category/risk/date-range filters,
+   * parsed once so the .xlsx export can never silently drift from what the on-screen list actually
+   * filters on. */
+  private parseListFilters(req: Request) {
+    const search = parseSearchParam(req.query);
+    const status = typeof req.query.status === 'string' ? (req.query.status as LoanApplication['status']) : undefined;
+    const requestedCategory = typeof req.query.requestedCategory === 'string' ? req.query.requestedCategory : undefined;
+    const riskTier =
+      typeof req.query.riskTier === 'string' && ['LOW', 'MEDIUM', 'HIGH'].includes(req.query.riskTier)
+        ? (req.query.riskTier as 'LOW' | 'MEDIUM' | 'HIGH')
+        : undefined;
+    // 2026-09-11 (user request): "Submitted" date-range filter on the Loan Applications list -
+    // createdBefore is treated as end-of-day so picking the same date for both ends still
+    // includes every application submitted that day, not just ones at/before midnight.
+    const createdAfter = typeof req.query.createdAfter === 'string' ? new Date(req.query.createdAfter) : undefined;
+    const createdBeforeRaw = typeof req.query.createdBefore === 'string' ? new Date(req.query.createdBefore) : undefined;
+    const createdBefore = createdBeforeRaw ? new Date(createdBeforeRaw.setHours(23, 59, 59, 999)) : undefined;
+    return { search, status, requestedCategory, riskTier, createdAfter, createdBefore };
+  }
+
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
       const { limit, cursor } = parsePaginationParams(req.query);
-      const search = parseSearchParam(req.query);
-      const status = typeof req.query.status === 'string' ? (req.query.status as LoanApplication['status']) : undefined;
-      const requestedCategory = typeof req.query.requestedCategory === 'string' ? req.query.requestedCategory : undefined;
-      const riskTier =
-        typeof req.query.riskTier === 'string' && ['LOW', 'MEDIUM', 'HIGH'].includes(req.query.riskTier)
-          ? (req.query.riskTier as 'LOW' | 'MEDIUM' | 'HIGH')
-          : undefined;
-      // 2026-09-11 (user request): "Submitted" date-range filter on the Loan Applications list -
-      // createdBefore is treated as end-of-day so picking the same date for both ends still
-      // includes every application submitted that day, not just ones at/before midnight.
-      const createdAfter = typeof req.query.createdAfter === 'string' ? new Date(req.query.createdAfter) : undefined;
-      const createdBeforeRaw = typeof req.query.createdBefore === 'string' ? new Date(req.query.createdBefore) : undefined;
-      const createdBefore = createdBeforeRaw ? new Date(createdBeforeRaw.setHours(23, 59, 59, 999)) : undefined;
       const applications = await this.deps.listLoanApplicationsUseCase.execute({
         limit,
         cursor,
         branchId: resolveBranchFilter(scope),
-        search,
-        status,
-        requestedCategory,
-        riskTier,
-        createdAfter,
-        createdBefore,
+        ...this.parseListFilters(req),
       });
       const presented = await this.presentMany(applications);
       res.status(200).json(toPaginatedResponse(presented, limit, (item) => item.id));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-09-12 (user request): "Download Excel" on the Loan Applications list - same
+   * search/status/category/risk/date filters currently applied on screen (via `parseListFilters`),
+   * not paginated (a real export needs every matching row, not one page) - same posture as
+   * `reports/loan-releases.xlsx` and friends. `EXPORT_LIMIT` is a generous ceiling, not a real
+   * pagination boundary; this dataset (loan applications, not loan accounts/payments) never
+   * approaches it in practice. */
+  listXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const EXPORT_LIMIT = 10_000;
+      const applications = await this.deps.listLoanApplicationsUseCase.execute({
+        limit: EXPORT_LIMIT,
+        branchId: resolveBranchFilter(scope),
+        ...this.parseListFilters(req),
+      });
+      const presented = await this.presentMany(applications);
+      const rows: LoanApplicationXlsxRow[] = presented.map((app) => ({
+        applicant: app.applicantName,
+        category: app.requestedCategory,
+        amount: Number(app.requestedAmount),
+        dtiPercent: app.dtiPercent !== null ? Number(app.dtiPercent) : null,
+        riskTier: app.riskTier ?? '—',
+        status: STATUS_DISPLAY_LABEL[app.status],
+        reason: declineReason(app),
+        loanAccount: app.createdLoanAccountCode ?? '—',
+        submitted: new Date(app.createdAt),
+      }));
+      const buffer = await writeTabularXlsx<LoanApplicationXlsxRow>({
+        sheetName: 'Loan Applications',
+        columns: LOAN_APPLICATION_XLSX_COLUMNS,
+        rows,
+      });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="Loan Applications.xlsx"');
+      res.status(200).send(buffer);
     } catch (error) {
       next(error);
     }

@@ -56,6 +56,9 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
     controller.updateIntake,
   );
   router.get('/loan-applications', requireAuth, requireApplicationAccess, controller.list);
+  // 2026-09-12 (Download Excel, user request): same access gate as the list itself - this exports
+  // exactly what the user can already see on screen, not a separate report-level permission.
+  router.get('/loan-applications.xlsx', requireAuth, requireApplicationAccess, controller.listXlsx);
   router.post(
     '/loan-applications/:id/assign-product',
     requireAuth,

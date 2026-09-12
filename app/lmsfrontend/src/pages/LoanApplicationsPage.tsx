@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, ChevronDown, ChevronRight, ExternalLink, FilePlus2, Lock, Search } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, Download, ExternalLink, FilePlus2, Lock, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +22,7 @@ import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { STATUS_DISPLAY_LABEL } from '@/lib/loanApplicationStatusLabels';
 import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
 import { useQuery } from '@tanstack/react-query';
-import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import { apiClient, downloadFile, fetchAllPages, ApiError } from '@/lib/apiClient';
 import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicationApiTypes';
 import { LoanApplicationEntry } from '@/pages/LoanApplicationCreatePage';
 import { formatDate, formatPeso } from '@/lib/utils';
@@ -209,6 +209,8 @@ export function LoanApplicationsPage() {
   const [dateTo, setDateTo] = React.useState('');
   const [createOpen, setCreateOpen] = React.useState(false);
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
+  const [isDownloading, setIsDownloading] = React.useState(false);
+  const [downloadError, setDownloadError] = React.useState<string | null>(null);
 
   useLogPageView('List of Loan Applications');
   const productTypeLabelsQuery = useProductTypeLabels();
@@ -231,6 +233,17 @@ export function LoanApplicationsPage() {
     });
   };
 
+  // Shared by the list query and the "Download Excel" export below, so the export can never
+  // silently drift from whatever's actually filtered on screen.
+  const listFilterParams = {
+    search: debouncedSearch,
+    status: status === 'ALL' ? undefined : status === 'FOR_DISBURSEMENT' ? 'APPROVED' : status,
+    requestedCategory: category === 'ALL' ? undefined : category,
+    riskTier: riskTier === 'ALL' ? undefined : riskTier,
+    createdAfter: dateFrom || undefined,
+    createdBefore: dateTo || undefined,
+  };
+
   const {
     items: applications,
     query: applicationsQuery,
@@ -239,20 +252,24 @@ export function LoanApplicationsPage() {
     hasPrev,
     goNext,
     goPrev,
-  } = useCursorPagination<LoanApplication>(
-    ['loan-applications'],
-    '/loan-applications',
-    {
-      search: debouncedSearch,
-      status: status === 'ALL' ? undefined : status === 'FOR_DISBURSEMENT' ? 'APPROVED' : status,
-      requestedCategory: category === 'ALL' ? undefined : category,
-      riskTier: riskTier === 'ALL' ? undefined : riskTier,
-      createdAfter: dateFrom || undefined,
-      createdBefore: dateTo || undefined,
-    },
-    PAGE_SIZE,
-    canAccessLoanApplications,
-  );
+  } = useCursorPagination<LoanApplication>(['loan-applications'], '/loan-applications', listFilterParams, PAGE_SIZE, canAccessLoanApplications);
+
+  const handleDownloadExcel = async () => {
+    setIsDownloading(true);
+    setDownloadError(null);
+    try {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(listFilterParams)) {
+        if (value) params.set(key, value);
+      }
+      const query = params.toString();
+      await downloadFile(`/loan-applications.xlsx${query ? `?${query}` : ''}`, 'Loan Applications.xlsx');
+    } catch (err) {
+      setDownloadError(err instanceof ApiError ? err.message : 'Could not reach the server. Check your connection and try again.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   // Which of this page's applications' created loan accounts exist, their status, and loan code -
   // status drives the "For Disbursement"/"Disbursed" relabel (an Approved application whose loan
@@ -405,10 +422,23 @@ export function LoanApplicationsPage() {
           <AlertCircle className="h-4 w-4 shrink-0" /> Could not load loan applications. Is the backend running?
         </div>
       )}
+      {downloadError && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" /> {downloadError}
+        </div>
+      )}
 
       <Card>
         <CardHeader className="flex flex-col gap-3">
-          <CardTitle className="text-base">Search &amp; Filter</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Search &amp; Filter</CardTitle>
+            {/* 2026-09-12 (user request): exports exactly what's currently filtered/visible above -
+                same posture as the Reports hub's own .xlsx downloads (e.g. Loan Releases Report). */}
+            <Button variant="outline" size="sm" onClick={() => void handleDownloadExcel()} disabled={isDownloading}>
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              {isDownloading ? 'Preparing…' : 'Download Excel'}
+            </Button>
+          </div>
           <div className="flex flex-col flex-wrap gap-2 sm:flex-row">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

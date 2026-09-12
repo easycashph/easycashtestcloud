@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-12T22:46:24+08:00",
-    "commitMessage":  "Add session log for Internal Credit Score bands table + docker build hang",
-    "commit":  "f5cfb064",
-    "builtAt":  "2026-09-12T15:02:29.1670051Z"
+    "commitDate":  "2026-09-12T23:05:03+08:00",
+    "commitMessage":  "Show example points for late payments on Payment History factor",
+    "commit":  "eba334bd",
+    "builtAt":  "2026-09-12T15:21:57.6529534Z"
 }
