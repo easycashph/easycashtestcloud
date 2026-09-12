@@ -69,9 +69,61 @@ activity on a live system can look like a data bug mid-investigation — audit_l
   yes, the Internal Credit Score's DTI factor reads the same persisted `dtiPercent` the Risk badge
   shows — fixed 2026-09-12 per the doc's own changelog note, no independent re-derivation anymore.
 
+## Follow-up: Maniwang edit, and a real product gap found
+
+User edited ALDWIN JALA MANIWANG's application directly in the LMS (added `monthlyIncome`) via
+"Edit Application" — confirmed the backend already recomputes `dtiPercent`/`riskTier` (and even
+`status`, PREDECLINED → PREAPPROVED) automatically on that kind of edit, no script needed. DTI
+changed twice as the user kept editing during the conversation (43.6% HIGH → 33.5% MEDIUM) -
+expected live behavior, not a bug.
+
+User then asked why Maniwang's DTI didn't include his existing ACTIVE loan account (SML-REG_00382,
+from earlier in this session) — confirmed this is v1's documented scope: DTI covers only the new
+application's own estimated amortization, not other active Easycash loans (see
+`LoanApplicationRiskAssessmentService.ts`'s own doc comment for why - no clean mapping from a
+LoanAccount's product to the application's free-text category). Real DTI is understated for any
+renewal applicant with existing debt - flagged to the user, not actioned (out of scope, would need
+its own design decision).
+
+**Investigated why "Test DELA CRUZ Applicant" stayed INCOMPLETE despite having 8 attachments** —
+first suspected a bug (`RevertLoanApplicationDecisionUseCase` is supposed to check document
+completeness and skip landing on INCOMPLETE if already complete), but the real cause was simpler:
+this application has a co-borrower (TESTCOB) that I'd overlooked, so `VALID_ID_CO_BORROWER` was
+correctly in its required-categories list and genuinely missing - the other 7 categories were all
+present. Not a bug; own mistake in reading the data.
+
+**Found a real product gap while fixing it**: the LMS Attachments panel (`AttachmentsPanel.tsx`)
+has no document-category picker once an application already exists - category-aware upload only
+exists in `LoanApplicationCreatePage.tsx`'s initial creation flow. Staff have no UI path to add a
+correctly-tagged document to an existing application, which silently blocks the INCOMPLETE →
+PREAPPROVED/PREDECLINED auto-transition for anything missing just one category post-creation.
+Flagged as a spawned background task (`task_79fa0d02`) rather than fixed inline, since it's a
+UI/UX decision (which categories to expose) that needs its own confirmation, not a quick patch.
+
+For this specific test record, worked around it with `scripts/scratch-attach-cob-valid-id-
+811d7768.ts` (committed `f91f3788`) - reuses the application's own existing `VALID_ID_BORROWER`
+bytes as a placeholder (test/dummy data only), then reruns the exact classification logic
+(`LoanApplicationPreQualificationService.evaluateCriteria()`, called directly rather than
+reimplemented, to avoid any drift from the real rules) that a real upload would trigger. Result:
+PREAPPROVED, DTI 11.3%, LOW.
+
 ## Current state
 
 - All DB changes are local to Office Server PC's database (test data only, no production
   applicants affected).
-- Script committed and pushed (`090f93b2`) so it's available to run on other machines if needed.
-- No outstanding follow-up from this task.
+- Final state of all 5 test applications:
+
+  | Applicant | Status | DTI | Risk |
+  |---|---|---|---|
+  | Test DELA CRUZ Applicant | PREAPPROVED | 11.3% | LOW |
+  | ALDWIN JALA MANIWANG | PREAPPROVED | 33.5% | MEDIUM |
+  | TEST6NOMER... | INCOMPLETE | 7.9% | LOW |
+  | TEST2NOMER... | INCOMPLETE | 19.7% | LOW |
+  | NOMER DELA CRUZ PEREZ | INCOMPLETE | — | — (no monthlyIncome, no attachments at all) |
+
+- Scripts committed and pushed (`090f93b2`, `f91f3788`) so they're available to run on other
+  machines if needed.
+- Outstanding: `task_79fa0d02` (category picker for existing applications' Attachments panel) -
+  spawned, not started. NOMER DELA CRUZ PEREZ remains INCOMPLETE with zero attachments and no
+  income on record - genuinely incomplete test data, not something to fix without knowing what the
+  user actually wants that record to represent.
