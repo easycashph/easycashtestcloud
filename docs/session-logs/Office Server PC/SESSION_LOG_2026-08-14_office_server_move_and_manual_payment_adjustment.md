@@ -7243,3 +7243,92 @@ become visible. Committed and pushed as `e35836eb`.
   page (§149) - and a legacy dump's raw Mongo field names are worth confirming against one real
   document before writing lookup logic against them, not assumed from a sibling collection's naming
   convention (§152).
+
+## §154 — 2026-09-12: Synced §116-§153's work onto Macbook Nomer (CRM report, pre-approval
+revert/undo, filename cleanup, TWA wrapper)
+
+Pure sync session on Macbook Nomer, picking up six days' worth of work landed elsewhere since this
+machine's last pull (§115): `git pull` brought in 102 changed files with no new Prisma migration -
+only `prisma/seed.ts` changed, no `prisma/migrations/` additions - confirmed explicitly via `git
+diff --stat` on that path before skipping the `migrate deploy` step §115 had flagged as easy to
+forget.
+
+Notable incoming work (not otherwise detailed here - see the originating sessions' own entries for
+full context): a CRM report PDF generator (`CrmReportPdfBuilder.ts`/`GenerateCrmReportUseCase.ts`),
+revert/undo pre-approval use cases, attachment filename cleanup (§153's work), the SDevTech
+loan-account sync hardening (§152), Loan Applications list filtering/decline-reason display
+(§150), Internal Credit Score on Underwriting (§151), and a new `app/portalfrontend-twa/` Android
+Trusted Web Activity wrapper (Gradle project) for shipping the Portal as an installable Android app
+- a genuinely new piece of the stack, first appearance in this log.
+
+Rebuild hit the two known gotchas from earlier sessions back to back, both already-documented
+patterns rather than new problems:
+- `docker compose up -d --build` failed outright with `Cannot connect to the Docker daemon` -
+  Docker Desktop had gone to sleep (this Mac's own recurring instability, unrelated to WSL2 - no
+  WSL2 on macOS). Fixed by quitting and relaunching the Docker Desktop app and waiting for the
+  daemon socket to respond, not by touching the build itself.
+- First rebuild attempt after that failed again, this time with `npm error network`/`ECONNRESET`
+  mid `npm install` - the same "transient network blip during a build, just retry" pattern §140
+  documented on Office Server PC. A plain retry of the same `docker compose up -d --build` command
+  succeeded cleanly.
+
+All three rebuilt containers (`easycashbackend`, `lmsfrontend`, `portalfrontend`) came back healthy
+(`/health` 200, both frontends 200 via host `curl`). Nothing authored this session beyond
+`build-info.json` - entirely a "get this machine caught up" sync, no new feature work.
+
+### Current state after §154
+
+- Macbook Nomer is now current through §153. Still no Ollama installed here (§106/§107) - AI
+  Extraction remains unavailable on this machine until the team's alternative testing approach
+  materializes.
+- **Two portable lessons reconfirmed, now cross-machine**: (1) a sleeping/crashed Docker daemon
+  reads as a generic "Cannot connect" error from `docker compose` - always check `docker info`
+  before assuming a build itself is broken, and restart the Docker Desktop app rather than
+  debugging further. (2) `npm error network`/`ECONNRESET` mid-`npm install` inside a Docker build
+  is usually a transient blip, not a real problem - retry the exact same build command once before
+  investigating anything else.
+
+## §155 — 2026-09-12: Restored Office Server PC's Sept 12 database export onto Macbook Nomer
+
+User dropped `legacy/mongodb/Database-Export-2026-09-12.zip` and asked to migrate it in to update
+this machine's data, with an explicit "suriin mo muna" (examine it first) instruction - did not
+assume its contents from the filename/folder alone.
+
+Inspection before touching anything: despite the `legacy/mongodb/` folder name, `file` identified
+the extracted archive as a **PostgreSQL custom-format dump** (`pg_dump -Fc`), not a Mongo export -
+same format as the `easycash-database-2026-09-04.dump` already sitting in that folder. `pg_restore
+-l` confirmed a clean, complete `easycash` dump (76 tables, dumped from Postgres 16.14 at
+2026-09-12 05:31 UTC, `_prisma_migrations` included) whose latest applied migration
+(`20260906033146_add_additional_document_categories`) matches this machine's own - no schema drift
+to reconcile. User confirmed mid-task this was in fact the Office Server PC's own "Export
+Database" MIS feature output, as suspected from the naming convention.
+
+**Flagged before proceeding** (this is a full-database overwrite, not an additive migration): local
+Postgres here held real data (4,605 borrowers, 1,809 loan accounts) that a restore would completely
+replace, including any local-only test data from this machine's own session work that never synced
+to Office Server PC. User chose to back up first rather than restore blind.
+
+Executed as: `pg_dump` the current local DB to
+`legacy/mongodb/pre-restore-backups/easycash-macbooknomer-pre-restore-<timestamp>.dump` (29.2MB,
+kept - not a scratch file) → stopped `easycashbackend` (avoid mid-restore connections) → terminated
+remaining backend connections to the `easycash` db → `pg_restore --clean --if-exists --no-owner
+--no-acl` (re-ran once more afterward purely to scan for errors - safe/idempotent given `--clean
+--if-exists`, confirmed zero errors both times) → restarted `easycashbackend`, confirmed healthy.
+
+Post-restore counts: 4,605 → **4,611** borrowers, 1,809 → **1,812** loan accounts - small, sane
+deltas consistent with a few days' worth of real new activity, not a corrupted or mismatched
+restore. `_prisma_migrations` latest entry unchanged, confirming schema compatibility held.
+
+### Current state after §155
+
+- Macbook Nomer's local database now mirrors Office Server PC's 2026-09-12 05:31 UTC snapshot.
+  A pre-restore backup of this machine's prior local state is kept at
+  `legacy/mongodb/pre-restore-backups/` if anything from before this restore is ever needed again.
+- **This machine's own local-only data prior to the restore is now gone from the live DB** (only
+  recoverable from that backup dump, not currently re-imported) - worth remembering before treating
+  Macbook Nomer as a place to create test data meant to persist, now that periodic restores from
+  the authoritative server are an established workflow here.
+- Confirmed pattern for future restores on any secondary machine: examine the dump with `file` +
+  `pg_restore -l` before assuming its format or scope, back up the target's current DB first
+  (`pg_dump -Fc`), stop the backend during the restore window, and verify `_prisma_migrations`
+  and a couple of real row counts afterward rather than trusting a clean `pg_restore` exit alone.
