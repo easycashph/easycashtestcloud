@@ -7708,3 +7708,40 @@ whenever any factor is null - previously that rescaling happened silently.
   set for DTI elsewhere in the app.
 - `docs/INTERNAL_CREDIT_SCORE.md` is the new canonical reference for this feature's formula -
   update it alongside any future change to `computeInternalScore()`'s scoring bands or factors.
+
+## §162 — 2026-09-12: Pushed §156-§161's work - concurrent push from another machine required a
+merge
+
+`git push` was rejected (non-fast-forward) - another machine had pushed a new **bulk-export
+progress tracking** feature (`ProcessBulkExportJobUseCase.ts`, a new `processedRecords` field, a
+`20260912055727_add_bulk_export_progress` migration, `BulkExportsPage.tsx` changes) in the
+meantime. `git pull --no-rebase origin main` produced merge conflicts in exactly the two
+machine-local `build-info.json` files (both machines had written their own commit hash/timestamp
+there) - trivial, resolved by taking the incoming side and regenerating fresh via
+`write-build-info.sh` right after completing the merge, rather than hand-editing either side's
+JSON.
+
+Both machines' schema changes (`LoanApplicationStatus.INCOMPLETE`/`LoanApplicationRiskTier` from
+this session, `processedRecords` from the other) auto-merged cleanly with no conflicts - confirmed
+by grepping for leftover `<<<<<<<`/`>>>>>>>` markers project-wide after the merge, finding none.
+
+**Caught before it became a real bug**: `tsc --noEmit` failed post-merge on
+`PrismaBulkExportJobRepository.ts` referencing `processedRecords` - not a real type error, just a
+stale generated Prisma Client that hadn't picked up the incoming migration's new column yet.
+`npx prisma generate` fixed it; re-ran `tsc` clean on both packages afterward.
+
+Rebuilt `easycashbackend` + `lmsfrontend`, applied the incoming `add_bulk_export_progress`
+migration (`prisma migrate deploy` inside the container - `docker compose up --build` alone never
+runs migrations, the same reminder §115 already flagged), re-verified both containers healthy, and
+re-ran the full `vitest` suite - back to the same 41-failure pre-existing baseline, confirming the
+merge introduced no regressions of its own. Pushed successfully as `cb99386d`.
+
+### Current state after §162
+
+- All of this session's work (§156-§161: DTI risk triage, INCOMPLETE status, Internal Credit Score
+  alignment/breakdown, `docs/INTERNAL_CREDIT_SCORE.md`) is now on `origin/main`, merged cleanly
+  alongside another machine's concurrent bulk-export progress-tracking feature - both live
+  together on Macbook Nomer with no known conflicts.
+- Reconfirmed standing lesson from `project_concurrent_sessions_on_repo` (memory): always `git
+  fetch`/check before assuming local is current when multiple machines are active - this session's
+  own push would have silently failed and needed the exact same recovery regardless.
