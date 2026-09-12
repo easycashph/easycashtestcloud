@@ -7243,3 +7243,47 @@ become visible. Committed and pushed as `e35836eb`.
   page (§149) - and a legacy dump's raw Mongo field names are worth confirming against one real
   document before writing lookup logic against them, not assumed from a sibling collection's naming
   convention (§152).
+
+## §154 — 2026-09-12: Synced §116-§153's work onto Macbook Nomer (CRM report, pre-approval
+revert/undo, filename cleanup, TWA wrapper)
+
+Pure sync session on Macbook Nomer, picking up six days' worth of work landed elsewhere since this
+machine's last pull (§115): `git pull` brought in 102 changed files with no new Prisma migration -
+only `prisma/seed.ts` changed, no `prisma/migrations/` additions - confirmed explicitly via `git
+diff --stat` on that path before skipping the `migrate deploy` step §115 had flagged as easy to
+forget.
+
+Notable incoming work (not otherwise detailed here - see the originating sessions' own entries for
+full context): a CRM report PDF generator (`CrmReportPdfBuilder.ts`/`GenerateCrmReportUseCase.ts`),
+revert/undo pre-approval use cases, attachment filename cleanup (§153's work), the SDevTech
+loan-account sync hardening (§152), Loan Applications list filtering/decline-reason display
+(§150), Internal Credit Score on Underwriting (§151), and a new `app/portalfrontend-twa/` Android
+Trusted Web Activity wrapper (Gradle project) for shipping the Portal as an installable Android app
+- a genuinely new piece of the stack, first appearance in this log.
+
+Rebuild hit the two known gotchas from earlier sessions back to back, both already-documented
+patterns rather than new problems:
+- `docker compose up -d --build` failed outright with `Cannot connect to the Docker daemon` -
+  Docker Desktop had gone to sleep (this Mac's own recurring instability, unrelated to WSL2 - no
+  WSL2 on macOS). Fixed by quitting and relaunching the Docker Desktop app and waiting for the
+  daemon socket to respond, not by touching the build itself.
+- First rebuild attempt after that failed again, this time with `npm error network`/`ECONNRESET`
+  mid `npm install` - the same "transient network blip during a build, just retry" pattern §140
+  documented on Office Server PC. A plain retry of the same `docker compose up -d --build` command
+  succeeded cleanly.
+
+All three rebuilt containers (`easycashbackend`, `lmsfrontend`, `portalfrontend`) came back healthy
+(`/health` 200, both frontends 200 via host `curl`). Nothing authored this session beyond
+`build-info.json` - entirely a "get this machine caught up" sync, no new feature work.
+
+### Current state after §154
+
+- Macbook Nomer is now current through §153. Still no Ollama installed here (§106/§107) - AI
+  Extraction remains unavailable on this machine until the team's alternative testing approach
+  materializes.
+- **Two portable lessons reconfirmed, now cross-machine**: (1) a sleeping/crashed Docker daemon
+  reads as a generic "Cannot connect" error from `docker compose` - always check `docker info`
+  before assuming a build itself is broken, and restart the Docker Desktop app rather than
+  debugging further. (2) `npm error network`/`ECONNRESET` mid-`npm install` inside a Docker build
+  is usually a transient blip, not a real problem - retry the exact same build command once before
+  investigating anything else.
