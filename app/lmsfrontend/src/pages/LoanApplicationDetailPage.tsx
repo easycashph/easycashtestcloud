@@ -946,6 +946,13 @@ interface InternalScoreFactor {
    * `detail` at render time, so it can never drift from the real number. Undefined when `points`
    * is null (nothing to show a formula for). */
   formula?: string;
+  /** 2026-09-12 (user request, "dapat pala makita din itong table dun sa income"): the full
+   * points-per-band reference table for a factor with discrete bands (Income, DTI, Employment) -
+   * shown alongside `formula` when a row is expanded, with the band that produced `points`
+   * highlighted, so staff can see at a glance how close an applicant is to the next band up.
+   * Omitted for a factor with no discrete bands (Payment History's points are a continuous
+   * `round(rate × 25)`, not a lookup table) or when `points` is null. */
+  bands?: { label: string; points: number; active: boolean }[];
 }
 interface InternalScore {
   total: number;
@@ -977,6 +984,13 @@ function computeInternalScore(
       incomeRatio !== undefined && amortization !== undefined
         ? `₱${income!.toFixed(2)} ÷ ₱${amortization.toFixed(2)} amortization = ${incomeRatio.toFixed(1)}× income ratio → ${incomePoints} pts`
         : undefined,
+    bands: [
+      { label: '< 1.0×', points: 0, active: incomePoints === 0 },
+      { label: '1.0× – 1.5×', points: 10, active: incomePoints === 10 },
+      { label: '1.5× – 2.0×', points: 18, active: incomePoints === 18 },
+      { label: '2.0× – 3.0×', points: 22, active: incomePoints === 22 },
+      { label: '≥ 3.0×', points: 25, active: incomePoints === 25 },
+    ],
   };
 
   // 2026-09-12 (user request, fixing a real inconsistency): uses the same persisted
@@ -1003,6 +1017,14 @@ function computeInternalScore(
       dtiPercent === undefined
         ? undefined
         : `DTI ${dtiPercent.toFixed(1)}% ${dtiPercent <= 30 ? '≤ 30%' : dtiPercent <= 40 ? '31–40%' : '> 40%'} → ${dtiPoints} pts`,
+    bands:
+      dtiPoints === null
+        ? undefined
+        : [
+            { label: '≤ 30%', points: 25, active: dtiPoints === 25 },
+            { label: '31% – 40%', points: 12, active: dtiPoints === 12 },
+            { label: '> 40%', points: 0, active: dtiPoints === 0 },
+          ],
   };
 
   const hasOccupation = Boolean(application.occupation?.trim());
@@ -1018,6 +1040,11 @@ function computeInternalScore(
         ? `${application.occupation || 'Occupation not specified'}${application.employer ? ` at ${application.employer}` : ''}.`
         : 'No occupation or employer on record.',
     formula: `Occupation ${hasOccupation ? '✓' : '✗'} and Employer ${hasEmployer ? '✓' : '✗'} → ${employmentPoints} pts`,
+    bands: [
+      { label: 'Both occupation & employer on record', points: 25, active: employmentPoints === 25 },
+      { label: 'Only one on record', points: 12, active: employmentPoints === 12 },
+      { label: 'Neither on record', points: 0, active: employmentPoints === 0 },
+    ],
   };
 
   const onTimeRate = riskSummary?.onTimePaymentRate ?? null;
@@ -1830,6 +1857,22 @@ const UnderwritingCard = React.forwardRef<
                       <div className="space-y-1.5 pb-2.5 pl-5">
                         <p className="text-muted-foreground">{f.detail}</p>
                         {f.formula && <p className="rounded bg-muted/60 px-2 py-1 font-mono text-[11px] text-muted-foreground">{f.formula}</p>}
+                        {/* 2026-09-12 (user request, "dapat pala makita din itong table dun sa
+                            income"): the full band → points scale, not just this application's own
+                            data point - so staff can see how close an applicant is to the next
+                            band without doing the arithmetic themselves. */}
+                        {f.bands && (
+                          <table className="w-full border-collapse overflow-hidden rounded border text-[11px]">
+                            <tbody>
+                              {f.bands.map((b) => (
+                                <tr key={b.label} className={cn('border-t first:border-t-0', b.active && 'bg-primary/10 font-medium')}>
+                                  <td className="px-2 py-1">{b.label}</td>
+                                  <td className="px-2 py-1 text-right tabular-nums">{b.points} pts</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
                       </div>
                     )}
                   </div>
