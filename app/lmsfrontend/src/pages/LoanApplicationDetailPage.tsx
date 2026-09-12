@@ -953,6 +953,12 @@ interface InternalScoreFactor {
    * Omitted for a factor with no discrete bands (Payment History's points are a continuous
    * `round(rate × 25)`, not a lookup table) or when `points` is null. */
   bands?: { label: string; points: number; active: boolean }[];
+  /** 2026-09-12 (user follow-up, "pero kapag may late may bracket din kung ilang point ito?"):
+   * shown above `bands` only for Payment History, whose points are a continuous
+   * `round(rate × 25)`, not a real lookup table - clarifies the rows below are illustrative
+   * example rates, not fixed brackets a real rate snaps to, so staff don't read them the same way
+   * as Income/DTI/Employment's actual bands. */
+  bandsCaption?: string;
 }
 interface InternalScore {
   total: number;
@@ -1058,6 +1064,17 @@ function computeInternalScore(
         ? 'Not applicable - no prior loan history on file for this client.'
         : `${Math.round(onTimeRate * 100)}% on-time rate across their loan history.`,
     formula: onTimeRate === null ? undefined : `${Math.round(onTimeRate * 100)}% on-time rate × 25 = ${Math.round(onTimeRate * 25)} pts`,
+    bandsCaption: onTimeRate === null ? undefined : 'Proportional to on-time rate, not fixed brackets - some example points:',
+    bands:
+      onTimeRate === null
+        ? undefined
+        : [
+            { label: '100% on-time', points: 25, active: Math.round(onTimeRate * 100) === 100 },
+            { label: '75% on-time (e.g. 1 late in 4)', points: 19, active: Math.round(onTimeRate * 100) === 75 },
+            { label: '50% on-time (e.g. 2 late in 4)', points: 13, active: Math.round(onTimeRate * 100) === 50 },
+            { label: '25% on-time (e.g. 3 late in 4)', points: 6, active: Math.round(onTimeRate * 100) === 25 },
+            { label: '0% on-time (all late)', points: 0, active: Math.round(onTimeRate * 100) === 0 },
+          ],
   };
 
   const factors = [incomeFactor, dtiFactor, paymentHistoryFactor, employmentFactor];
@@ -1861,6 +1878,7 @@ const UnderwritingCard = React.forwardRef<
                             income"): the full band → points scale, not just this application's own
                             data point - so staff can see how close an applicant is to the next
                             band without doing the arithmetic themselves. */}
+                        {f.bands && f.bandsCaption && <p className="text-[11px] italic text-muted-foreground">{f.bandsCaption}</p>}
                         {f.bands && (
                           <table className="w-full border-collapse overflow-hidden rounded border text-[11px]">
                             <tbody>
