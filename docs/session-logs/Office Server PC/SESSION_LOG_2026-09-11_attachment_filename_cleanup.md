@@ -37,13 +37,18 @@ Scope: the "8 AUGUST 2026" Google Drive folder, sibling of the already-handled S
 skipped here. User explicitly chose the thorough option — verify every attachment's content, not
 just attach-and-trust — for all remaining accounts.
 
-### Rodgie Pascual — SML-REG_00387 (new attach, 0 → 7 of 8 attachments)
+### Rodgie Pascual — SML-REG_00387 (new attach, 0 → 8 of 8 attachments)
 
 Zero pre-existing attachments. Downloaded 8 documents from Drive, decoded, and attached 7
 (`scripts/scratch-attach-pascual-00387.ts`). **"Selfie Photo.pdf" (10.6MB) could not be downloaded**
-— the Google Drive MCP connector's `download_file_content` has a hard ~10MB ceiling with no
-workaround via current tools. Still needs manual handling (download directly via Drive web UI or
-another path, then attach).
+via the Google Drive MCP connector — `download_file_content` has a hard ~10MB ceiling, and no
+in-session browser could complete the Drive login (sandboxed Browser pane has no Google session;
+Claude in Chrome extension wasn't connected this session) to fetch it another way.
+
+**Resolved 2026-09-12**: user manually downloaded the file from Drive and placed it in the staging
+folder. Content verified (selfie of Rodgie Gatchalian Pascual holding his SSS ID, matches the
+loan's borrower) and attached (`scripts/scratch-attach-pascual-selfie-00387.ts`). SML-REG_00387 now
+has all 8 of 8 attachments.
 
 ### Aldwin Maniwang — SML-REG_00382 (29 attachments)
 
@@ -93,17 +98,15 @@ same caution to any future attachment review.
 
 ## Known follow-up work (not yet done)
 
-1. **Rodgie Pascual's "Selfie Photo.pdf"** (SML-REG_00387) — still unattached, blocked by the Drive
-   connector's 10MB download limit. Needs manual download + attach.
-2. **Two flagged Proof-of-Billing anomalies** — Nelson Malinao's (George Malinao) and Aristotle
+1. **Two flagged Proof-of-Billing anomalies** — Nelson Malinao's (George Malinao) and Aristotle
    Moreno's (Victor Dizon Eusebio) — reported but not resolved. User should confirm whether these
    are acceptable (e.g. household members) or need replacement with the actual borrower's own
    billing proof.
-3. **3 misattached files + 3 duplicate pairs on Aldwin Maniwang's account (SML-REG_00382)** — left
+2. **3 misattached files + 3 duplicate pairs on Aldwin Maniwang's account (SML-REG_00382)** — left
    in place per user instruction; no action taken, but worth a follow-up decision at some point
    (e.g. moving the misattached files to their correct loan accounts, or removing duplicates) rather
    than leaving them indefinitely.
-4. **`AttachmentsPanel.tsx`'s `documentCategory`-masks-`fileName` display bug** — root-caused and
+3. **`AttachmentsPanel.tsx`'s `documentCategory`-masks-`fileName` display bug** — root-caused and
    worked around at the data layer for SL-CORP_00135, but the component itself is unchanged and can
    recreate the same "rename didn't show" confusion for any future attachment tagged with an
    unmapped `documentCategory`.
@@ -113,6 +116,7 @@ same caution to any future attachment review.
 - `scratch-rename-sl-corp-00135-attachments.ts`
 - `scratch-clear-sl-corp-00135-categories.ts`
 - `scratch-attach-pascual-00387.ts`
+- `scratch-attach-pascual-selfie-00387.ts` (added 2026-09-12)
 - `scratch-rename-maniwang-00382-attachments.ts`
 - `scratch-rename-malinao-00385-attachments.ts`
 - `scratch-rename-moreno-co00097-attachments.ts`
