@@ -100,3 +100,23 @@ accounts, an installment counts as on-time if paid before the next installment's
   verification (LEAD() check against real data) was only run against a Salary Loan borrower.
   Worth the same verification exercise for a Seafarer borrower before extending the rule if this
   comes up again.
+
+## Follow-up questions answered same day
+
+- **"Paano kung new loan at wala pang loan account dito?"** (what about a brand-new applicant with
+  no loan account yet) - traced both relevant code paths and confirmed both degrade gracefully to
+  Payment History showing N/A, never a crash or a wrong number: (1) no `application.borrowerId` at
+  all - the risk-summary query is `enabled: Boolean(application.borrowerId)`, so it never even
+  fires; (2) `borrowerId` set but zero loan accounts or zero settled installments -
+  `BorrowerRiskSummaryService.summarize()`'s `settledCount > 0 ? ... : null` guard returns
+  `onTimePaymentRate: null` cleanly. Either way the Internal Credit Score rescales over the
+  remaining applicable factors (Income/DTI/Employment), same as documented in
+  `docs/INTERNAL_CREDIT_SCORE.md`'s own "Rescaling" section.
+- **"Naka-apply na ba ito sa lahat ng application na papasok sa LMS?"** (is the fix already live for
+  everything, not just this one case) - yes: `BorrowerRiskSummaryService` is the one shared service
+  behind `/borrowers/:id/risk-summary`, consumed by three frontend surfaces
+  (`LoanApplicationDetailPage.tsx`'s Internal Credit Score, `ClientProfilePage.tsx`'s own risk
+  summary card, `LoanApplicationsPage.tsx`'s risk tiles). Nothing is cached/stored - it's computed
+  live on every page load - so every Salary Loan applicant/client already benefits from the fix
+  with no further action, both existing applications already in the system and any new one
+  submitted from here on.
