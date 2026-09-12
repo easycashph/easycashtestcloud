@@ -28,6 +28,7 @@ export class GetBorrowerRiskSummaryUseCase {
         status: loan.status,
         collectionsBalance: loan.collectionsBalance,
         installments: await this.deps.repaymentInstallmentRepository.findByLoanAccountId(loan.id),
+        loanCode: loan.loanCode,
       })),
     );
 

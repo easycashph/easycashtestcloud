@@ -18,6 +18,7 @@ export interface BorrowerLoanInput {
   status: LoanAccountStatus;
   collectionsBalance: Money;
   installments: RepaymentInstallment[];
+  loanCode: string;
 }
 
 const ACTIVE_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
@@ -56,11 +57,32 @@ export class BorrowerRiskSummaryService {
     let settledCount = 0;
     let onTimeCount = 0;
     for (const loan of loans) {
-      for (const installment of loan.installments) {
-        if (installment.status === 'PAID') {
-          settledCount += 1;
-          if (!installment.lastPaidAt || installment.lastPaidAt <= installment.dueDate) onTimeCount += 1;
+      // 2026-09-13 (user request, verified against a real case before shipping - see
+      // "docs/session-logs/Office Server PC/SESSION_LOG_2026-09-13_semi_monthly_split_payment
+      // _investigation.md"): Salary Loan borrowers commonly repay via a semi-monthly
+      // payroll/allotment deduction - one nominal monthly installment is actually settled via two
+      // roughly-equal partial payments about two weeks apart, so `lastPaidAt` (when the installment
+      // was FULLY paid) lands ~13-15 days after that installment's own due date even when the
+      // borrower never missed a payroll cycle. Confirmed every one of a real Salary Loan
+      // borrower's non-final installments was fully settled before the NEXT installment's own due
+      // date - "caught up before the next cycle" is what actually happened, not lateness. Scoped to
+      // Salary Loan (`loanCode` starting with "SL-") only, on the user's explicit choice - Business/
+      // Seafarer loans weren't confirmed to show this same allotment-driven pattern reliably enough
+      // to trust the same relaxed rule for them. The last installment of a loan has no "next"
+      // installment to lean on, so it keeps the strict same-due-date check either way.
+      const isSalaryLoan = loan.loanCode.startsWith('SL-');
+      const sortedInstallments = isSalaryLoan ? [...loan.installments].sort((a, b) => a.installmentNumber - b.installmentNumber) : loan.installments;
+      for (let i = 0; i < sortedInstallments.length; i += 1) {
+        const installment = sortedInstallments[i]!;
+        if (installment.status !== 'PAID') continue;
+        settledCount += 1;
+        if (!installment.lastPaidAt) {
+          onTimeCount += 1;
+          continue;
         }
+        const nextDueDate = isSalaryLoan ? sortedInstallments[i + 1]?.dueDate : undefined;
+        const onTime = nextDueDate ? installment.lastPaidAt < nextDueDate : installment.lastPaidAt <= installment.dueDate;
+        if (onTime) onTimeCount += 1;
       }
     }
     const onTimePaymentRate = settledCount > 0 ? onTimeCount / settledCount : null;
