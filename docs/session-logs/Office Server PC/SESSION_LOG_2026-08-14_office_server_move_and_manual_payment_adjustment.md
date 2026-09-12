@@ -7287,3 +7287,48 @@ All three rebuilt containers (`easycashbackend`, `lmsfrontend`, `portalfrontend`
   debugging further. (2) `npm error network`/`ECONNRESET` mid-`npm install` inside a Docker build
   is usually a transient blip, not a real problem - retry the exact same build command once before
   investigating anything else.
+
+## §155 — 2026-09-12: Restored Office Server PC's Sept 12 database export onto Macbook Nomer
+
+User dropped `legacy/mongodb/Database-Export-2026-09-12.zip` and asked to migrate it in to update
+this machine's data, with an explicit "suriin mo muna" (examine it first) instruction - did not
+assume its contents from the filename/folder alone.
+
+Inspection before touching anything: despite the `legacy/mongodb/` folder name, `file` identified
+the extracted archive as a **PostgreSQL custom-format dump** (`pg_dump -Fc`), not a Mongo export -
+same format as the `easycash-database-2026-09-04.dump` already sitting in that folder. `pg_restore
+-l` confirmed a clean, complete `easycash` dump (76 tables, dumped from Postgres 16.14 at
+2026-09-12 05:31 UTC, `_prisma_migrations` included) whose latest applied migration
+(`20260906033146_add_additional_document_categories`) matches this machine's own - no schema drift
+to reconcile. User confirmed mid-task this was in fact the Office Server PC's own "Export
+Database" MIS feature output, as suspected from the naming convention.
+
+**Flagged before proceeding** (this is a full-database overwrite, not an additive migration): local
+Postgres here held real data (4,605 borrowers, 1,809 loan accounts) that a restore would completely
+replace, including any local-only test data from this machine's own session work that never synced
+to Office Server PC. User chose to back up first rather than restore blind.
+
+Executed as: `pg_dump` the current local DB to
+`legacy/mongodb/pre-restore-backups/easycash-macbooknomer-pre-restore-<timestamp>.dump` (29.2MB,
+kept - not a scratch file) → stopped `easycashbackend` (avoid mid-restore connections) → terminated
+remaining backend connections to the `easycash` db → `pg_restore --clean --if-exists --no-owner
+--no-acl` (re-ran once more afterward purely to scan for errors - safe/idempotent given `--clean
+--if-exists`, confirmed zero errors both times) → restarted `easycashbackend`, confirmed healthy.
+
+Post-restore counts: 4,605 → **4,611** borrowers, 1,809 → **1,812** loan accounts - small, sane
+deltas consistent with a few days' worth of real new activity, not a corrupted or mismatched
+restore. `_prisma_migrations` latest entry unchanged, confirming schema compatibility held.
+
+### Current state after §155
+
+- Macbook Nomer's local database now mirrors Office Server PC's 2026-09-12 05:31 UTC snapshot.
+  A pre-restore backup of this machine's prior local state is kept at
+  `legacy/mongodb/pre-restore-backups/` if anything from before this restore is ever needed again.
+- **This machine's own local-only data prior to the restore is now gone from the live DB** (only
+  recoverable from that backup dump, not currently re-imported) - worth remembering before treating
+  Macbook Nomer as a place to create test data meant to persist, now that periodic restores from
+  the authoritative server are an established workflow here.
+- Confirmed pattern for future restores on any secondary machine: examine the dump with `file` +
+  `pg_restore -l` before assuming its format or scope, back up the target's current DB first
+  (`pg_dump -Fc`), stop the backend during the restore window, and verify `_prisma_migrations`
+  and a couple of real row counts afterward rather than trusting a clean `pg_restore` exit alone.
