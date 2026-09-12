@@ -61,12 +61,36 @@ solely so the running containers' `build-info.json` matches the actual latest co
 with why this project tracks build info at all (catching a stale deployment across its multiple
 independently-deployed machines).
 
+## Verification
+
+Manually cross-checked the `DATABASE_DUMP` progress logic against the live database rather than
+leaving it untested: ran `pg_dump --verbose` by hand inside the `easycashbackend` container and
+confirmed its `"dumping contents of table ..."` line count (76) exactly matches the
+`information_schema.tables` count used to set `recordCount` up front. The regex and the approach
+are sound for this Postgres/pg_dump version.
+
+## Follow-up: pulling in concurrent work from another machine
+
+Right after this feature shipped, `git pull` brought in a large, unrelated feature from another
+machine (Loan Application Risk Assessment / DTI risk tier, `INCOMPLETE` application status,
+document-completeness recheck — 34 files, 2 new Prisma migrations). Standard sync steps followed:
+`prisma migrate deploy` (both migrations applied cleanly), `write-build-info`, then
+`docker compose up -d --build easycashbackend lmsfrontend portalfrontend`.
+
+**Gotcha found**: that rebuild command reported `Image easycash-portalfrontend Built` but did
+**not** recreate the running `portalfrontend` container — it stayed on its old image (36h uptime,
+unchanged) even though `lmsfrontend` and `easycashbackend` were correctly recreated in the same
+command. Cause not root-caused (compose's change-detection didn't trigger a recreate for that one
+service this time); worked around with a follow-up `docker compose up -d --force-recreate
+portalfrontend`. **Worth double-checking container uptime (`docker ps`) after any multi-service
+`--build` rebuild** rather than trusting the compose output alone — this is a similar class of
+"looks deployed but isn't" issue as `[[project_stale_docker_wsl_port_forward]]`.
+
 ## Current state
 
-- Both rebuilds completed; `easycashbackend`/`lmsfrontend` containers healthy on the latest commit.
+- All rebuilds completed; `easycashbackend`/`lmsfrontend`/`portalfrontend` containers verified
+  healthy and actually running the latest images (checked via `docker ps` uptime, not just the
+  compose command's own output).
 - The cancelled "Download All Loan Accounts" export needs to be re-requested by the user if still
   wanted — it will now show live progress.
-- Not yet done: no automated test for the `pg_dump --verbose` progress-parsing regex — it depends on
-  exact wording in pg_dump's stderr output, which could differ across postgresql-client versions.
-  Worth a smoke test (a small `DATABASE_DUMP` export) after this log is written, to confirm the
-  percent actually advances instead of sitting at 0% for the whole dump.
+- Repo and DB are in sync with `origin/main` at commit `059247ee` as of this log.
