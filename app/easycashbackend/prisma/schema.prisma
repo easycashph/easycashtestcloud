@@ -2520,6 +2520,11 @@ model BulkExportJob {
   endDate           DateTime
   status            BulkExportStatus @default(PENDING)
   recordCount       Int?
+  /// 2026-09-12 (user request: show export progress in the LMS): how many of `recordCount`
+  /// records have been fully processed so far - updated as the job runs, not just at the end.
+  /// Null before the job reaches PROCESSING. Meaningless for DATABASE_DUMP (a single pg_dump
+  /// process with no per-record checkpoint), which never sets it.
+  processedRecords  Int?
   fileCount         Int?
   resultStorageKey  String?
   resultFileSize    Int?

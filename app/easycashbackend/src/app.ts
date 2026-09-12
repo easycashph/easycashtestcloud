@@ -1944,6 +1944,7 @@ export function createApp(): Express {
     notificationService,
     databaseUrl: env.DATABASE_URL,
     cancellationRegistry: bulkExportCancellationRegistry,
+    prisma,
   });
   const bulkExportRouter = createBulkExportRouter(
     {

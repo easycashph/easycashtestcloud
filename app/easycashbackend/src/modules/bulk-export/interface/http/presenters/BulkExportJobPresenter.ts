@@ -8,6 +8,7 @@ export function presentBulkExportJob(job: BulkExportJob) {
     endDate: job.endDate.toISOString(),
     status: job.status,
     recordCount: job.recordCount,
+    processedRecords: job.processedRecords,
     fileCount: job.fileCount,
     resultFileSize: job.resultFileSize,
     errorMessage: job.errorMessage,

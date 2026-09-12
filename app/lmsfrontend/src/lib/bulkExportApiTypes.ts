@@ -8,6 +8,7 @@ export interface BulkExportJob {
   endDate: string;
   status: BulkExportStatus;
   recordCount: number | null;
+  processedRecords: number | null;
   fileCount: number | null;
   resultFileSize: number | null;
   errorMessage: string | null;
