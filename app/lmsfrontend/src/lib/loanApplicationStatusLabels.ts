@@ -8,6 +8,7 @@ import type { LoanApplicationStatus } from './loanApplicationApiTypes';
  * ("Requirement Compliance" / "Pre Declined") without touching the underlying enum values.
  */
 export const STATUS_DISPLAY_LABEL: Record<LoanApplicationStatus, string> = {
+  INCOMPLETE: 'Incomplete',
   PREAPPROVED: 'Requirement Compliance',
   PREDECLINED: 'Pre Declined',
   UNDER_REVIEW: 'Under Review',

@@ -7,6 +7,7 @@ import type { UploadAttachmentUseCase } from '../../application/use-cases/Upload
 import type { ListAttachmentsForOwnerUseCase } from '../../application/use-cases/ListAttachmentsForOwnerUseCase';
 import type { DownloadAttachmentUseCase } from '../../application/use-cases/DownloadAttachmentUseCase';
 import type { DownloadAllBorrowerDocumentsUseCase } from '../../application/use-cases/DownloadAllBorrowerDocumentsUseCase';
+import type { RecheckLoanApplicationDocumentCompletenessUseCase } from '@modules/loan-application/application/use-cases/RecheckLoanApplicationDocumentCompletenessUseCase';
 import { attachmentOwnerTypeSchema, uploadAttachmentBodySchema } from './documentSchemas';
 import { presentAttachment } from './presenters/AttachmentPresenter';
 
@@ -32,6 +33,10 @@ export interface DocumentControllerDeps {
   listAttachmentsForOwnerUseCase: ListAttachmentsForOwnerUseCase;
   downloadAttachmentUseCase: DownloadAttachmentUseCase;
   downloadAllBorrowerDocumentsUseCase: DownloadAllBorrowerDocumentsUseCase;
+  /** 2026-09-12 (user request): optional so existing tests/mocks of this controller don't need
+   * updating - only wired in production DI (app.ts). See RecheckLoanApplicationDocumentCompleteness
+   * UseCase's own doc comment. */
+  recheckLoanApplicationDocumentCompletenessUseCase?: RecheckLoanApplicationDocumentCompletenessUseCase;
 }
 
 /** Thin controller only — no business logic here (CLAUDE.md §Architecture), matching every other module's controller shape. */
@@ -54,6 +59,15 @@ export class DocumentController {
         documentCategory: body.documentCategory ?? null,
         uploadedByUserId: currentUser.sub,
       });
+
+      // 2026-09-12 (user request): required-document uploads can flip an INCOMPLETE loan
+      // application to its real PREAPPROVED/PREDECLINED verdict - cheap no-op for every other
+      // owner type/status, so unconditional here rather than every upload caller remembering to
+      // trigger it.
+      if (body.ownerType === 'LOAN_APPLICATION' && this.deps.recheckLoanApplicationDocumentCompletenessUseCase) {
+        await this.deps.recheckLoanApplicationDocumentCompletenessUseCase.execute(body.ownerId);
+      }
+
       res.status(201).json(presentAttachment(attachment));
     } catch (error) {
       next(error);

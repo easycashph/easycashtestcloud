@@ -458,6 +458,7 @@ export const en = {
     loanApplicationDialogTitle: 'Loan Application',
     detailLoadError: 'Unable to load this application right now.',
     statusLabels: {
+      INCOMPLETE: 'Incomplete',
       PREAPPROVED: 'Pre-approved',
       PREDECLINED: 'Pre-declined',
       UNDER_REVIEW: 'Under review',
@@ -466,6 +467,7 @@ export const en = {
       DECLINED: 'Declined',
     },
     statusNextSteps: {
+      INCOMPLETE: 'Please upload the remaining required documents. Your application will move forward automatically once everything is in.',
       PREAPPROVED: 'Our system pre-approved this application. A loan officer will review it next, usually within 1-2 business days.',
       PREDECLINED: 'Our system flagged this application. You can edit and resubmit it, or a loan officer may reach out for more information.',
       UNDER_REVIEW: "A loan officer is reviewing this application now. We'll notify you as soon as there's a decision.",
@@ -1348,6 +1350,7 @@ export const fil: Translations = {
     loanApplicationDialogTitle: 'Loan Application',
     detailLoadError: 'Hindi ma-load ang aplikasyong ito ngayon.',
     statusLabels: {
+      INCOMPLETE: 'Kulang sa Requirements',
       PREAPPROVED: 'Pre-approved',
       PREDECLINED: 'Pre-declined',
       UNDER_REVIEW: 'Sinusuri',
@@ -1356,6 +1359,7 @@ export const fil: Translations = {
       DECLINED: 'Na-decline',
     },
     statusNextSteps: {
+      INCOMPLETE: 'Paki-upload ang natitirang kailangang mga dokumento. Awtomatikong ipapatuloy ang aplikasyon kapag kumpleto na.',
       PREAPPROVED: 'Pre-approved ang aplikasyong ito ng aming sistema. Susuriin ito ng loan officer, karaniwang sa loob ng 1-2 business days.',
       PREDECLINED: 'Na-flag ng aming sistema ang aplikasyong ito. Puwede mo itong i-edit at isumite ulit, o maaaring makipag-ugnayan ang loan officer para sa karagdagang impormasyon.',
       UNDER_REVIEW: 'Sinusuri ngayon ng loan officer ang aplikasyong ito. Aabisuhan ka namin sa sandaling may desisyon na.',

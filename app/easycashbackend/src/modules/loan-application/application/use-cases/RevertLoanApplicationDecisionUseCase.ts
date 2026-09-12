@@ -1,15 +1,18 @@
 import { NotFoundError } from '@shared/errors/DomainError';
 import type { IAuditLogger } from '@modules/identity/application/ports/IAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import type { IAttachmentRepository } from '@modules/document/application/ports/IAttachmentRepository';
 import type { LoanApplication } from '../../domain/LoanApplication';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
 import { assessLoanApplicationRisk } from '../services/LoanApplicationRiskAssessmentService';
+import { getRequiredDocumentCategories, isDocumentComplete } from '../config/requiredDocumentCategories';
 
 export interface RevertLoanApplicationDecisionUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
   auditLogger: IAuditLogger;
   preQualificationService: LoanApplicationPreQualificationService;
+  attachmentRepository: IAttachmentRepository;
   profileActivityLogService?: ProfileActivityLogService;
 }
 
@@ -39,8 +42,19 @@ export class RevertLoanApplicationDecisionUseCase {
       employer: props.employer,
     });
 
+    // 2026-09-12 (user request): revert also has to reflect the INCOMPLETE stage, not just
+    // PREAPPROVED/PREDECLINED - reverting an application whose documents are still (or again)
+    // incomplete should land it back on INCOMPLETE, not a classification that's not really valid
+    // yet. Documents are additive-only in this codebase, but a decision made before the
+    // documents-completeness check existed (or of an application that was declined straight from
+    // INCOMPLETE) can still legitimately revert to INCOMPLETE.
+    const requiredCategories = getRequiredDocumentCategories(props.requestedCategory, Boolean(props.coBorrowerFirstName || props.coBorrowerName));
+    const attachments = await this.deps.attachmentRepository.listByOwner('LOAN_APPLICATION', id);
+    const documentsComplete = isDocumentComplete(requiredCategories, attachments.map((a) => a.documentCategory));
+
     const riskAssessment = assessLoanApplicationRisk(props.monthlyIncome, classification.estimatedMonthlyAmortization);
-    application.revert(classification.status, { dtiPercent: riskAssessment?.dtiPercent, riskTier: riskAssessment?.riskTier });
+    const targetStatus = documentsComplete ? classification.status : 'INCOMPLETE';
+    application.revert(targetStatus, { dtiPercent: riskAssessment?.dtiPercent, riskTier: riskAssessment?.riskTier });
     await this.deps.loanApplicationRepository.save(application);
     await this.deps.auditLogger.log({
       userId: revertedByUserId,
@@ -48,7 +62,7 @@ export class RevertLoanApplicationDecisionUseCase {
       entityType: 'LoanApplication',
       entityId: application.id,
       previousValue: { status: previousStatus },
-      newValue: { status: classification.status },
+      newValue: { status: targetStatus },
     });
 
     // ADR-050: Log activity for profile timeline
@@ -57,7 +71,7 @@ export class RevertLoanApplicationDecisionUseCase {
         profileType: 'LOAN_APPLICATION',
         profileId: application.id,
         userId: revertedByUserId,
-        ...ProfileActivityLogService.actions.decisionUpdated(previousStatus, classification.status, 'Decision reverted to pending'),
+        ...ProfileActivityLogService.actions.decisionUpdated(previousStatus, targetStatus, 'Decision reverted to pending'),
       });
     }
 

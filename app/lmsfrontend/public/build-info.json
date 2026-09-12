@@ -1,1 +1,1 @@
-{"commit":"dfab4e26","commitDate":"2026-09-12T15:38:19+08:00","commitMessage":"feat(loan-application): automatic Debt-to-Income risk triage at submission","builtAt":"2026-09-12T07:47:40.000Z"}
+{"commit":"09c5b6a7","commitDate":"2026-09-12T15:50:04+08:00","commitMessage":"fix(loan-application): dtiPercent/riskTier never persisted on an existing row's update","builtAt":"2026-09-12T08:43:59.000Z"}

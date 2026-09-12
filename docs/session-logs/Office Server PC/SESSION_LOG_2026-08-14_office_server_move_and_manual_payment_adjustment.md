@@ -7524,3 +7524,96 @@ rebuilding - `psql` confirmed real, persisted values this time (7.87/LOW, 9.08/L
   real bugs have now come from skipping that check. Worth a dedicated code comment at the top of
   the `update:` block itself (not done this session) so the next field addition sees the warning
   before writing the field, not after debugging why it silently didn't persist.
+
+## §159 — 2026-09-12: New status - INCOMPLETE, when a loan application's required documents
+aren't all uploaded yet
+
+User's question ("ano ilalagay mo na status kapag incomplete ang requirements") turned into an
+explicit new business rule: applications with missing required documents should show status
+INCOMPLETE, not PREAPPROVED/PREDECLINED.
+
+**Investigated before designing** (delegated to an Explore agent): the full `LoanApplicationStatus`
+state machine (six values, every transition guard in `LoanApplication.ts`), where required
+documents per category are already defined (`requiredDocumentCategories.ts`'s
+`getRequiredDocumentCategories()` - already existed, previously only used by the Portal dashboard's
+missing-docs indicator, never wired into the LMS decision flow), and - the critical finding -
+**required documents are uploaded in a separate HTTP request, strictly AFTER the application
+record already exists** (`POST /attachments` needs a real `ownerId`). This means completeness
+can't be checked once at submission the way DTI is; it has to be evaluated live and re-checked
+whenever a document is uploaded.
+
+**Confirmed the resulting behavior explicitly with the user before writing code**: since no
+attachments ever exist at the exact moment of creation, **every new application - Portal or LMS -
+now starts as INCOMPLETE**, even one that would otherwise pass every age/income/employment check,
+and only becomes the real PREAPPROVED/PREDECLINED verdict once its last required document lands.
+User confirmed this was the intended behavior, not an edge case to work around.
+
+**Implementation**:
+- Migration: additive `INCOMPLETE` value on `LoanApplicationStatus`.
+- `LoanApplication.ts`: `status` type now includes `'INCOMPLETE'`; new `completeDocuments()`
+  method (INCOMPLETE -> PREAPPROVED/PREDECLINED, no-ops otherwise - documents are additive-only in
+  this codebase, no delete-attachment capability exists, so completion only ever moves forward);
+  `decline()` widened to accept INCOMPLETE directly (so staff can close an application that never
+  gets its paperwork in, rather than it being stuck forever); `revert()` widened to accept
+  INCOMPLETE as a target (a reverted decision should land back on INCOMPLETE if documents are
+  still missing, not a classification that isn't really valid yet); `startReview()` deliberately
+  left untouched - its existing guard already only accepts PREAPPROVED/PREDECLINED, so INCOMPLETE
+  is naturally blocked from starting review without any extra code.
+- `requiredDocumentCategories.ts`: new `isDocumentComplete(required, uploadedCategories)` helper.
+- `CreateLoanApplicationUseCase`: computes required categories (`getRequiredDocumentCategories`,
+  `hasCoBorrower` from `coBorrowerFirstName`/`coBorrowerName`) against an always-empty upload list
+  at creation time - always INCOMPLETE, by design, per the confirmed behavior above.
+- New `RecheckLoanApplicationDocumentCompletenessUseCase`: no-ops instantly unless the application
+  is currently INCOMPLETE (cheap to call unconditionally after every upload); once every required
+  category has an attachment, re-runs the same pre-qualification + DTI classification
+  `CreateLoanApplicationUseCase` runs, and transitions via `completeDocuments()`.
+- Wired into **both** places documents get uploaded for a LOAN_APPLICATION owner - they're
+  separate code paths, not one shared route: `DocumentController.upload` (LMS/staff uploads, via
+  `documentRouter.ts`'s generic `/attachments` endpoint) and
+  `UploadPortalLoanApplicationDocumentUseCase` (the Portal's own dedicated upload use case, which
+  calls `UploadAttachmentUseCase` directly and never touches the shared controller). Missing either
+  one would have left that upload path permanently unable to complete an application.
+  `RevertLoanApplicationDecisionUseCase` also now checks completeness (needed `attachmentRepository`
+  added as a new dependency) to decide whether a revert should land on INCOMPLETE or a fresh
+  classification.
+- Frontend (LMS + Portal, both apps): `LoanApplicationStatus` type, status display labels/next-step
+  copy (Portal, both EN/FIL), badge variants, and the Loan Applications list's status filter
+  dropdown/pending-count grouping all updated. Detail page gained a small INCOMPLETE-specific
+  panel (explains what's happening, offers Decline only - no Start Review, matching the backend
+  guard) rather than reusing the PREAPPROVED/PREDECLINED action block.
+
+**Bug caught by the test suite, fixed immediately**: adding `attachmentRepository` as a new
+required constructor dependency on `RevertLoanApplicationDecisionUseCase` broke its own two unit
+tests (their mocks never provided one) - full-suite failure count went from the 41-failure
+pre-existing baseline to 43. Fixed by adding a mock `attachmentRepository` stubbed with every
+document category "Salary Loan" requires already present (preserving those tests' original
+intent: revert lands on the freshly classified PREAPPROVED/PREDECLINED, not INCOMPLETE) - back to
+41 failures, confirmed zero overlap with anything touched this entry.
+
+**Verification**: `tsc --noEmit` clean across `easycashbackend`, `lmsfrontend`, AND
+`portalfrontend` (the last of which separately surfaced a pre-existing, unrelated gap - a
+`qrcode` dependency declared in `package.json` but never `npm install`'d after an earlier pull
+that added the Android TWA "Get the App" page - fixed with a plain `npm install`, not a code
+change). Two throwaway scripts (deleted after use, never committed) proved the real behavior end
+to end against live Postgres: (1) a fresh application via `CreateLoanApplicationUseCase` came back
+INCOMPLETE immediately, stayed INCOMPLETE through 4 of 5 required Salary Loan documents, and
+flipped to `PREAPPROVED`/`19.67%` DTI/`LOW` risk the instant the 5th (last) document was uploaded
+and `RecheckLoanApplicationDocumentCompletenessUseCase` ran; (2) `decline()` called directly on a
+fresh INCOMPLETE application persisted as `DECLINED` correctly. Rebuilt all three containers
+(`easycashbackend`, `lmsfrontend`, `portalfrontend`); all healthy.
+
+### Current state after §159
+
+- Every new loan application (Portal or LMS) starts INCOMPLETE and only reaches its real
+  PREAPPROVED/PREDECLINED verdict once every required document (per
+  `getRequiredDocumentCategories`) is uploaded - confirmed working end to end against live data,
+  not just unit-tested.
+- Two upload code paths both wired (LMS generic attachment endpoint + Portal's dedicated use case)
+  - anyone adding a THIRD way to attach a document to a LOAN_APPLICATION in the future needs to
+    remember to call `RecheckLoanApplicationDocumentCompletenessUseCase` there too, or that path's
+    uploads will silently never un-stick an INCOMPLETE application.
+- Not attempted this session: exposing which specific documents are still missing on the LMS list's
+  "Reason" column for an INCOMPLETE row (currently shows "—", same treatment as every other status
+  the Reason column doesn't have text for) - the Portal dashboard's own missing-docs indicator
+  already surfaces this to the applicant, but staff-side visibility of "which category exactly is
+  missing" from the LMS list itself is a reasonable follow-up if requested.

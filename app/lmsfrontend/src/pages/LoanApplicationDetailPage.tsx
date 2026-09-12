@@ -767,6 +767,7 @@ function cardOrderKey(userId: string): string {
 /** Mirrors LoanApplicationsPage's STATUS_BADGE_VARIANT - kept local since this file doesn't
  * otherwise import from that page. */
 const DETAIL_STATUS_BADGE_VARIANT: Record<LoanApplication['status'], 'secondary' | 'warning' | 'success' | 'destructive'> = {
+  INCOMPLETE: 'warning',
   PREAPPROVED: 'secondary',
   PREDECLINED: 'warning',
   UNDER_REVIEW: 'secondary',
@@ -2633,6 +2634,7 @@ export function LoanApplicationDetailPage() {
     .join('')
     .toUpperCase();
 
+  const isIncomplete = application.status === 'INCOMPLETE';
   const isPreApprovalStage = application.status === 'PREAPPROVED' || application.status === 'PREDECLINED';
   const isUnderReview = application.status === 'UNDER_REVIEW';
   const isPreApproval = application.status === 'PRE_APPROVAL';
@@ -3023,6 +3025,28 @@ export function LoanApplicationDetailPage() {
             )}
 
             <Separator className="my-4" />
+
+            {/* 2026-09-12 (user request): waiting on required documents - no Start Review here
+                (backend blocks that transition until the application leaves INCOMPLETE on its
+                own, once every required document is uploaded), just a way to close out an
+                application that never got its paperwork in. */}
+            {isIncomplete && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Waiting for required documents to be uploaded. This application will automatically move to Requirement Compliance/Pre
+                  Declined once every required document is attached.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setConfirmAction('DECLINED')}
+                    disabled={!canReviewLoanApplication || decideMutation.isPending}
+                  >
+                    Decline Application
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {isPreApprovalStage && (
               <div className="space-y-3">

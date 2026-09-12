@@ -20,3 +20,10 @@ export function getRequiredDocumentCategories(requestedCategory: string, hasCoBo
   }
   return categories;
 }
+
+/** 2026-09-12 (user request): backs the INCOMPLETE loan-application status - true once every
+ * category `getRequiredDocumentCategories` lists has at least one uploaded attachment. */
+export function isDocumentComplete(required: AttachmentDocumentCategory[], uploadedCategories: (AttachmentDocumentCategory | null)[]): boolean {
+  const uploaded = new Set(uploadedCategories.filter((c): c is AttachmentDocumentCategory => c !== null));
+  return required.every((category) => uploaded.has(category));
+}

@@ -1,6 +1,7 @@
 import type { ILoanApplicationRepository } from '@modules/loan-application/application/ports/ILoanApplicationRepository';
 import type { AttachmentDocumentCategory, AttachmentRecord } from '@modules/document/application/ports/IAttachmentRepository';
 import type { UploadAttachmentUseCase } from '@modules/document/application/use-cases/UploadAttachmentUseCase';
+import type { RecheckLoanApplicationDocumentCompletenessUseCase } from '@modules/loan-application/application/use-cases/RecheckLoanApplicationDocumentCompletenessUseCase';
 import { PortalLoanApplicationNotFoundError } from '../../domain/errors/PortalAuthErrors';
 
 export interface UploadPortalLoanApplicationDocumentInput {
@@ -15,6 +16,9 @@ export interface UploadPortalLoanApplicationDocumentInput {
 export interface UploadPortalLoanApplicationDocumentUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
   uploadAttachmentUseCase: UploadAttachmentUseCase;
+  /** 2026-09-12 (user request): the Portal's own upload path bypasses documentController.upload
+   * entirely, so it needs this recheck wired in separately too, not just there. */
+  recheckLoanApplicationDocumentCompletenessUseCase: RecheckLoanApplicationDocumentCompletenessUseCase;
 }
 
 /** A client may only attach documents to a LoanApplication they themselves submitted -
@@ -29,7 +33,7 @@ export class UploadPortalLoanApplicationDocumentUseCase {
       throw new PortalLoanApplicationNotFoundError();
     }
 
-    return this.deps.uploadAttachmentUseCase.execute({
+    const attachment = await this.deps.uploadAttachmentUseCase.execute({
       ownerType: 'LOAN_APPLICATION',
       ownerId: input.loanApplicationId,
       fileName: input.fileName,
@@ -38,5 +42,9 @@ export class UploadPortalLoanApplicationDocumentUseCase {
       documentCategory: input.documentCategory,
       uploadedByUserId: null,
     });
+
+    await this.deps.recheckLoanApplicationDocumentCompletenessUseCase.execute(input.loanApplicationId);
+
+    return attachment;
   }
 }

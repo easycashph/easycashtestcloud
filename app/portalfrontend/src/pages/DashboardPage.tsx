@@ -25,6 +25,7 @@ import type { PortalLoanApplicationDetail, PortalLoanApplicationSummary, PortalL
 import { getLoanProductDisplayLabel } from '@/lib/loanProducts';
 
 const STATUS_TONE: Record<PortalLoanApplicationSummary['status'], string> = {
+  INCOMPLETE: 'bg-amber-100 text-amber-900',
   PREAPPROVED: 'bg-primary/10 text-primary',
   PREDECLINED: 'bg-muted text-muted-foreground',
   UNDER_REVIEW: 'bg-amber-100 text-amber-900',

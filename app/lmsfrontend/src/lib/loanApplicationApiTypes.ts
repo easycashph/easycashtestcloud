@@ -10,7 +10,7 @@
  * then can MIS/Loan Operation Manager give the final APPROVED/DECLINED call (2026-07-17, Under
  * Review / Pre Approval stages).
  */
-export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
+export type LoanApplicationStatus = 'INCOMPLETE' | 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
 export type LoanApplicationAccountType = 'NEW' | 'RENEWAL';
 export type CreditBureauResult = 'CLEAR' | 'FLAGGED' | 'NO_RECORD_FOUND';
 

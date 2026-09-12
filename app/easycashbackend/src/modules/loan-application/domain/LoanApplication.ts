@@ -5,7 +5,7 @@ import { InvalidLoanApplicationTransitionError, ProductNotAssignedError } from '
  * From PREAPPROVED, a CRM/MIS/Loan Operation Manager user starts a manual review (UNDER_REVIEW),
  * tags it PRE_APPROVAL once the Review Report is complete, and only then can MIS/Loan Operation
  * Manager give the final APPROVED/DECLINED call (2026-07-16, Under Review / Pre Approval stages). */
-export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
+export type LoanApplicationStatus = 'INCOMPLETE' | 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
 export type LoanApplicationAccountType = 'NEW' | 'RENEWAL';
 export type CreditBureauResult = 'CLEAR' | 'FLAGGED' | 'NO_RECORD_FOUND';
 
@@ -277,9 +277,12 @@ export interface CreateLoanApplicationProps {
   requestedTermMonths: number;
   submittedDocuments?: string[];
   encodedByUserId?: string;
-  /** Computed by LoanApplicationPreQualificationService before construction — geocoding/rate
-   * lookup is I/O and does not belong in this domain layer. */
-  status: 'PREAPPROVED' | 'PREDECLINED';
+  /** Computed by LoanApplicationPreQualificationService (+ a document-completeness check - see
+   * requiredDocumentCategories.ts) before construction — geocoding/rate lookup and attachment
+   * lookups are I/O and don't belong in this domain layer. INCOMPLETE when required documents
+   * aren't all uploaded yet - always true at creation, since documents attach in separate
+   * requests afterward (see CreateLoanApplicationUseCase). */
+  status: 'INCOMPLETE' | 'PREAPPROVED' | 'PREDECLINED';
   distanceFromBranchKm?: number;
   submissionLatitude?: number;
   submissionLongitude?: number;
@@ -569,6 +572,21 @@ export class LoanApplication {
     this.props.updatedAt = new Date();
   }
 
+  /** 2026-09-12 (user request): INCOMPLETE -> PREAPPROVED/PREDECLINED, once the application's
+   * required documents (requiredDocumentCategories.ts) are all uploaded - called by
+   * RecheckLoanApplicationDocumentCompletenessUseCase after each attachment upload. No-ops once
+   * status has moved past INCOMPLETE (documents are additive-only in this codebase - there's no
+   * attachment-delete capability - so completion can only ever move forward, never needs undoing;
+   * this guard just makes the method safe to call unconditionally after every upload). */
+  completeDocuments(classification: { status: 'PREAPPROVED' | 'PREDECLINED'; distanceFromBranchKm: number | null; dtiPercent?: number; riskTier?: 'LOW' | 'MEDIUM' | 'HIGH' }): void {
+    if (this.props.status !== 'INCOMPLETE') return;
+    this.props.status = classification.status;
+    this.props.distanceFromBranchKm = classification.distanceFromBranchKm ?? undefined;
+    this.props.dtiPercent = classification.dtiPercent;
+    this.props.riskTier = classification.riskTier;
+    this.props.updatedAt = new Date();
+  }
+
   /** 2026-07-17 (Milestone C): narrowed to PRE_APPROVAL-only - an application must go through
    * Start Review -> Tag Pre Approval before the final Approve is reachable. Previously accepted
    * PREAPPROVED/PREDECLINED directly (Milestone A/B kept that path open while the review routes
@@ -589,9 +607,12 @@ export class LoanApplication {
 
   /** 2026-07-16: widened to allow declining from any of the four pre-decision stages, not just the
    * system's initial PREAPPROVED/PREDECLINED verdict - a Credit Bureau flag or failed CI can
-   * surface mid-review just as easily as at intake. */
+   * surface mid-review just as easily as at intake. 2026-09-12: also allow declining directly from
+   * INCOMPLETE, so staff can close out an application that never got its required documents in,
+   * rather than leaving it stuck forever with no way to resolve it. */
   decline(reviewedByUserId: string, decisionNote: string | undefined): void {
     if (
+      this.props.status !== 'INCOMPLETE' &&
       this.props.status !== 'PREAPPROVED' &&
       this.props.status !== 'PREDECLINED' &&
       this.props.status !== 'UNDER_REVIEW' &&
@@ -695,7 +716,10 @@ export class LoanApplication {
    * no concept of roles). `targetStatus` is a freshly recomputed system verdict (the calling use
    * case re-runs LoanApplicationPreQualificationService) rather than a memorized old value, so
    * revert always reflects current data. */
-  revert(targetStatus: 'PREAPPROVED' | 'PREDECLINED', freshRisk?: { dtiPercent?: number; riskTier?: 'LOW' | 'MEDIUM' | 'HIGH' }): void {
+  revert(
+    targetStatus: 'INCOMPLETE' | 'PREAPPROVED' | 'PREDECLINED',
+    freshRisk?: { dtiPercent?: number; riskTier?: 'LOW' | 'MEDIUM' | 'HIGH' },
+  ): void {
     if (this.props.status === 'PREAPPROVED' || this.props.status === 'PREDECLINED') {
       throw new InvalidLoanApplicationTransitionError(this.props.status, 'revert');
     }
@@ -703,10 +727,17 @@ export class LoanApplication {
     this.props.reviewedByUserId = undefined;
     this.props.reviewedAt = undefined;
     this.props.decisionNote = undefined;
-    // 2026-09-12: same "always reflects current data" reasoning as the classification above -
-    // undefined (caller didn't pass it) leaves existing DTI/tier untouched, doesn't blank it.
-    if (freshRisk && 'dtiPercent' in freshRisk) this.props.dtiPercent = freshRisk.dtiPercent;
-    if (freshRisk && 'riskTier' in freshRisk) this.props.riskTier = freshRisk.riskTier;
+    if (targetStatus === 'INCOMPLETE') {
+      // Not properly classified while documents are missing - clear rather than show a stale
+      // DTI/tier from before the revert.
+      this.props.dtiPercent = undefined;
+      this.props.riskTier = undefined;
+    } else {
+      // 2026-09-12: same "always reflects current data" reasoning as the classification above -
+      // undefined (caller didn't pass it) leaves existing DTI/tier untouched, doesn't blank it.
+      if (freshRisk && 'dtiPercent' in freshRisk) this.props.dtiPercent = freshRisk.dtiPercent;
+      if (freshRisk && 'riskTier' in freshRisk) this.props.riskTier = freshRisk.riskTier;
+    }
     this.props.updatedAt = new Date();
   }
 

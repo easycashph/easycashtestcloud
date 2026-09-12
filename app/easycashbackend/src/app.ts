@@ -217,6 +217,7 @@ import { AssignLoanApplicationProductUseCase } from '@modules/loan-application/a
 import { ApproveLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/ApproveLoanApplicationUseCase';
 import { DeclineLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/DeclineLoanApplicationUseCase';
 import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/application/use-cases/RevertLoanApplicationDecisionUseCase';
+import { RecheckLoanApplicationDocumentCompletenessUseCase } from '@modules/loan-application/application/use-cases/RecheckLoanApplicationDocumentCompletenessUseCase';
 import { RevertLoanApplicationToPreApprovalUseCase } from '@modules/loan-application/application/use-cases/RevertLoanApplicationToPreApprovalUseCase';
 import { DeleteLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/DeleteLoanApplicationUseCase';
 import { GenerateLoanApplicationFormUseCase } from '@modules/loan-application/application/use-cases/GenerateLoanApplicationFormUseCase';
@@ -1465,6 +1466,7 @@ export function createApp(): Express {
         loanApplicationRepository,
         auditLogger,
         preQualificationService,
+        attachmentRepository: new PrismaAttachmentRepository(),
         profileActivityLogService,
       }),
       revertLoanApplicationToPreApprovalUseCase: new RevertLoanApplicationToPreApprovalUseCase({
@@ -1650,6 +1652,11 @@ export function createApp(): Express {
       listAttachmentsForOwnerUseCase: new ListAttachmentsForOwnerUseCase({ attachmentRepository }),
       downloadAttachmentUseCase: new DownloadAttachmentUseCase({ attachmentRepository, fileStorage }),
       downloadAllBorrowerDocumentsUseCase: new DownloadAllBorrowerDocumentsUseCase({ borrowerRepository, attachmentRepository, fileStorage }),
+      recheckLoanApplicationDocumentCompletenessUseCase: new RecheckLoanApplicationDocumentCompletenessUseCase({
+        loanApplicationRepository,
+        attachmentRepository,
+        preQualificationService,
+      }),
     },
     tokenService,
   );
@@ -1697,6 +1704,11 @@ export function createApp(): Express {
       uploadPortalLoanApplicationDocumentUseCase: new UploadPortalLoanApplicationDocumentUseCase({
         loanApplicationRepository,
         uploadAttachmentUseCase: portalUploadAttachmentUseCase,
+        recheckLoanApplicationDocumentCompletenessUseCase: new RecheckLoanApplicationDocumentCompletenessUseCase({
+          loanApplicationRepository,
+          attachmentRepository,
+          preQualificationService,
+        }),
       }),
       listPortalLoanApplicationDocumentsUseCase: new ListPortalLoanApplicationDocumentsUseCase({ loanApplicationRepository, attachmentRepository }),
       downloadPortalLoanApplicationDocumentUseCase: new DownloadPortalLoanApplicationDocumentUseCase({

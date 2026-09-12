@@ -182,7 +182,7 @@ export interface SubmitLoanApplicationRequest {
   submissionLongitude?: number;
 }
 
-export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
+export type LoanApplicationStatus = 'INCOMPLETE' | 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
 
 export interface PortalLoanApplicationSummary {
   id: string;

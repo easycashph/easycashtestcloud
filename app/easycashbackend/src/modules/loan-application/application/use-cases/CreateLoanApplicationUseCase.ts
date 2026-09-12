@@ -10,6 +10,7 @@ import type { ILoanApplicationRepository } from '../ports/ILoanApplicationReposi
 import type { CreateLoanApplicationInput } from '../dtos/LoanApplicationDtos';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
 import { assessLoanApplicationRisk } from '../services/LoanApplicationRiskAssessmentService';
+import { getRequiredDocumentCategories, isDocumentComplete } from '../config/requiredDocumentCategories';
 
 const CLOSED_LOAN_ACCOUNT_STATUSES = new Set(['CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_REJECTED', 'CLOSED_RESTRUCTURED', 'CLOSED_ADJUSTED']);
 
@@ -84,12 +85,20 @@ export class CreateLoanApplicationUseCase {
 
     const riskAssessment = assessLoanApplicationRisk(input.monthlyIncome, classification.estimatedMonthlyAmortization);
 
+    // 2026-09-12 (user request): required documents attach in separate requests AFTER this
+    // application exists (see UploadAttachmentUseCase - it needs an ownerId), so there are never
+    // any uploaded yet at this point - every new application starts INCOMPLETE and transitions to
+    // the real PREAPPROVED/PREDECLINED verdict automatically once RecheckLoanApplicationDocument
+    // CompletenessUseCase sees all required categories present.
+    const requiredCategories = getRequiredDocumentCategories(input.requestedCategory, Boolean(input.coBorrowerFirstName || input.coBorrowerName));
+    const documentsComplete = isDocumentComplete(requiredCategories, []);
+
     const application = LoanApplication.create({
       ...input,
-      status: classification.status,
+      status: documentsComplete ? classification.status : 'INCOMPLETE',
       distanceFromBranchKm: classification.distanceFromBranchKm ?? undefined,
-      dtiPercent: riskAssessment?.dtiPercent,
-      riskTier: riskAssessment?.riskTier,
+      dtiPercent: documentsComplete ? riskAssessment?.dtiPercent : undefined,
+      riskTier: documentsComplete ? riskAssessment?.riskTier : undefined,
     });
     await this.deps.loanApplicationRepository.save(application);
 

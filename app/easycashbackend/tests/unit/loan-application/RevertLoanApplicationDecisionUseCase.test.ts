@@ -8,7 +8,16 @@ import { InvalidLoanApplicationTransitionError } from '@modules/loan-application
  * (see the use case's own doc comment), so the use case calls `classify()` before calling the
  * domain's `revert(targetStatus)`. */
 function buildPreQualificationService(result: { status: 'PREAPPROVED' | 'PREDECLINED'; distanceFromBranchKm: number | null }) {
-  return { classify: vi.fn().mockResolvedValue(result) };
+  return { classify: vi.fn().mockResolvedValue({ ...result, estimatedMonthlyAmortization: 0 }) };
+}
+
+/** 2026-09-12: required dep - the use case checks document completeness to decide whether a
+ * revert should land on INCOMPLETE instead of the fresh classification. Stubbed with every
+ * category "Salary Loan" requires already present, so these tests' original intent (revert lands
+ * on the freshly recomputed PREAPPROVED/PREDECLINED, not INCOMPLETE) is unaffected. */
+function buildAttachmentRepository() {
+  const categories = ['VALID_ID_BORROWER', 'PROOF_OF_BILLING', 'EMPLOYEE_ID', 'CORPORATE_PAYSLIP', 'CERTIFICATE_OF_EMPLOYMENT'];
+  return { listByOwner: vi.fn().mockResolvedValue(categories.map((documentCategory) => ({ documentCategory }))) };
 }
 
 function buildDecidedApplication() {
@@ -34,6 +43,7 @@ describe('RevertLoanApplicationDecisionUseCase', () => {
       loanApplicationRepository,
       auditLogger,
       preQualificationService: preQualificationService as never,
+      attachmentRepository: buildAttachmentRepository() as never,
     });
 
     const result = await useCase.execute(application.id, 'mis-user');
@@ -65,6 +75,7 @@ describe('RevertLoanApplicationDecisionUseCase', () => {
       loanApplicationRepository,
       auditLogger,
       preQualificationService: preQualificationService as never,
+      attachmentRepository: buildAttachmentRepository() as never,
     });
 
     await expect(useCase.execute(application.id, 'mis-user')).rejects.toThrow(InvalidLoanApplicationTransitionError);

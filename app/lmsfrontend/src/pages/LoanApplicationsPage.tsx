@@ -121,6 +121,7 @@ function getSortValue(app: LoanApplication, key: string): string | number | Date
  * staff can find applications actually waiting on disbursement. */
 const STATUS_OPTIONS: { value: LoanApplicationStatus | 'FOR_DISBURSEMENT' | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
+  { value: 'INCOMPLETE', label: STATUS_DISPLAY_LABEL.INCOMPLETE },
   { value: 'PREAPPROVED', label: STATUS_DISPLAY_LABEL.PREAPPROVED },
   { value: 'PREDECLINED', label: STATUS_DISPLAY_LABEL.PREDECLINED },
   { value: 'UNDER_REVIEW', label: STATUS_DISPLAY_LABEL.UNDER_REVIEW },
@@ -131,6 +132,7 @@ const STATUS_OPTIONS: { value: LoanApplicationStatus | 'FOR_DISBURSEMENT' | 'ALL
 ];
 
 const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'secondary' | 'warning' | 'success' | 'destructive'> = {
+  INCOMPLETE: 'warning',
   PREAPPROVED: 'secondary',
   PREDECLINED: 'warning',
   UNDER_REVIEW: 'secondary',
@@ -312,7 +314,8 @@ export function LoanApplicationsPage() {
   }
 
   const pendingCount = applications.filter(
-    (a) => a.status === 'PREAPPROVED' || a.status === 'PREDECLINED' || a.status === 'UNDER_REVIEW' || a.status === 'PRE_APPROVAL',
+    (a) =>
+      a.status === 'INCOMPLETE' || a.status === 'PREAPPROVED' || a.status === 'PREDECLINED' || a.status === 'UNDER_REVIEW' || a.status === 'PRE_APPROVAL',
   ).length;
 
   return (
