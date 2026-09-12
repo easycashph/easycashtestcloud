@@ -941,6 +941,11 @@ interface InternalScoreFactor {
   points: number | null;
   max: number;
   detail: string;
+  /** 2026-09-12 (user request): the exact arithmetic behind `points`, shown when a factor row is
+   * expanded - computed here, alongside `points` itself, rather than reverse-engineered from
+   * `detail` at render time, so it can never drift from the real number. Undefined when `points`
+   * is null (nothing to show a formula for). */
+  formula?: string;
 }
 interface InternalScore {
   total: number;
@@ -968,6 +973,10 @@ function computeInternalScore(
     points: incomePoints,
     max: 25,
     detail: income ? `₱${income.toFixed(2)}/month declared.` : 'Monthly income not yet recorded.',
+    formula:
+      incomeRatio !== undefined && amortization !== undefined
+        ? `₱${income!.toFixed(2)} ÷ ₱${amortization.toFixed(2)} amortization = ${incomeRatio.toFixed(1)}× income ratio → ${incomePoints} pts`
+        : undefined,
   };
 
   // 2026-09-12 (user request, fixing a real inconsistency): uses the same persisted
@@ -990,6 +999,10 @@ function computeInternalScore(
           ? 'Not yet computed - required documents are still incomplete.'
           : 'Not enough data to estimate DTI.'
         : `${dtiPercent.toFixed(1)}% DTI (${application.riskTier ?? '—'} risk).`,
+    formula:
+      dtiPercent === undefined
+        ? undefined
+        : `DTI ${dtiPercent.toFixed(1)}% ${dtiPercent <= 30 ? '≤ 30%' : dtiPercent <= 40 ? '31–40%' : '> 40%'} → ${dtiPoints} pts`,
   };
 
   const hasOccupation = Boolean(application.occupation?.trim());
@@ -1004,6 +1017,7 @@ function computeInternalScore(
       hasOccupation || hasEmployer
         ? `${application.occupation || 'Occupation not specified'}${application.employer ? ` at ${application.employer}` : ''}.`
         : 'No occupation or employer on record.',
+    formula: `Occupation ${hasOccupation ? '✓' : '✗'} and Employer ${hasEmployer ? '✓' : '✗'} → ${employmentPoints} pts`,
   };
 
   const onTimeRate = riskSummary?.onTimePaymentRate ?? null;
@@ -1016,6 +1030,7 @@ function computeInternalScore(
       onTimeRate === null
         ? 'Not applicable - no prior loan history on file for this client.'
         : `${Math.round(onTimeRate * 100)}% on-time rate across their loan history.`,
+    formula: onTimeRate === null ? undefined : `${Math.round(onTimeRate * 100)}% on-time rate × 25 = ${Math.round(onTimeRate * 25)} pts`,
   };
 
   const factors = [incomeFactor, dtiFactor, paymentHistoryFactor, employmentFactor];
@@ -1502,6 +1517,18 @@ const UnderwritingCard = React.forwardRef<
 ) {
   const queryClient = useQueryClient();
 
+  // 2026-09-12 (user request): click-to-expand replaces a native `title` tooltip for each Internal
+  // Credit Score factor - the tooltip was invisible until hovered and easy to miss entirely.
+  const [expandedScoreFactors, setExpandedScoreFactors] = React.useState<Set<string>>(new Set());
+  const toggleScoreFactor = (key: string) => {
+    setExpandedScoreFactors((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   /** 2026-09-09 (user request): "Preview CRM Report" - same "open a tab synchronously, load the PDF
    * into it once ready" pattern as the header's Print Application (`generateFormMutation`) - see
    * that mutation's own doc comment for why the tab has to open in the click handler itself. */
@@ -1775,14 +1802,53 @@ const UnderwritingCard = React.forwardRef<
                 Advisory only - combines income, DTI, payment history, and employment. Does not replace the reviewer's own judgment.
               </p>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t pt-3 text-xs">
-              {internalScore.factors.map((f) => (
-                <div key={f.key} className="flex items-center justify-between gap-2" title={f.detail}>
-                  <span className="text-muted-foreground">{f.label}</span>
-                  <span className="font-medium">{f.points === null ? 'N/A' : `${f.points}/${f.max}`}</span>
-                </div>
-              ))}
+            {/* 2026-09-12 (user request): click-to-expand replaces a native `title` tooltip - the
+                tooltip was invisible until hovered and easy to miss. Each row's exact arithmetic
+                (`f.formula`) is computed once, in computeInternalScore itself, never re-derived
+                here - "no black-box numbers", same standard already applied to the DTI breakdown
+                on the Loan Applications list. */}
+            <div className="mt-3 divide-y border-t text-xs">
+              {internalScore.factors.map((f) => {
+                const isOpen = expandedScoreFactors.has(f.key);
+                return (
+                  <div key={f.key}>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-2 py-2 text-left"
+                      onClick={() => toggleScoreFactor(f.key)}
+                      aria-expanded={isOpen}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', !isOpen && '-rotate-90')} />
+                        <span>{f.label}</span>
+                      </span>
+                      <span className={cn('font-medium', f.points === null && 'text-muted-foreground')}>
+                        {f.points === null ? 'N/A' : `${f.points}/${f.max}`}
+                      </span>
+                    </button>
+                    {isOpen && (
+                      <div className="space-y-1.5 pb-2.5 pl-5">
+                        <p className="text-muted-foreground">{f.detail}</p>
+                        {f.formula && <p className="rounded bg-muted/60 px-2 py-1 font-mono text-[11px] text-muted-foreground">{f.formula}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+            {internalScore.factors.some((f) => f.points === null) && (
+              <p className="mt-2 border-t pt-2 text-[11px] text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  {internalScore.factors
+                    .filter((f) => f.points === null)
+                    .map((f) => f.label)
+                    .join(' and ')}{' '}
+                  {internalScore.factors.filter((f) => f.points === null).length > 1 ? 'are' : 'is'} N/A
+                </span>
+                , so the score above is rescaled over the remaining factors (max{' '}
+                {internalScore.factors.filter((f) => f.points !== null).reduce((sum, f) => sum + f.max, 0)}, not 100).
+              </p>
+            )}
           </div>
         )}
         {breakdown && (

@@ -7670,3 +7670,41 @@ to rename/relabel either one).
 - The blended-score-vs-pure-DTI naming overlap ("Low/Medium/High" meaning two different things in
   two different UI elements on the same page) remains as-is - worth a rename/clarifying label if a
   future session gets a report of a loan officer being confused by the two disagreeing.
+
+## §161 — 2026-09-12: Made the Internal Credit Score's per-factor reasoning visible (was a
+hover-only tooltip)
+
+Asked how to let staff actually see *how* the Internal Credit Score was computed. Answered by
+re-reading `computeInternalScore()`'s real formula in full (per-factor scoring bands, the
+rescale-when-N/A mechanism) and writing it up as a standalone reference doc,
+`docs/INTERNAL_CREDIT_SCORE.md` - the first dedicated reference doc for this feature, since it
+previously only existed as inline code comments.
+
+Auditing the existing UI surfaced the actual gap: each factor row already carried a `detail`
+string (e.g. "₱80,000.00/month declared."), but it only ever showed via a native HTML `title`
+attribute - invisible until hovered, easy to miss entirely, no visual cue that more information
+even existed.
+
+**Design pass (mockup first, per standing workflow)**: built and shared an Artifact mockup turning
+each factor row into a click-to-expand disclosure (chevron rotates, detail + a formula line appear
+below), plus a "rescaled because X is N/A" note explaining the scoring math when a factor doesn't
+apply - matching the same "no black-box numbers" transparency standard already established for the
+Loan Applications list's DTI breakdown (§157). User confirmed the direction before implementation.
+
+**Implementation**: added a `formula?: string` field to `InternalScoreFactor`, computed once
+inside `computeInternalScore()` alongside `points`/`detail` for all four factors (Income, DTI,
+Employment, Payment History) - deliberately NOT re-derived at render time, so the displayed
+arithmetic can never drift from the real number (same principle as §160's dtiPercent fix). Replaced
+the static factor-row `<div title=...>` list with a `React.useState`-backed expand/collapse per
+row, and added a footnote that names which factor(s) are N/A and the resulting rescaled max
+whenever any factor is null - previously that rescaling happened silently.
+
+`tsc --noEmit` clean. Rebuilt `lmsfrontend`; healthy.
+
+### Current state after §161
+
+- Every Internal Credit Score factor is now individually inspectable (click to expand) with its
+  exact formula shown, not just a final points value - matches the transparency standard already
+  set for DTI elsewhere in the app.
+- `docs/INTERNAL_CREDIT_SCORE.md` is the new canonical reference for this feature's formula -
+  update it alongside any future change to `computeInternalScore()`'s scoring bands or factors.
