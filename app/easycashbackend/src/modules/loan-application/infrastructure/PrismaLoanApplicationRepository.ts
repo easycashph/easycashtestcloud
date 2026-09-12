@@ -176,9 +176,19 @@ async function write(client: PrismaWriteClient, application: LoanApplication): P
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
     },
+    // WARNING (2026-09-12, third time this exact bug has bitten this file): `create` and `update`
+    // are separate field lists on purpose - not every field is meant to be editable post-creation
+    // - but that means adding a field to `create` above does NOT make it persist on an existing
+    // row. If a domain method can change this field after creation (a status transition, an
+    // `update*()` method, `applySystemClassification`, etc.), it MUST be added here too, or the
+    // write silently no-ops. Bitten twice before this (monthlyIncome/creditScore, then
+    // applicantName/age/etc.) and a third time by dtiPercent/riskTier - check this before adding
+    // any new field anywhere in this repository.
     update: {
       status: p.status,
       distanceFromBranchKm: p.distanceFromBranchKm,
+      dtiPercent: p.dtiPercent,
+      riskTier: p.riskTier,
       assignedLoanProductVersionId: p.assignedLoanProductVersionId,
       reviewedByUserId: p.reviewedByUserId,
       reviewedAt: p.reviewedAt,

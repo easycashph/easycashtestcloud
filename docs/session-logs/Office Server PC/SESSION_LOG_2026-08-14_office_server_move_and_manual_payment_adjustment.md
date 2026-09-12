@@ -7470,3 +7470,57 @@ healthy.
   what was shown to the user.
 - Same v1 scope limitation as §156 still applies: new-loan DTI only, no existing debt of any kind
   included yet. Not revisited this session.
+
+## §158 — 2026-09-12: Design pass to match the mockup's column layout; found the real
+`update:`-clause gap this uncovered
+
+User asked to match the Artifact mockup's exact column order (`Applicant | Category | Amount | DTI
+| Risk | Decision Status | ...`) and visual details, then to backfill DTI/risk onto 5 pre-existing
+test applications already in the LMS.
+
+**Design alignment**: added a dedicated DTI column (percentage + a mini progress bar, scaled 0-60%
+DTI so the common <30% case doesn't look nearly-empty - same visual idea as the mockup's own bar),
+moved the Risk badge to sit right after it (both clickable, matching mockup's info-button
+affordance), added a colored dot inside the Risk badge, and restructured the expandable breakdown
+row into the mockup's numbered "Step 1 / Step 2" layout (circled step number + stage label) instead
+of the flatter 4-column grid from §157. Column order now: Applicant, Category, Amount, DTI, Risk,
+Decision Status, Reason, Loan Account, Submitted - the last two aren't in the mockup (a simplified
+demo) but are real existing LMS features, kept in place rather than removed to match a mockup that
+was never meant to be pixel-exact everywhere.
+
+**The backfill surfaced a real bug**: asked to apply DTI/risk to the 5 pre-existing applications
+(0 had it - all predate 2026-09-12). Two of the five (`NOMER DELA CRUZ PEREZ`,
+`ALDWIN JALA MANIWANG`) had no `monthlyIncome` on file - user filled those in via the LMS UI first
+("ilagay ko muna"), confirmed via `psql` before proceeding. Wrote a one-off script
+(`backfill-dti-existing.ts`, deleted after use, never committed) reusing the exact same production
+services (`LoanApplicationPreQualificationService` + `assessLoanApplicationRisk` +
+`applySystemClassification`) rather than raw SQL, so results would be identical to what the real
+feature computes. First run printed sensible values (LOW/LOW/MEDIUM/LOW/LOW) - but re-querying
+Postgres directly afterward showed every `dtiPercent`/`riskTier` still `null`. Root cause: **the
+`update:` half of `PrismaLoanApplicationRepository.save()`'s upsert never included `dtiPercent`/
+`riskTier`** - only `create:` did (added in §156, when only brand-new applications existed to test
+against, so the gap was invisible until now). `applySystemClassification()` recomputes both fields
+on every intake edit/revert (§156's own explicit design goal), but every one of those writes was
+silently swallowed for any *existing* row - **this is the third occurrence of this exact bug
+class in this same file**, following the identical `monthlyIncome`/`creditScore` gap (found while
+building `updateApplicantFinancials`) and the `applicantName`/`age`/etc. gap (found while building
+`updateSelfServiceIntake`) - both already documented in this file's own inline comments as
+warnings, which this session's change should have cross-referenced but didn't.
+
+Fixed by adding `dtiPercent`/`riskTier` to the `update:` clause, with a comment naming this as the
+third instance of the pattern for whoever adds the next new field. Re-ran the backfill script after
+rebuilding - `psql` confirmed real, persisted values this time (7.87/LOW, 9.08/LOW, 33.54/MEDIUM,
+19.67/LOW, 11.33/LOW). Rebuilt `easycashbackend` again with the fix; healthy.
+
+### Current state after §158
+
+- All 5 pre-existing loan applications in this Mac's local DB now have real, computed DTI/risk
+  tier - the DTI feature (§156-§158) is visually complete (matches the mockup) and functionally
+  correct for both new and pre-existing applications.
+- **Standing lesson, now stated plainly rather than left implicit in scattered comments**:
+  `PrismaLoanApplicationRepository.save()`'s upsert has separate `create:`/`update:` field lists by
+  design (not every field is meant to be editable post-creation) - but that design means **any new
+  field added to `create:` must be deliberately decided for `update:` too**, not assumed. Three
+  real bugs have now come from skipping that check. Worth a dedicated code comment at the top of
+  the `update:` block itself (not done this session) so the next field addition sees the warning
+  before writing the field, not after debugging why it silently didn't persist.
