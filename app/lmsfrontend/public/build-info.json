@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-14T08:29:53+08:00",
-    "commitMessage":  "Add session log for Docker/WSL2 outage recovery and export race condition fix",
-    "commit":  "d0352fc6",
-    "builtAt":  "2026-09-14T01:30:44.7460594Z"
+    "commitDate":  "2026-09-14T13:28:34+08:00",
+    "commitMessage":  "Add DMW-licensed recruitment agency dropdown for Seafarer Loan agency name field",
+    "commit":  "725762cf",
+    "builtAt":  "2026-09-14T05:28:53.6522048Z"
 }
