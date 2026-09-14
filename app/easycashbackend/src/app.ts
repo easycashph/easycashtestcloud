@@ -324,6 +324,9 @@ import { PrismaSecuritySettingsRepository } from '@modules/security-settings/inf
 import { createInterestRateChartRouter } from '@modules/interest-rate-chart/interface/http/interestRateChartRouter';
 import { ListInterestRateChartUseCase } from '@modules/interest-rate-chart/application/use-cases/ListInterestRateChartUseCase';
 import { PrismaInterestRateChartRepository } from '@modules/interest-rate-chart/infrastructure/PrismaInterestRateChartRepository';
+import { createLicensedRecruitmentAgencyRouter } from '@modules/licensed-recruitment-agency/interface/http/licensedRecruitmentAgencyRouter';
+import { SearchLicensedRecruitmentAgenciesUseCase } from '@modules/licensed-recruitment-agency/application/use-cases/SearchLicensedRecruitmentAgenciesUseCase';
+import { PrismaLicensedRecruitmentAgencyRepository } from '@modules/licensed-recruitment-agency/infrastructure/PrismaLicensedRecruitmentAgencyRepository';
 import { createReportingRouter } from '@modules/reporting/interface/http/reportingRouter';
 import { GetLoanOriginationReportUseCase } from '@modules/reporting/application/use-cases/GetLoanOriginationReportUseCase';
 import { GetCollectionReportUseCase } from '@modules/reporting/application/use-cases/GetCollectionReportUseCase';
@@ -1614,6 +1617,17 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', interestRateChartRouter);
+
+  // --- licensed-recruitment-agency module wiring: Agency name search (Seafarer Loan's Agency/contract verification) ---
+  const licensedRecruitmentAgencyRouter = createLicensedRecruitmentAgencyRouter(
+    {
+      searchLicensedRecruitmentAgenciesUseCase: new SearchLicensedRecruitmentAgenciesUseCase({
+        licensedRecruitmentAgencyRepository: new PrismaLicensedRecruitmentAgencyRepository(),
+      }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', licensedRecruitmentAgencyRouter);
 
   // --- reporting module wiring: Loan/Collection/Transaction Report pages ---
   const reportingRepository = new PrismaReportingRepository();

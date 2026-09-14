@@ -72,6 +72,7 @@ import { RoleAbbr } from '@/components/RoleAbbr';
 import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import { ProfileNotesPanel } from '@/components/ProfileNotesPanel';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
+import { AgencyNameCombobox } from '@/components/AgencyNameCombobox';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { TermTip } from '@/components/TermTip';
@@ -2236,11 +2237,19 @@ const UnderwritingCard = React.forwardRef<
                       {f.required && isSeafarerLoan && <span className="ml-0.5 text-destructive">*</span>}
                     </Label>
                     {canEditReview ? (
-                      <Input
-                        value={agencyVerification[f.key] ?? ''}
-                        onChange={(e) => setAgencyVerification((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                        className={f.required && isSeafarerLoan && !agencyVerification[f.key]?.trim() ? 'border-destructive/50' : undefined}
-                      />
+                      f.key === 'agencyName' ? (
+                        <AgencyNameCombobox
+                          value={agencyVerification[f.key] ?? ''}
+                          onChange={(v) => setAgencyVerification((prev) => ({ ...prev, [f.key]: v }))}
+                          className={f.required && isSeafarerLoan && !agencyVerification[f.key]?.trim() ? 'border-destructive/50' : undefined}
+                        />
+                      ) : (
+                        <Input
+                          value={agencyVerification[f.key] ?? ''}
+                          onChange={(e) => setAgencyVerification((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                          className={f.required && isSeafarerLoan && !agencyVerification[f.key]?.trim() ? 'border-destructive/50' : undefined}
+                        />
+                      )
                     ) : (
                       <p className="text-sm">{agencyVerification[f.key] || '-'}</p>
                     )}

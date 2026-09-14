@@ -887,6 +887,38 @@ model InterestRateChart {
   @@map("interest_rate_chart")
 }
 
+/// 2026-09-14 (Agency name dropdown, user request): reference list backing a searchable combobox
+/// for the Seafarer Loan "Agency / contract / allotment verification" section's Agency name field
+/// (previously plain free text) - staff pick from real DMW-licensed agencies instead of retyping a
+/// name that may have typos, while a free-text fallback stays available for an agency not yet in
+/// this snapshot. Sourced directly from the DMW's own live public directory
+/// (dmw.gov.ph/licensed-recruitment-agencies, 3,794 agencies, captured 2026-09-14) - real data, not
+/// invented. No official API exists for this list (confirmed 2026-09-14); this is a point-in-time
+/// snapshot, not a live sync - re-import by hand (see scripts/scratch-import-dmw-agencies.ts) if a
+/// refreshed list is ever needed. `name` is deliberately not unique - DMW's own directory has
+/// duplicate names under different license records (e.g. a company re-licensed after expiry), and
+/// `licenseNumber` was not populated in the source table at capture time (every row read "N/A").
+model LicensedRecruitmentAgency {
+  id            String  @id @default(uuid())
+  name          String
+  address       String?
+  contactName   String?
+  phone         String?
+  licenseNumber String?
+  /// Verbatim DMW status text (e.g. "Valid License", "Expired", "Cancelled", "Delisted", "Forever
+  /// Banned") - not normalized into an enum, since DMW's own status vocabulary isn't fixed (18
+  /// distinct values seen in one capture, including near-duplicates like "Ceased Operations" vs
+  /// "Ceased Operation").
+  status String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([status])
+  @@map("licensed_recruitment_agencies")
+}
+
 /// LPV-1: every approved LoanAccount references a specific, immutable
 /// version. Editing a product never affects loans already approved under
 /// a prior version (LPV-3).
