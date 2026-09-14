@@ -7745,3 +7745,45 @@ merge introduced no regressions of its own. Pushed successfully as `cb99386d`.
 - Reconfirmed standing lesson from `project_concurrent_sessions_on_repo` (memory): always `git
   fetch`/check before assuming local is current when multiple machines are active - this session's
   own push would have silently failed and needed the exact same recovery regardless.
+
+## §163 — 2026-09-12/13: Synced two more rounds of Office Server PC work onto Macbook Nomer
+
+Two separate `git pull` cycles, both sync-only on this machine (no new code authored here):
+
+**Round 1** brought in Office Server PC's own follow-ups to this session's DTI/INCOMPLETE/Internal
+Credit Score work: a Loan Applications **Excel export** button (`GET /loan-applications.xlsx`,
+same filters as the on-screen list, `writeTabularXlsx` moved from `modules/reporting/` to
+`shared/infrastructure/` since it's now used by a second module), and **band reference tables**
+added to the Internal Credit Score's expand-to-see-more panel (full Income/DTI/Employment
+points-per-band scale, not just the current application's one arithmetic line - direct extension
+of §161's click-to-expand work). No schema changes. Also notable from that machine's own session
+logs (not actioned here, just synced): a DTI/risk backfill run against Office Server PC's own
+local test data (separate database, doesn't affect this machine), and a real product gap found -
+no document-category picker exists for adding a document to an *already-created* application
+(`AttachmentsPanel.tsx`), which can silently block the INCOMPLETE→PREAPPROVED/PREDECLINED
+auto-transition - flagged as a spawned background task there, not yet fixed.
+
+**Round 2** brought in a `BorrowerRiskSummaryService.summarize()` fix: Salary Loan installments
+paid via two semi-monthly partial payments (a payroll/allotment deduction pattern) were being
+undercounted as late, because `repayment_schedules.lastPaidAt` records the LATER of the two partial
+payments' completion, landing after the single monthly due date even though the borrower never
+actually missed a payroll cycle. Fixed by counting an installment on-time if paid before the *next*
+installment's own due date (Salary Loan / `SL-` prefix only, not system-wide - Seafarer/Business
+weren't verified to show the same reliable pattern). This feeds Payment History on the Internal
+Credit Score, `ClientProfilePage.tsx`'s risk summary, and the Loan Applications list's risk tiles -
+all three read the same shared, uncached, live-computed service, so the fix applies everywhere at
+once with no backfill needed. No schema changes.
+
+Both rounds: `tsc --noEmit` clean, rebuilt the affected containers (`easycashbackend` both times,
+`lmsfrontend` for round 1 only), verified healthy via `/health` + `docker ps`.
+
+### Current state after §163
+
+- Macbook Nomer is now current through both of these rounds. `docs/INTERNAL_CREDIT_SCORE.md`
+  (this session's own reference doc, §161) was NOT updated for the band-reference-table addition
+  or the semi-monthly Payment History fix - worth a follow-up pass to keep it accurate as the
+  canonical reference, since both rounds materially changed how two of its four factors compute or
+  display.
+- The Attachments-panel document-category-picker gap (found on Office Server PC, §-numbered there)
+  is a real, live limitation on every machine running this codebase, Macbook Nomer included - not
+  fixed here either.
