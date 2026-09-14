@@ -1,7 +1,7 @@
 import type { IGeocodingService } from '@shared/geo/IGeocodingService';
 import { haversineDistanceKm } from '@shared/geo/haversineDistanceKm';
 import type { IBranchRepository } from '../ports/IBranchRepository';
-import { computeFlatRateAmortization, getMonthlyFlatRate } from '../config/loanCategoryFlatRates';
+import { computeEstimatedAmortization } from '../config/loanApplicationContractualRates';
 
 const MIN_AGE = 18;
 const MAX_AGE = 55;
@@ -103,15 +103,14 @@ export class LoanApplicationPreQualificationService {
           : `Age ${input.age} - requires ${MIN_AGE}–${MAX_AGE}.`,
     };
 
-    const amortization = computeFlatRateAmortization(input.requestedAmount, input.requestedTermMonths, input.requestedCategory);
+    const amortization = computeEstimatedAmortization(input.requestedAmount, input.requestedTermMonths);
     const incomeOk = input.monthlyIncome !== undefined && input.monthlyIncome > amortization;
-    const monthlyFlatRatePercent = (getMonthlyFlatRate(input.requestedCategory) * 100).toFixed(2);
     const incomeCheck: PreQualificationCheck = {
       passed: incomeOk,
       label: 'Monthly income vs. loan amount',
       detail:
         input.monthlyIncome === undefined
-          ? `Monthly income not yet recorded - needs to exceed the estimated ₱${amortization.toFixed(2)}/month amortization (${monthlyFlatRatePercent}% flat rate).`
+          ? `Monthly income not yet recorded - needs to exceed the estimated ₱${amortization.toFixed(2)}/month amortization.`
           : `Monthly income ₱${input.monthlyIncome.toFixed(2)} vs. estimated ₱${amortization.toFixed(2)}/month amortization.`,
     };
 
