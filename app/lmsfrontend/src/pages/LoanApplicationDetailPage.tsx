@@ -2247,6 +2247,7 @@ const UnderwritingCard = React.forwardRef<
                               ...prev,
                               agencyName: agency.name,
                               agencyAddress: agency.address?.trim() || prev.agencyAddress,
+                              agencyContactNumbers: agency.phone?.trim() || prev.agencyContactNumbers,
                             }))
                           }
                           className={f.required && isSeafarerLoan && !agencyVerification[f.key]?.trim() ? 'border-destructive/50' : undefined}
