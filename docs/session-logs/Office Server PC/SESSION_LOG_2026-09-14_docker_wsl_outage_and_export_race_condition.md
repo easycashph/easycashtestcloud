@@ -79,6 +79,36 @@ regardless of how individual round-trip latencies happen to vary.
 a guess) via a one-off script, run and then deleted - not part of the committed fix, since it only
 applied to this one already-produced, already-verified result.
 
+## Incident 3 (not an incident - a feature request): real PMT formula for Loan Application DTI
+
+User revisited an earlier-deferred question: could the Loan Application stage's DTI/pre-screening
+amortization estimate use the same Declining-Balance PMT formula
+(`AmortizationScheduleGenerator`) a real, booked `LoanAccount` uses, instead of the simplified
+flat add-on-rate approximation (`computeFlatRateAmortization`) used until now?
+
+The blocker identified earlier (no `LoanProductVersion`/Contractual Rate assigned yet at the point
+DTI is computed - that only happens later, at PRE_APPROVAL) still holds, but a workable path
+opened up: a real `LoanAccount`'s Contractual Rate is itself a **lookup** from `interest_rate_chart`
+by (Add-On Rate, Term), not a fixed per-product constant - and the DTI estimate already assumes a
+3.0%/month Add-On Rate (the same one `loanCategoryFlatRates.ts` used). Queried the live
+`interest_rate_chart` table for that exact 3.0% row set (terms 1-12, full coverage confirmed
+against every `requestedTermMonths` on record) and embedded it as a verified, real-data snapshot in
+a new file (`loanApplicationContractualRates.ts`), rather than threading a DB call into
+`LoanApplicationPreQualificationService.evaluateCriteria()` (deliberately pure/no-I/O, so the
+Detail page can show a live breakdown on every read with no extra round-trip).
+
+`computeEstimatedAmortization()` now looks up the real contractual rate for the requested term and
+feeds it into the exact same `AmortizationScheduleGenerator.generate()` a real loan account's own
+amortization schedule runs - not a re-implementation, the same class. Verified before shipping:
+computed old-flat vs new-PMT for 4 real applications - all within a few pesos of each other (as
+expected for short terms under the same add-on assumption), confirming the formula swap didn't
+introduce a wild discrepancy. Commit `00cbce84`.
+
+**Known limitation, documented in the new file's own doc comment**: the embedded rate snapshot is
+a manual copy of `interest_rate_chart`'s 3.0%-add-on rows as of 2026-09-14 - if that table's data
+changes later, this snapshot needs a manual re-sync (no automatic link). Term coverage is 1-12
+months; a requested term outside that range throws rather than silently extrapolating.
+
 ## Current state
 
 - Both incidents resolved: live site reachable, tunnel healthy, `easycashbackend` rebuilt with the
