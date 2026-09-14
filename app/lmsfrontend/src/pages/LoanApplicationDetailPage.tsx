@@ -74,6 +74,7 @@ import { ProfileNotesPanel } from '@/components/ProfileNotesPanel';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { AgencyNameCombobox } from '@/components/AgencyNameCombobox';
 import { SeafarerPositionCombobox } from '@/components/SeafarerPositionCombobox';
+import { BankCombobox } from '@/components/BankCombobox';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { TermTip } from '@/components/TermTip';
@@ -2119,10 +2120,14 @@ const UnderwritingCard = React.forwardRef<
                 <div key={f.key} className="space-y-1">
                   <Label className="text-xs text-muted-foreground">{f.label}</Label>
                   {canEditAccountOwner ? (
-                    <Input
-                      value={mitigation[f.key] ?? ''}
-                      onChange={(e) => setMitigation((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                    />
+                    f.key === 'bank' ? (
+                      <BankCombobox value={mitigation[f.key] ?? ''} onChange={(v) => setMitigation((prev) => ({ ...prev, [f.key]: v }))} />
+                    ) : (
+                      <Input
+                        value={mitigation[f.key] ?? ''}
+                        onChange={(e) => setMitigation((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                      />
+                    )
                   ) : (
                     <p className="text-sm">{mitigation[f.key] || '-'}</p>
                   )}
