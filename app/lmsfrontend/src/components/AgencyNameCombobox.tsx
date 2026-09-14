@@ -39,10 +39,14 @@ function statusBadgeVariant(status: string): 'success' | 'destructive' {
 export function AgencyNameCombobox({
   value,
   onChange,
+  onSelectAgency,
   className,
 }: {
   value: string;
   onChange: (value: string) => void;
+  /** Fired (in addition to onChange) when a suggestion is picked, with the full matched record -
+   * lets a caller auto-fill related fields (address, contact number) from the same selection. */
+  onSelectAgency?: (agency: LicensedRecruitmentAgency) => void;
   className?: string;
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -105,6 +109,7 @@ export function AgencyNameCombobox({
                   type="button"
                   onClick={() => {
                     onChange(agency.name);
+                    onSelectAgency?.(agency);
                     setOpen(false);
                   }}
                   className="flex w-full items-start gap-2 px-3 py-2 text-left text-xs hover:bg-muted/60"

@@ -2241,6 +2241,13 @@ const UnderwritingCard = React.forwardRef<
                         <AgencyNameCombobox
                           value={agencyVerification[f.key] ?? ''}
                           onChange={(v) => setAgencyVerification((prev) => ({ ...prev, [f.key]: v }))}
+                          onSelectAgency={(agency) =>
+                            setAgencyVerification((prev) => ({
+                              ...prev,
+                              agencyName: agency.name,
+                              agencyAddress: agency.address?.trim() || prev.agencyAddress,
+                            }))
+                          }
                           className={f.required && isSeafarerLoan && !agencyVerification[f.key]?.trim() ? 'border-destructive/50' : undefined}
                         />
                       ) : (
