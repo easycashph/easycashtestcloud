@@ -73,6 +73,7 @@ import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import { ProfileNotesPanel } from '@/components/ProfileNotesPanel';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { AgencyNameCombobox } from '@/components/AgencyNameCombobox';
+import { SeafarerPositionCombobox } from '@/components/SeafarerPositionCombobox';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { TermTip } from '@/components/TermTip';
@@ -2248,6 +2249,12 @@ const UnderwritingCard = React.forwardRef<
                               agencyAddress: agency.address?.trim() || prev.agencyAddress,
                             }))
                           }
+                          className={f.required && isSeafarerLoan && !agencyVerification[f.key]?.trim() ? 'border-destructive/50' : undefined}
+                        />
+                      ) : f.key === 'position' ? (
+                        <SeafarerPositionCombobox
+                          value={agencyVerification[f.key] ?? ''}
+                          onChange={(v) => setAgencyVerification((prev) => ({ ...prev, [f.key]: v }))}
                           className={f.required && isSeafarerLoan && !agencyVerification[f.key]?.trim() ? 'border-destructive/50' : undefined}
                         />
                       ) : (
