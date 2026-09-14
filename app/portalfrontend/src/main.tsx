@@ -1,20 +1,16 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
-import UnderDevelopment from './UnderDevelopment';
+import App from './App';
 import './index.css';
 
-// 2026-09-10 (user request): Portal taken offline again - back to the "Under Development"
-// placeholder, reversing the 2026-09-10 re-enable (which itself reversed the original 2026-09-08
-// takedown). The tunnel that would back a live deployment is down again too - see
-// `Start Cloudflare Tunnel (Auto-Update).ps1`. Swap `<App />` back in here when the Portal returns.
-//
-// 2026-09-14: briefly swapped to `<App />` for local-only testing of the semi-major client-portal
-// redesign (persistent nav shell, first-login profile gate, dashboard redesign); reverted back to
-// this placeholder afterward per the same reasoning above - this toggle is unrelated to that work.
+// 2026-09-14 (user request): Portal re-enabled again, reversing the 2026-09-10 takedown (itself a
+// reversal of a 2026-09-08 re-enable...) - see git history on this file for the full back-and-forth.
+// Swap back to `<UnderDevelopment />` if the Portal needs to go offline again (e.g. the Cloudflare
+// tunnel backing the live deployment goes down - `Start Cloudflare Tunnel (Auto-Update).ps1`).
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <UnderDevelopment />
+    <App />
   </React.StrictMode>,
 );
 
