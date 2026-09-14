@@ -8,6 +8,10 @@ import './index.css';
 // placeholder, reversing the 2026-09-10 re-enable (which itself reversed the original 2026-09-08
 // takedown). The tunnel that would back a live deployment is down again too - see
 // `Start Cloudflare Tunnel (Auto-Update).ps1`. Swap `<App />` back in here when the Portal returns.
+//
+// 2026-09-14: briefly swapped to `<App />` for local-only testing of the semi-major client-portal
+// redesign (persistent nav shell, first-login profile gate, dashboard redesign); reverted back to
+// this placeholder afterward per the same reasoning above - this toggle is unrelated to that work.
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <UnderDevelopment />

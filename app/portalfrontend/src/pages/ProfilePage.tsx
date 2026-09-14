@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
 import { Alert } from '@/components/ui/Alert';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { PortalHeader } from '@/components/PortalHeader';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
@@ -422,14 +421,11 @@ export function ProfileForm() {
 export function ProfilePage() {
   const { t } = useLanguage();
   return (
-    <div className="min-h-screen bg-secondary/30">
-      <PortalHeader />
-      <main className="container max-w-3xl py-10">
-        <h1 className="text-2xl font-bold tracking-tight">{t.profile.pageTitle}</h1>
-        <div className="mt-8">
-          <ProfileForm />
-        </div>
-      </main>
-    </div>
+    <main className="container max-w-3xl py-10">
+      <h1 className="text-2xl font-bold tracking-tight">{t.profile.pageTitle}</h1>
+      <div className="mt-8">
+        <ProfileForm />
+      </div>
+    </main>
   );
 }

@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Dialog } from '@/components/ui/Dialog';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { PortalHeader } from '@/components/PortalHeader';
 import { LoanApplicationDetailView } from '@/components/LoanApplicationDetailView';
 import { PortalLoanAccountsSection } from '@/components/PortalLoanAccountsSection';
 import { PortalNextPaymentDueCard } from '@/components/PortalNextPaymentDueCard';
@@ -147,25 +146,51 @@ export function DashboardPage() {
       .catch(() => setViewingTimeline([]));
   };
 
+  const firstName = account?.email ? account.email.split('@')[0] : '';
+
   return (
-    <div className="min-h-screen bg-secondary/30">
-      <PortalHeader />
+    <>
+    <main className="container py-8 sm:py-10">
+      {/* 2026-09-14 (semi-major dashboard redesign, user request: "premium, modern, high-tech
+          fintech appearance"): a navy->lime hero banner leads the page instead of a plain h1 - the
+          same gradient language the redesigned public landing page/Button already use, so the
+          authenticated app reads as one continuous brand rather than a plainer "admin panel"
+          bolted onto a polished marketing site. Status/CTA logic below is unchanged from before -
+          only the presentation moved. */}
+      <motion.div initial="hidden" animate="show" variants={fadeUp}>
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary to-primary/85 p-6 text-white shadow-lg sm:p-8">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand-green/30 blur-3xl"
+          />
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/70">{t.dashboard.subtitle}</p>
+              <h1 className="mt-1.5 text-2xl font-bold tracking-tight sm:text-3xl">
+                {t.dashboard.welcomeBack}
+                {firstName ? `, ${firstName}` : ''}
+              </h1>
+            </div>
+            <Button
+              className="bg-white text-primary shadow-md hover:bg-white/90 hover:brightness-100 sm:shrink-0"
+              onClick={() => navigate('/apply')}
+              disabled={hasPendingApplication}
+              title={hasPendingApplication ? t.dashboard.pendingApplicationTitle : undefined}
+            >
+              <FileText className="h-4 w-4" /> {t.dashboard.createApplication}
+            </Button>
+          </div>
+        </div>
+      </motion.div>
 
-      <main className="container py-10">
-        <motion.div initial="hidden" animate="show" variants={fadeUp}>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {t.dashboard.welcomeBack}
-            {account ? `, ${account.email}` : ''}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t.dashboard.subtitle}</p>
-        </motion.div>
+      <p className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Overview</p>
 
-        {/* 2026-08-14 (user request): compact 2-per-row grid for the short "fact" cards - each
-            manages its own conditional rendering (returns null when it has nothing to show), and
-            CSS grid simply reflows around whichever ones are actually present. The two list/table
-            widgets below (My Loans, Recent Payments) stay full-width - they hold multi-column rows
-            and per-row action buttons that would cramp badly at half width. */}
-        <div className="mt-8 grid gap-5 sm:grid-cols-2">
+      {/* 2026-08-14 (user request): compact 2-per-row grid for the short "fact" cards - each
+          manages its own conditional rendering (returns null when it has nothing to show), and
+          CSS grid simply reflows around whichever ones are actually present. The two list/table
+          widgets below (My Loans, Recent Payments) stay full-width - they hold multi-column rows
+          and per-row action buttons that would cramp badly at half width. */}
+        <div className="grid gap-5 sm:grid-cols-2">
           <PortalSignDocumentsCard />
           <PortalTwoFactorNudgeCard />
           <PortalNextPaymentDueCard />
@@ -197,13 +222,14 @@ export function DashboardPage() {
           </motion.div>
         </div>
 
-        <div className="mt-5 space-y-5">
+        <p className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Loans &amp; Payments</p>
+        <div className="space-y-5">
           <PortalLoanAccountsSection />
           <PortalRecentPaymentsSection />
         </div>
 
-        <motion.div initial="hidden" animate="show" variants={fadeUp}>
-        <Card className="mt-5 p-6">
+        <motion.div initial="hidden" animate="show" variants={fadeUp} className="mt-8">
+        <Card className="p-6">
           <h2 className="text-base font-semibold">{t.dashboard.myApplications}</h2>
           {applications === null ? (
             <ApplicationsListSkeleton />
@@ -277,6 +303,6 @@ export function DashboardPage() {
           </div>
         )}
       </Dialog>
-    </div>
+    </>
   );
 }

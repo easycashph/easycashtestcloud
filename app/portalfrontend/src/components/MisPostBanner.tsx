@@ -4,13 +4,17 @@ import { apiClient, API_BASE_URL } from '@/lib/apiClient';
 import type { ActiveMisPostsResponse, MisPostView } from '@/lib/portalApiTypes';
 
 /**
- * Homepage MIS post banner (2026-08-20 user request) - shown above the News Flash ticker, full
- * text/image, not scrolling ("ilagay na lang ang buong post sa bandang itaas ng newsflash, para
- * madaling mabasa"). Two kinds of card, both rendered in full: any currently-live custom/manual
- * MIS post (e.g. a typhoon advisory - disappears on its own once its duration elapses) shown
- * first, and the day's auto-rotating post next to it ("lalabas... Homepage at News &
- * Announcements page... kasabay ng anumang active manual announcement"). Deliberately separate
- * from `NewsFlashTicker`, which stays external-news-only per the same user request.
+ * Homepage MIS post banner (2026-08-20 user request) - full text/image, not scrolling ("ilagay na
+ * lang ang buong post sa bandang itaas ng newsflash, para madaling mabasa"). Two kinds of card,
+ * both rendered in full: any currently-live custom/manual MIS post (e.g. a typhoon advisory -
+ * disappears on its own once its duration elapses) shown first, and the day's auto-rotating post
+ * next to it.
+ *
+ * 2026-09-11: the News page/ticker this was originally shown alongside was removed entirely (user
+ * request) - this banner is a separate, backend-driven MIS-announcement feature, not part of that
+ * removal, but it is not currently mounted anywhere in the app (it was previously only reachable
+ * via the now-deleted News page). Left in place since MIS announcements remain a real feature; if
+ * it's still wanted, it needs a new mount point (e.g. the homepage) - not restored automatically.
  */
 export function MisPostBanner() {
   const [data, setData] = React.useState<ActiveMisPostsResponse | null>(null);

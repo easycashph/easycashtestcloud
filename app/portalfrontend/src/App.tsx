@@ -8,6 +8,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { PortalDialogHost } from '@/components/PortalDialogHost';
 import { PortalAnnouncementPopup } from '@/components/PortalAnnouncementPopup';
+import { ConsentGate } from '@/components/ConsentGate';
 import { PortalChatWidget } from '@/components/PortalChatWidget';
 import { LandingPage } from '@/pages/LandingPage';
 
@@ -25,6 +26,7 @@ const ChangePasswordRequiredPage = React.lazy(() =>
 );
 const ForgotPasswordPage = React.lazy(() => import('@/pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })));
 const ResetPasswordPage = React.lazy(() => import('@/pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
+const PortalAppShell = React.lazy(() => import('@/components/PortalAppShell').then((m) => ({ default: m.PortalAppShell })));
 const DashboardPage = React.lazy(() => import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
 const LoanApplicationFormPage = React.lazy(() => import('@/pages/LoanApplicationFormPage').then((m) => ({ default: m.LoanApplicationFormPage })));
 const LoanProductsPage = React.lazy(() => import('@/pages/LoanProductsPage').then((m) => ({ default: m.LoanProductsPage })));
@@ -34,8 +36,6 @@ const PrivacyPolicyPage = React.lazy(() => import('@/pages/PrivacyPolicyPage').t
 const TermsPage = React.lazy(() => import('@/pages/TermsPage').then((m) => ({ default: m.TermsPage })));
 const SecurityTipsPage = React.lazy(() => import('@/pages/SecurityTipsPage').then((m) => ({ default: m.SecurityTipsPage })));
 const ComplaintsPage = React.lazy(() => import('@/pages/ComplaintsPage').then((m) => ({ default: m.ComplaintsPage })));
-const NewsPage = React.lazy(() => import('@/pages/NewsPage').then((m) => ({ default: m.NewsPage })));
-const NewsArticlePage = React.lazy(() => import('@/pages/NewsArticlePage').then((m) => ({ default: m.NewsArticlePage })));
 const RequirementsPage = React.lazy(() => import('@/pages/RequirementsPage').then((m) => ({ default: m.RequirementsPage })));
 const GetAppPage = React.lazy(() => import('@/pages/GetAppPage').then((m) => ({ default: m.GetAppPage })));
 const ContactPage = React.lazy(() => import('@/pages/ContactPage').then((m) => ({ default: m.ContactPage })));
@@ -89,59 +89,28 @@ function AppRoutes() {
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/security-tips" element={<SecurityTipsPage />} />
       <Route path="/complaints" element={<ComplaintsPage />} />
-      <Route path="/news" element={<NewsPage />} />
-      <Route path="/news/:slug" element={<NewsArticlePage />} />
       <Route path="/requirements" element={<RequirementsPage />} />
       <Route path="/get-app" element={<GetAppPage />} />
       <Route path="/contact" element={<ContactPage />} />
+      {/* 2026-09-14 (semi-major portal redesign, user request: "persistent navbar ... across the
+          entire client portal") - one shared `PortalAppShell` (header + first-login profile-setup
+          gate) for every authenticated page below, via a parent route + `<Outlet/>` instead of
+          each page mounting its own header copy. `/sign/:sessionId` deliberately stays outside
+          this shell (a focused, full-bleed signing flow, unaffected by this redesign). */}
       <Route
-        path="/dashboard"
         element={
           <ProtectedRoute>
-            <DashboardPage />
+            <PortalAppShell />
           </ProtectedRoute>
         }
-      />
-      <Route
-        path="/apply"
-        element={
-          <ProtectedRoute>
-            <LoanApplicationFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/apply/:id"
-        element={
-          <ProtectedRoute>
-            <LoanApplicationFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/products"
-        element={
-          <ProtectedRoute>
-            <LoanProductsPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/profile"
-        element={
-          <ProtectedRoute>
-            <ProfilePage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/security"
-        element={
-          <ProtectedRoute>
-            <SecurityPage />
-          </ProtectedRoute>
-        }
-      />
+      >
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/apply" element={<LoanApplicationFormPage />} />
+        <Route path="/apply/:id" element={<LoanApplicationFormPage />} />
+        <Route path="/products" element={<LoanProductsPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/security" element={<SecurityPage />} />
+      </Route>
       {/* 2026-08-20 (Portal e-signature, user request) - authenticated counterpart of
           lmsfrontend's public /sign/:token, reached from a "Sign Documents" prompt on the
           Dashboard instead of a mailed link. See PortalSigningPage's own doc comment. */}
@@ -202,6 +171,7 @@ export default function App() {
                 >
                   Skip to main content
                 </a>
+                <ConsentGate />
                 <OfflineBanner />
                 <PreviewBanner />
                 {/* A plain div, not <main>: each page owns its own landmarks (the landing page

@@ -6,10 +6,12 @@ import { LOAN_PRODUCTS } from '@/lib/loanProducts';
 import { estimateMonthlyPayment, estimateTotalRepayment } from '@/lib/loanEstimator';
 
 const AMOUNT_MIN = 5_000;
-const AMOUNT_MAX = 200_000;
 const AMOUNT_STEP = 5_000;
 const TERM_MIN = 1;
-const TERM_MAX = 24;
+/** 2026-09-10 (user-confirmed business rule): Easycash does not offer installment terms beyond 12
+ * months on any product - capped here (was 24) so the marketing calculator can never suggest a
+ * term the company doesn't actually offer. */
+const TERM_MAX = 12;
 
 function peso(value: number): string {
   return `₱${Math.round(value).toLocaleString()}`;
@@ -23,9 +25,13 @@ function peso(value: number): string {
  * inventing a number - the eligibility widget next to this one drew that exact line for the same
  * reason (see EligibilityCheckWidget's doc comment: never fabricate a business rule).
  *
- * The slider/term bounds below (₱5,000-200,000, 1-24 months) are calculator UI convenience only -
- * never presented as Easycash's official minimum/maximum loan amount or term, which aren't
- * published anywhere this codebase has verified.
+ * The amount slider's floor (₱5,000) is calculator UI convenience only - never presented as
+ * Easycash's official minimum, which isn't published anywhere this codebase has verified. The
+ * ceiling, though, now tracks each product's own real `maxAmount` (see loanProducts.ts's own doc
+ * comment - CONFIRMED figures read off the live easycash.ph product pages, 2026-09-10), so
+ * switching the loan type changes what the slider can reach. The term bound (max 12 months) IS a
+ * confirmed real business rule (2026-09-10 user confirmation) - Easycash does not offer longer
+ * installment terms.
  *
  * 2026-07-31 (user request/analysis): the REAL contractual rate actually used at loan booking
  * comes from the `interest_rate_chart` table (add-on rate × term -> a per-term contractual rate,
@@ -43,6 +49,17 @@ export function LoanCalculatorWidget() {
   const [category, setCategory] = React.useState<string>(LOAN_PRODUCTS[0].category);
   const [amount, setAmount] = React.useState(50_000);
   const [termMonths, setTermMonths] = React.useState(12);
+
+  const selectedProduct = LOAN_PRODUCTS.find((p) => p.category === category) ?? LOAN_PRODUCTS[0];
+  const amountMax = selectedProduct.maxAmount;
+
+  const handleCategoryChange = (nextCategory: string) => {
+    setCategory(nextCategory);
+    // Switching to a product with a lower real ceiling than the current amount - pull the slider
+    // back in rather than silently letting it sit past what that product actually offers.
+    const nextMax = LOAN_PRODUCTS.find((p) => p.category === nextCategory)?.maxAmount ?? amountMax;
+    setAmount((current) => Math.min(current, nextMax));
+  };
 
   const monthlyPayment = estimateMonthlyPayment(amount, termMonths, category);
   const totalRepayment = estimateTotalRepayment(amount, termMonths, category);
@@ -65,7 +82,7 @@ export function LoanCalculatorWidget() {
           <select
             id="calc-category"
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            onChange={(e) => handleCategoryChange(e.target.value)}
             style={{ marginTop: 6, width: '100%', borderRadius: 10, border: '1px solid var(--line)', background: 'var(--surface)', padding: '8px 12px', fontSize: '0.86rem' }}
           >
             {LOAN_PRODUCTS.map((product) => (
@@ -85,7 +102,7 @@ export function LoanCalculatorWidget() {
             id="calc-amount"
             type="range"
             min={AMOUNT_MIN}
-            max={AMOUNT_MAX}
+            max={amountMax}
             step={AMOUNT_STEP}
             value={amount}
             onChange={(e) => setAmount(Number(e.target.value))}
@@ -93,7 +110,7 @@ export function LoanCalculatorWidget() {
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--ink-soft)' }}>
             <span>{peso(AMOUNT_MIN)}</span>
-            <span>{peso(AMOUNT_MAX)}</span>
+            <span>{peso(amountMax)}</span>
           </div>
         </div>
 

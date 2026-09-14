@@ -82,22 +82,22 @@ export function EligibilityCheckWidget() {
           style={{
             marginTop: 18,
             borderRadius: 14,
-            border: `1px solid ${allYes ? 'rgba(76,175,80,0.4)' : 'rgba(245,158,11,0.4)'}`,
-            background: allYes ? 'rgba(76,175,80,0.1)' : 'rgba(245,158,11,0.1)',
+            border: `1px solid ${allYes ? 'var(--success-border)' : 'var(--warning-border)'}`,
+            background: allYes ? 'var(--success-bg)' : 'var(--warning-bg)',
             padding: 16,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             {allYes ? (
-              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" style={{ color: '#4caf50' }} />
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" style={{ color: 'var(--success-ink)' }} />
             ) : (
-              <XCircle className="mt-0.5 h-5 w-5 shrink-0" style={{ color: '#b45309' }} />
+              <XCircle className="mt-0.5 h-5 w-5 shrink-0" style={{ color: 'var(--warning-ink)' }} />
             )}
             <div>
-              <p style={{ fontSize: '0.86rem', fontWeight: 700, margin: 0, color: allYes ? '#2e7d32' : '#92400e' }}>
+              <p style={{ fontSize: '0.86rem', fontWeight: 700, margin: 0, color: allYes ? 'var(--success-ink)' : 'var(--warning-ink)' }}>
                 {allYes ? t.eligibilityCheck.resultPassTitle : t.eligibilityCheck.resultFailTitle}
               </p>
-              <p style={{ marginTop: 4, fontSize: '0.86rem', lineHeight: 1.5, color: allYes ? '#2e7d32' : '#92400e' }}>
+              <p style={{ marginTop: 4, fontSize: '0.86rem', lineHeight: 1.5, color: allYes ? 'var(--success-ink)' : 'var(--warning-ink)' }}>
                 {allYes ? t.eligibilityCheck.resultPassBody : t.eligibilityCheck.resultFailBody}
               </p>
               <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>

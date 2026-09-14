@@ -25,26 +25,53 @@ import type { Locale } from './i18n/LanguageContext';
  * bug class already fixed once elsewhere (see LandingPage.tsx's own 2026-07-29 changelog entry)
  * but missed here since this file is shared across four pages, none of which flagged it alone. Now
  * `{ en, fil }` objects - read via `localizedProductText()` below, which every consumer must use
- * instead of reading the field directly. */
+ * instead of reading the field directly.
+ *
+ * 2026-09-10 (user request, "Seafarer Loan is the #1 featured product throughout the website"):
+ * reordered so Seafarer Loan leads the array - every consumer that renders/derives from this order
+ * (the landing page's featured-product row, the nav mega-menu, the mobile drawer, the Requirements
+ * page's document cards, LoanProductsPage, the application form's category dropdown, and
+ * LoanCalculatorWidget's default selected category) picks this up automatically via `.map()`/
+ * `[0]`, with no per-page reordering logic to keep in sync. `category` values themselves are
+ * untouched (see 2026-08-12 note above) - this only changes display/array order, never the real
+ * backend-facing value.
+ *
+ * 2026-09-10 (user request, "expand using details fetched from easycash.ph"): added `maxAmount`
+ * and `ageRange` per product - CONFIRMED real published figures, read directly off the live
+ * easycash.ph product pages (Seafarer Loan, Personal Loan, SME Loan pages, checked this same day),
+ * not estimates or UI-convenience bounds like the calculator widgets' own slider ceilings (see
+ * those files' doc comments on that distinction). If easycash.ph republishes different figures
+ * later, these must be re-verified against the live site, not assumed still current.
+ *
+ * Deliberately NOT changed this pass: the live site's FAQ states loans are "disbursed via bank
+ * transfer, e-wallet, or other supported channels", which conflicts with this Portal's own
+ * disbursement disclosure (`t.landing.disbursementNotice` / footer - "released via Bank Cheque
+ * only... never disburses in... bank transfer"). That is a real conflict between two claimed
+ * sources of truth about actual money movement, not a presentation detail - it needs a business
+ * decision from whoever owns that policy, not a silent edit here. */
 export const LOAN_PRODUCTS = [
   {
-    icon: Briefcase,
-    category: 'Business Loan',
-    displayLabel: 'SME Loan',
+    icon: Anchor,
+    category: 'Seafarer Loan',
+    displayLabel: 'Seafarer Loan',
+    maxAmount: 500_000,
+    ageRange: '21-60',
     blurb: {
-      en: 'Flexible financing and a simpler process for growing your business.',
-      fil: 'Flexible na financing at mas simpleng proseso para sa paglago ng iyong negosyo.',
+      en: 'Lower rates and faster approvals, tailored around irregular allotment income.',
+      fil: 'Mas mababang rate at mas mabilis na approval, iniangkop sa hindi regular na allotment income.',
     },
     details: {
-      en: 'Working capital, equipment, or expansion financing for small and medium-sized business owners.',
-      fil: 'Working capital, kagamitan, o financing para sa pagpapalawak ng maliit at katamtamang laki ng negosyo.',
+      en: 'Built for seafarers with allotment-based income - flexible terms around your contract and deployment schedule.',
+      fil: 'Ginawa para sa mga seafarer na may allotment-based na kita - flexible na termino ayon sa iyong kontrata at deployment schedule.',
     },
-    image: './images/product-business.jpg',
+    image: './images/product-seafarer.jpg',
   },
   {
     icon: Landmark,
     category: 'Salary Loan',
     displayLabel: 'Personal Loan',
+    maxAmount: 300_000,
+    ageRange: '21-60',
     blurb: {
       en: 'A quick cash advance against your salary, approved fast.',
       fil: 'Mabilisang cash advance laban sa iyong sahod, mabilis maaprubahan.',
@@ -56,18 +83,20 @@ export const LOAN_PRODUCTS = [
     image: './images/product-salary.jpg',
   },
   {
-    icon: Anchor,
-    category: 'Seafarer Loan',
-    displayLabel: 'Seafarer Loan',
+    icon: Briefcase,
+    category: 'Business Loan',
+    displayLabel: 'SME Loan',
+    maxAmount: 500_000,
+    ageRange: '21-65',
     blurb: {
-      en: 'Lower rates and faster approvals, tailored around irregular allotment income.',
-      fil: 'Mas mababang rate at mas mabilis na approval, iniangkop sa hindi regular na allotment income.',
+      en: 'Flexible loan terms and a simpler process for growing your business.',
+      fil: 'Flexible na termino ng pautang at mas simpleng proseso para sa paglago ng iyong negosyo.',
     },
     details: {
-      en: 'Built for seafarers with allotment-based income - flexible terms around your contract and deployment schedule.',
-      fil: 'Ginawa para sa mga seafarer na may allotment-based na kita - flexible na termino ayon sa iyong kontrata at deployment schedule.',
+      en: 'Working capital, equipment, or expansion loans for small and medium-sized business owners.',
+      fil: 'Working capital, kagamitan, o pautang para sa pagpapalawak ng maliit at katamtamang laki ng negosyo.',
     },
-    image: './images/product-seafarer.jpg',
+    image: './images/product-business.jpg',
   },
 ] as const;
 

@@ -35,8 +35,7 @@
  * `t('landing.hero.title')` has no compile-time link between the key string and its usage - a typo
  * or a missing translation fails silently at runtime. Here, `fil` is assigned the exact type of
  * `en` (via `satisfies`), so TypeScript refuses to compile if a translation is missing, misspelled,
- * or has the wrong shape. This mirrors the project's existing preference for typed structures over
- * magic strings (see NewsBlock's discriminated union in content/news.ts).
+ * or has the wrong shape.
  */
 
 export const en = {
@@ -50,13 +49,11 @@ export const en = {
   },
   nav: {
     product: 'Product',
-    news: 'News',
     requirements: 'Requirements',
     security: 'Security',
     goToDashboard: 'Go to Dashboard',
     productFull: 'Our Loan Products',
     requirementsFull: 'Loan Requirements',
-    newsFull: 'News & Announcements',
     securityFull: 'Security & Anti-Scam',
     theme: 'Theme',
     language: 'Language',
@@ -71,7 +68,6 @@ export const en = {
     viewOnMap: 'View on map',
     quickLinksHeading: 'Quick Links',
     requirements: 'Loan Requirements',
-    news: 'News & Announcements',
     security: 'Security & Anti-Scam',
     complaints: 'File a Complaint',
     privacy: 'Data Privacy Statement',
@@ -84,7 +80,7 @@ export const en = {
     // 2011" placeholder guess). The hero's "Years in Business" stat (LandingPage.tsx) was updated
     // to 16 in the same session to stay consistent (2026-2010 = 16).
     badge: 'SEC-Registered · Since 2010',
-    heroTitle: 'Financing that moves at the speed of your ambition.',
+    heroTitle: 'Lending that moves at the speed of your ambition.',
     heroSubtitle:
       'Apply for a loan online in minutes, track your application status in real time, and manage your account - all from one place.',
     applyToday: 'Apply for a Loan Today',
@@ -115,12 +111,21 @@ export const en = {
     ],
     waysToPayTitle: 'Ways to pay',
     waysToPaySubtitle: 'Settle your installments through either of these channels.',
+    waysToPayMarqueeCaption: 'Pay from any major Philippine bank or e-wallet.',
     waysToPay: [
       { title: 'Bank Transfer', body: 'Pay directly from your bank account - funds are matched to your loan the same banking day.' },
       { title: 'Post-Dated Check (PDC)', body: 'Hand in a set of checks once, dated to your own payment schedule - no need to remember due dates.' },
     ],
+    repaymentSteps: [
+      { title: 'Enter our account number', body: 'Use the official Easycash account shown below - never a personal or unlisted account.' },
+      { title: 'Transfer the exact amount', body: "Send exactly what's due so it's matched to your loan automatically." },
+      { title: 'Keep your reference number', body: "Save your bank's transaction or reference number as proof of payment." },
+    ],
+    pdcAccountNote: 'Post-Dated Checks (PDC) are cleared through this same official account where applicable - no separate account to remember.',
     officialBankAccountHeading: 'Payment to Official Bank Account',
     officialBankAccountProofNote: 'Please send proof of payment to',
+    copyAccountNo: 'Copy account number',
+    copiedAccountNo: 'Copied',
     testimonialsTitle: 'People say the nicest things',
     testimonialsSubtitle:
       "Here's the compelling reason why thousands of businesses and individuals have opted for our expertise to drive their financial growth.",
@@ -197,6 +202,17 @@ export const en = {
     documentsHeading: 'Documents by loan type',
     documentsIntro: 'You can submit your application first and upload these afterwards, but having them ready speeds things up considerably.',
     coBorrowerNote: 'If you are applying with a co-borrower, they will also need to provide a valid ID.',
+    alwaysRequiredLabel: 'Always required',
+    productSpecificLabel: 'For this loan type',
+    prepHeading: 'Before you apply',
+    prepIntro: 'A few minutes of preparation now saves you back-and-forth later.',
+    prepTips: [
+      'Make sure your government ID is valid and not expired.',
+      'Have clear, complete photos or scans of every document ready to upload.',
+      'Use a mobile number and email address you actively check - this is how we reach you about your application.',
+      'Know your preferred loan amount and term before you start the form.',
+    ],
+    processHeading: 'A simple, guided process',
     readyHeading: 'Ready to apply?',
     readyBody: 'Create an account and submit your application online - you can save your progress and come back to it.',
   },
@@ -266,6 +282,33 @@ export const en = {
     targetedHeading: 'Think you have been targeted?',
     targetedBody: 'Report it to us right away so we can warn other borrowers - even if you did not lose money. Contact us through any official channel above, or {complaintsLink}.',
     targetedLinkText: 'file a formal complaint',
+    /** Purely organizational grouping of the 7 `protect` tips above into 3 thematic clusters - no
+     * new advice, just a presentational regrouping (2026-09-10 visual pass). Indices below refer
+     * to positions in the `protect` array and must stay in sync with it. */
+    protectGroups: ['Verify before you trust', 'Protect your credentials', 'Stay in control'],
+    faqHeading: 'Frequently asked questions',
+    faq: [
+      {
+        question: 'Will Easycash ever call or text asking for my OTP?',
+        answer: 'No. No Easycash employee will ever ask for your one-time PIN, portal password, or card PIN by call, text, email, or chat. An OTP is for you alone to enter.',
+      },
+      {
+        question: 'Is it normal to be asked for a fee before my loan is released?',
+        answer: 'No. Easycash never requires an advance "processing fee", "insurance fee", or "release fee" sent to a personal account before your loan proceeds are released. Any deductible fees are disclosed in your loan documents and taken from the proceeds itself.',
+      },
+      {
+        question: 'How can I verify that Easycash is a legitimate, registered lender?',
+        answer: "Easycash is registered with the Securities and Exchange Commission (SEC). You can independently verify our company name and registration on the SEC's official website at sec.gov.ph.",
+      },
+      {
+        question: 'Someone claiming to be from Easycash contacted me from an unfamiliar number. What should I do?',
+        answer: 'Compare the number or email against our official channels listed above. If it does not match, do not engage - report it to us right away using an official channel or by filing a formal complaint.',
+      },
+      {
+        question: 'What if I already shared an OTP or password with someone?',
+        answer: 'Contact us immediately through an official channel above and change your Easycash Portal password as soon as possible. Treat an OTP like cash - once it is shared, assume it is compromised.',
+      },
+    ],
   },
   complaints: {
     title: 'File a Complaint',
@@ -309,23 +352,12 @@ export const en = {
     complaintBody: 'We would rather hear about it directly. {complaintsLink} and we will look into it.',
     complaintLinkText: 'File a complaint',
   },
-  news: {
-    title: 'News & Announcements',
-    intro: 'Service advisories, financial guides, and company updates from Easycash.',
-    emptyTitle: 'No posts yet',
-    emptyBody: 'Easycash announcements, service advisories, and financial guides will appear here. Check back soon.',
-    filterAll: 'All',
-    backToAllNews: 'Back to all news',
-    notFoundTitle: 'Post not found',
-    notFoundIntro: 'This post may have been moved or removed.',
-  },
   notFound: {
     title: 'Page not found',
     intro: 'The page you are looking for does not exist, or it may have been moved.',
     whereHeading: 'Where would you like to go?',
     linkHome: 'Home',
     linkRequirements: 'Loan Requirements',
-    linkNews: 'News & Announcements',
     linkSecurity: 'Security & Anti-Scam',
     linkContact: 'Contact Us',
     backToHome: 'Back to home',
@@ -630,6 +662,26 @@ export const en = {
     saved: 'Profile updated.',
     save: 'Save Changes',
     saving: 'Saving…',
+  },
+  /** First-login profile completion gate (2026-09-14 redesign, user request: "require them to
+   * complete their profile before continuing"). Renders in place of the normal authenticated app
+   * shell content until the required subset of `/portal/profile` fields is filled in - see
+   * `PortalProfileSetupGate.tsx`'s own doc comment for why completeness is derived from real saved
+   * fields rather than a new invented "profileComplete" flag. */
+  portalOnboarding: {
+    eyebrow: 'One last step',
+    title: 'Complete your profile',
+    subtitle: 'A few quick details before you continue - it only takes a minute.',
+    requiredBadge: 'Required',
+    optionalToggle: 'Add more details (optional)',
+    photoTitle: 'Profile photo',
+    photoHintAvailable: 'Optional, but a friendly touch loan officers appreciate.',
+    photoHintUnavailable: 'You can add a profile photo once you start a loan application.',
+    validationError: 'Please fill in the required fields highlighted below.',
+    genericSaveError: 'Something went wrong saving your profile. Please try again.',
+    saveAndContinue: 'Save & Continue',
+    saving: 'Saving…',
+    required: 'Required',
   },
   dashboardCards: {
     twoFactorNudge: {
@@ -952,13 +1004,11 @@ export const fil: Translations = {
   },
   nav: {
     product: 'Produkto',
-    news: 'Balita',
     requirements: 'Mga Kailangan',
     security: 'Seguridad',
     goToDashboard: 'Pumunta sa Dashboard',
     productFull: 'Aming mga Produktong Loan',
     requirementsFull: 'Mga Kailangan sa Pag-apply',
-    newsFull: 'Balita at mga Anunsyo',
     securityFull: 'Seguridad at Anti-Scam',
     theme: 'Tema',
     language: 'Wika',
@@ -973,7 +1023,6 @@ export const fil: Translations = {
     viewOnMap: 'Tingnan sa mapa',
     quickLinksHeading: 'Mga Mabilisang Link',
     requirements: 'Mga Kailangan sa Pag-apply',
-    news: 'Balita at mga Anunsyo',
     security: 'Seguridad at Anti-Scam',
     complaints: 'Magsampa ng Reklamo',
     privacy: 'Pahayag ng Data Privacy',
@@ -1014,12 +1063,21 @@ export const fil: Translations = {
     ],
     waysToPayTitle: 'Mga paraan ng pagbabayad',
     waysToPaySubtitle: 'Bayaran ang iyong mga hulog gamit ang alinman sa mga channel na ito.',
+    waysToPayMarqueeCaption: 'Magbayad mula sa alinmang mayor na Philippine bank o e-wallet.',
     waysToPay: [
       { title: 'Bank Transfer', body: 'Magbayad direkta mula sa iyong bank account - itutugma ang pondo sa iyong loan sa parehong banking day.' },
       { title: 'Post-Dated Check (PDC)', body: 'Magbigay ng set ng checks nang isang beses, naka-date base sa iyong sariling iskedyul ng bayad - hindi na kailangang tandaan ang due dates.' },
     ],
+    repaymentSteps: [
+      { title: 'Ilagay ang aming account number', body: 'Gamitin ang opisyal na Easycash account sa ibaba - hindi personal o hindi nakalistang account.' },
+      { title: 'Ilipat ang eksaktong halaga', body: 'Ipadala nang eksakto ang dapat bayaran para awtomatikong maitugma sa iyong loan.' },
+      { title: 'Itago ang iyong reference number', body: 'I-save ang transaction o reference number ng iyong bangko bilang patunay ng bayad.' },
+    ],
+    pdcAccountNote: 'Ang Post-Dated Checks (PDC) ay ikinakaltas gamit ang parehong opisyal na account na ito kung naaangkop - walang hiwalay na account na kailangang tandaan.',
     officialBankAccountHeading: 'Bayad sa Opisyal na Bank Account',
     officialBankAccountProofNote: 'Ipadala ang proof of payment sa',
+    copyAccountNo: 'Kopyahin ang account number',
+    copiedAccountNo: 'Nakopya',
     testimonialsTitle: 'Ang sinasabi ng aming mga kliyente',
     testimonialsSubtitle:
       'Ito ang dahilan kung bakit libo-libong negosyo at indibidwal ang pumili sa aming serbisyo para sa kanilang paglago sa pananalapi.',
@@ -1093,6 +1151,17 @@ export const fil: Translations = {
     documentsHeading: 'Mga dokumento kada uri ng loan',
     documentsIntro: 'Puwede mong isumite muna ang iyong aplikasyon at i-upload ang mga ito pagkatapos, pero mas mabilis kung nakahanda na ang mga ito.',
     coBorrowerNote: 'Kung mag-a-apply ka na may co-borrower, kakailanganin din nila ng wastong ID.',
+    alwaysRequiredLabel: 'Palaging kailangan',
+    productSpecificLabel: 'Para sa uri ng loan na ito',
+    prepHeading: 'Bago mag-apply',
+    prepIntro: 'Ilang minutong paghahanda ngayon ang makakatipid sa iyo ng oras sa susunod.',
+    prepTips: [
+      'Tiyaking valid at hindi expired ang iyong government ID.',
+      'Ihanda ang malinaw at kumpletong litrato o scan ng bawat dokumento na aa-upload-in.',
+      'Gumamit ng mobile number at email address na aktibong sinusuri mo - ito ang gagamitin namin para maabot ka tungkol sa iyong aplikasyon.',
+      'Alamin ang gusto mong halaga ng loan at termino bago simulan ang form.',
+    ],
+    processHeading: 'Simple at gabay na proseso',
     readyHeading: 'Handa ka na bang mag-apply?',
     readyBody: 'Gumawa ng account at isumite ang iyong aplikasyon online - puwede mong i-save ang iyong progreso at bumalik dito anumang oras.',
   },
@@ -1162,6 +1231,30 @@ export const fil: Translations = {
     targetedHeading: 'Sa tingin mo ba ay naging target ka?',
     targetedBody: 'Ireport ito sa amin kaagad para maabisuhan namin ang ibang nangungutang - kahit hindi ka nawalan ng pera. Makipag-ugnayan sa amin sa pamamagitan ng kahit alin sa mga opisyal na channel sa itaas, o {complaintsLink}.',
     targetedLinkText: 'magsampa ng pormal na reklamo',
+    protectGroups: ['Beripikahin bago magtiwala', 'Protektahan ang iyong kredensyal', 'Manatiling nasa kontrol'],
+    faqHeading: 'Mga madalas itanong',
+    faq: [
+      {
+        question: 'Tatawag o magte-text ba ang Easycash para hingin ang aking OTP?',
+        answer: 'Hindi. Walang empleyado ng Easycash na hihingi ng iyong one-time PIN, password sa portal, o PIN ng card sa tawag, text, email, o chat. Ang OTP ay para sa iyo lamang.',
+      },
+      {
+        question: 'Normal ba na hingan ako ng bayad bago ilabas ang aking loan?',
+        answer: 'Hindi. Hindi kailanman hihingi ang Easycash ng advance na "processing fee", "insurance fee", o "release fee" na ipapadala sa personal na account bago ilabas ang iyong loan proceeds. Anumang mababawas na bayad ay isinasaad sa iyong mga dokumento ng loan at kinukuha mismo mula sa proceeds.',
+      },
+      {
+        question: 'Paano ko mabeberipika na lehitimo at rehistradong lender ang Easycash?',
+        answer: 'Rehistrado ang Easycash sa Securities and Exchange Commission (SEC). Puwede mong beripikahin nang mag-isa ang aming pangalan ng kompanya at rehistrasyon sa opisyal na website ng SEC sa sec.gov.ph.',
+      },
+      {
+        question: 'May nakipag-ugnayan sa akin na nagsasabing taga-Easycash mula sa hindi pamilyar na numero. Ano ang gagawin ko?',
+        answer: 'Ikumpara ang numero o email sa aming opisyal na mga channel sa itaas. Kung hindi ito tumutugma, huwag makipag-ugnayan - ireport ito sa amin kaagad gamit ang opisyal na channel o sa pamamagitan ng pagsampa ng pormal na reklamo.',
+      },
+      {
+        question: 'Paano kung nabahagi ko na ang aking OTP o password sa iba?',
+        answer: 'Makipag-ugnayan sa amin kaagad sa pamamagitan ng opisyal na channel sa itaas at palitan ang iyong password sa Easycash Portal sa lalong madaling panahon. Ituring ang OTP na parang pera - kapag naibahagi na, ituring itong nakompromiso na.',
+      },
+    ],
   },
   complaints: {
     title: 'Magsampa ng Reklamo',
@@ -1205,23 +1298,12 @@ export const fil: Translations = {
     complaintBody: 'Mas gugustuhin naming malaman ito nang direkta. {complaintsLink} at aming susuriin ito.',
     complaintLinkText: 'Magsampa ng reklamo',
   },
-  news: {
-    title: 'Balita at mga Anunsyo',
-    intro: 'Mga service advisory, gabay pinansyal, at update ng kompanya mula sa Easycash.',
-    emptyTitle: 'Wala pang mga post',
-    emptyBody: 'Lalabas dito ang mga anunsyo, service advisory, at gabay pinansyal ng Easycash. Bumalik ulit sa lalong madaling panahon.',
-    filterAll: 'Lahat',
-    backToAllNews: 'Bumalik sa lahat ng balita',
-    notFoundTitle: 'Hindi natagpuan ang post',
-    notFoundIntro: 'Maaaring inilipat o inalis na ang post na ito.',
-  },
   notFound: {
     title: 'Hindi natagpuan ang pahina',
     intro: 'Ang pahinang iyong hinahanap ay hindi umiiral, o maaaring inilipat na ito.',
     whereHeading: 'Saan mo gustong pumunta?',
     linkHome: 'Home',
     linkRequirements: 'Mga Kailangan sa Pag-apply',
-    linkNews: 'Balita at mga Anunsyo',
     linkSecurity: 'Seguridad at Anti-Scam',
     linkContact: 'Makipag-ugnayan sa Amin',
     backToHome: 'Bumalik sa home',
@@ -1522,6 +1604,21 @@ export const fil: Translations = {
     saved: 'Na-update ang profile.',
     save: 'I-save ang mga Pagbabago',
     saving: 'Sine-save…',
+  },
+  portalOnboarding: {
+    eyebrow: 'Huling hakbang',
+    title: 'Kumpletuhin ang iyong profile',
+    subtitle: 'Ilang detalye lang bago tayo magpatuloy - isang minuto lang ito.',
+    requiredBadge: 'Kailangan',
+    optionalToggle: 'Magdagdag pa ng detalye (optional)',
+    photoTitle: 'Profile photo',
+    photoHintAvailable: 'Optional lang, pero pinahahalagahan ito ng mga loan officer.',
+    photoHintUnavailable: 'Puwede kang magdagdag ng profile photo kapag nag-apply ka na ng loan.',
+    validationError: 'Pakikumpleto ang mga kailangang field na naka-highlight sa ibaba.',
+    genericSaveError: 'May naganap na error sa pag-save ng profile. Pakisubukan muli.',
+    saveAndContinue: 'I-save at Magpatuloy',
+    saving: 'Sine-save…',
+    required: 'Kailangan',
   },
   dashboardCards: {
     twoFactorNudge: {

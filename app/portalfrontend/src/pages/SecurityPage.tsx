@@ -7,7 +7,6 @@ import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
 import { Dialog } from '@/components/ui/Dialog';
-import { PortalHeader } from '@/components/PortalHeader';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -402,14 +401,11 @@ export function SecurityForm() {
 export function SecurityPage() {
   const { t } = useLanguage();
   return (
-    <div className="min-h-screen bg-secondary/30">
-      <PortalHeader />
-      <main className="container max-w-2xl py-10">
-        <h1 className="text-2xl font-bold tracking-tight">{t.security.pageTitle}</h1>
-        <div className="mt-8">
-          <SecurityForm />
-        </div>
-      </main>
-    </div>
+    <main className="container max-w-2xl py-10">
+      <h1 className="text-2xl font-bold tracking-tight">{t.security.pageTitle}</h1>
+      <div className="mt-8">
+        <SecurityForm />
+      </div>
+    </main>
   );
 }

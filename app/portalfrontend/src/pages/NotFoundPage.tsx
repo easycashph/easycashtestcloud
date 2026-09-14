@@ -21,7 +21,6 @@ export function NotFoundPage() {
   const suggestedLinks = [
     { to: '/', label: t.notFound.linkHome },
     { to: '/requirements', label: t.notFound.linkRequirements },
-    { to: '/news', label: t.notFound.linkNews },
     { to: '/security-tips', label: t.notFound.linkSecurity },
     { to: '/contact', label: t.notFound.linkContact },
   ];
