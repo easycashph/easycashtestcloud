@@ -1,4 +1,4 @@
-# Session Log — 2026-09-14 — Docker/WSL2 Outage Recovery + Bulk Export Race Condition
+# Session Log — 2026-09-14 — Docker/WSL2 Outage Recovery + Bulk Export Race Condition + Agency Dropdown
 
 **Machine:** Office Server PC
 **Requested by:** Nomer Perez
@@ -109,15 +109,86 @@ a manual copy of `interest_rate_chart`'s 3.0%-add-on rows as of 2026-09-14 - if 
 changes later, this snapshot needs a manual re-sync (no automatic link). Term coverage is 1-12
 months; a requested term outside that range throws rather than silently extrapolating.
 
+## Feature: DMW-licensed recruitment agency dropdown for Seafarer Loan applications
+
+User asked what could turn the Loan Application Detail page's free-text "Agency name" field
+(Seafarer Loan's "Agency / contract / allotment verification" section, editable only while the
+application is `UNDER_REVIEW`) into a dropdown sourced from the Department of Migrant Workers
+(DMW)'s own licensed-recruitment-agency directory - staff currently type this by hand with no way
+to cross-check spelling or license status against DMW's records.
+
+**Checked for an API first** - none exists. WebSearch/WebFetch found no public DMW API; live
+browser inspection of `https://dmw.gov.ph/licensed-recruitment-agencies` (a Nuxt SPA) showed every
+network request was a static build asset, no XHR/fetch backing the table - the entire ~3,794-row
+dataset is server-rendered and paginated client-side (50/page, 76 pages) with nothing to call
+directly.
+
+**Page-size and filter workarounds both failed, on DMW's own site, not on our end**:
+- No page-size control exists (no `<select>` element; forcing `?perPage=500` via URL broke the
+  SPA's client routing).
+- The site's own "Active License" status filter returned "No matching agencies found" despite
+  1,103+ agencies literally carrying the status text "Valid License" in the underlying data - a
+  genuine bug on DMW's side, verified directly, not something fixable from our side.
+
+Given both, user chose: download all 76 pages and filter after import ourselves rather than rely
+on DMW's broken filter.
+
+**Extraction technique** (browser automation, no manual per-page clicking): a single async
+JavaScript snippet run via the browser tool's JS-exec action looped all 76 pages - clicking the
+"Next Page" button and waiting ~450ms between clicks - collecting each page's rows into a
+persistent global array (survives the SPA's client-side navigation, since no full reload occurs
+between pages). Captured all 3,794 rows in one run. The "Download CSV" button itself was unusable
+here (client-side blob generation, no request to capture, and downloads are blocked in the
+sandboxed browser anyway).
+
+**What shipped**:
+- New `LicensedRecruitmentAgency` Prisma model/table (`name`, `address`, `contactName`, `phone`,
+  `licenseNumber`, `status`, indexed on `name` and `status`) - migration hand-written (not
+  `prisma migrate dev`, which hangs on this machine's shadow DB - established pattern), applied via
+  `prisma migrate deploy`.
+- One-time idempotent import script (`scripts/scratch-import-dmw-agencies.ts`), imported all 3,794
+  rows from the captured JSON snapshot (`scripts/data/dmw-licensed-agencies-2026-09-14.json`),
+  verified via row count.
+- Read-only backend search module (`src/modules/licensed-recruitment-agency/`, Clean Architecture:
+  port → use case → Prisma repo → controller → router), `GET /api/v1/licensed-recruitment-agencies?q=`,
+  case-insensitive substring match, requires 2+ characters, capped at 20 results, open to any
+  authenticated role (every role may need to verify an agency, not just underwriters).
+- Frontend `AgencyNameCombobox` (modeled on `GlobalSearch.tsx`'s existing hand-rolled dropdown
+  pattern - no Radix Popover in this codebase) - debounced search, shows each match's address and a
+  status badge (green for the 4 "currently valid" status strings, red for everything else - DMW's
+  vocabulary has 18 distinct status values, not a fixed enum). **Deliberately still a free-text
+  input** - selecting a suggestion just fills in the exact DMW-recorded name; an agency newly
+  licensed after this snapshot, or missing for any other reason, never blocks staff from recording
+  what's actually on the applicant's documents.
+- Wired into `LoanApplicationDetailPage.tsx`'s existing `AGENCY_CORE_FIELDS` loop, replacing the
+  plain `<Input>` only for the `agencyName` field.
+
+Both backend and frontend type-checked clean (`tsc -b`, zero errors). Commits `725762cf` (feature)
+and `6295b728` (build-info stamp).
+
+**Known limitation, matching the PMT snapshot above**: this is a point-in-time capture
+(2026-09-14) of DMW's directory, not a live sync - an agency's status can change on DMW's site
+without this table updating. No refresh mechanism built yet; re-running the same
+browser-automation capture + `scratch-import-dmw-agencies.ts --apply` is the manual path if a
+refresh is ever needed.
+
 ## Current state
 
-- Both incidents resolved: live site reachable, tunnel healthy, `easycashbackend` rebuilt with the
-  race-condition fix and redeployed.
+- All three incidents/features resolved and deployed: live site reachable, tunnel healthy,
+  `easycashbackend` rebuilt with the export race-condition fix, the real-PMT DTI formula, and the
+  agency dropdown feature; `lmsfrontend` rebuilt with the agency dropdown UI. Both containers
+  recreated and verified healthy (`docker ps` uptime reset, `/health` OK, `build-info.json` inside
+  the running backend container confirmed stamped `725762cf`).
 - The previously-stuck database dump job is now correctly `COMPLETED` and downloadable.
 - Pulled two doc-only commits from Macbook Nomer during this session (merge commit `9987852a`) -
   no source code came in, confirmed via `git diff --stat` scoped to the three `src/` trees before
-  skipping a redundant rebuild.
+  skipping a redundant rebuild. Later in the session, also pulled a portal-frontend redesign batch
+  from another machine (`de92a415`) before pushing the agency feature - unrelated files, no
+  conflict.
 - Not otherwise investigated: whether the SAME race condition exists in `runAttachmentExport`'s
   progress-saving loop. That loop's saves are `await`ed directly inside the `for` loop (not
   fire-and-forget), so it's structurally different and likely not affected - but wasn't explicitly
   re-verified this session.
+- **Not yet tested end-to-end in the live UI** (cannot log in / cannot test authenticated flows
+  myself) - user still needs to try the new Agency name combobox on a Seafarer Loan application
+  under review to confirm it looks/behaves as expected in production.
