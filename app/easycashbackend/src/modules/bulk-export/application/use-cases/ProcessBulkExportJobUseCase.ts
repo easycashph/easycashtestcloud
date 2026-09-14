@@ -266,6 +266,23 @@ export class ProcessBulkExportJobUseCase {
     let stderrOutput = '';
     let processedTables = 0;
     let lastReportedPercent = -1;
+    // 2026-09-14 (bug fix - confirmed live: a completed dump's DB row was found stuck reading
+    // PROCESSING at 63/76 even though the actual .dump file inside the zip was complete and valid
+    // per `pg_restore --list`, and its "Export ready" notification HAD fired): the old code fired
+    // each progress `save()` with `void ... .catch(...)`, never awaited and with no ordering
+    // guarantee - a progress save queued just before the dump finished could still be in flight
+    // when `markCompleted()` + its own `save()` below landed, and if that stale write's round-trip
+    // resolved AFTER the completion write's, it silently overwrote status back to PROCESSING with
+    // stale progress numbers. `progressSaveChain` serializes every save (progress or final) onto
+    // one promise chain so writes are guaranteed to land in the order they were initiated -
+    // whichever save is initiated LAST (always the completion save, since it only runs once the
+    // process has fully closed and every stderr 'data' event has already been handled) is
+    // guaranteed to be the one that lands last in Postgres.
+    let progressSaveChain: Promise<void> = Promise.resolve();
+    const enqueueSave = (): void => {
+      progressSaveChain = progressSaveChain.then(() => this.deps.bulkExportJobRepository.save(job));
+      progressSaveChain.catch((err) => logger.warn({ jobId: job.id, err }, '[ProcessBulkExportJobUseCase] failed to persist dump progress'));
+    };
     pgDump.stderr.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
       stderrOutput += text;
@@ -277,9 +294,7 @@ export class ProcessBulkExportJobUseCase {
       if (percent === lastReportedPercent) return;
       lastReportedPercent = percent;
       job.updateProgress(processedTables);
-      void this.deps.bulkExportJobRepository
-        .save(job)
-        .catch((err) => logger.warn({ jobId: job.id, err }, '[ProcessBulkExportJobUseCase] failed to persist dump progress'));
+      enqueueSave();
     });
     // Same unhandled-'error'-event crash risk as a missing attachment file (see
     // runAttachmentExport's own doc comment) - attach a listener before archiver reads from it, so
@@ -315,7 +330,11 @@ export class ProcessBulkExportJobUseCase {
     }
 
     job.markCompleted({ resultStorageKey, resultFileSize: archive.pointer(), fileCount: 1 });
-    await this.deps.bulkExportJobRepository.save(job);
+    // Enqueued onto the same chain as every progress save above (not called directly) so it's
+    // guaranteed to execute - and therefore land in Postgres - after every progress save already
+    // queued, no matter how their DB round-trips happen to resolve relative to each other.
+    progressSaveChain = progressSaveChain.then(() => this.deps.bulkExportJobRepository.save(job));
+    await progressSaveChain;
 
     return { recordCount: 1, fileCount: 1 };
   }
