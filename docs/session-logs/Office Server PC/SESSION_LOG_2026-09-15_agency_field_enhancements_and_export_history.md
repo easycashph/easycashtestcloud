@@ -1,4 +1,4 @@
-# Session Log — 2026-09-15 — Agency Field Enhancements + Export History Requester
+# Session Log — 2026-09-15 — Agency Field Enhancements + Export History Requester + Negative Areas
 
 **Machine:** Office Server PC
 **Requested by:** Nomer Perez
@@ -97,13 +97,76 @@ One container-recreate cycle also briefly showed an empty `docker logs` output a
 still warming up, not a repeat of the [[project_stale_docker_wsl_port_forward]] issue - only one
 listener was ever on port 4000 this time, confirmed via `netstat`).
 
+## Negative Areas: MIS-configurable high-risk address list feeding pre-qualification
+
+User provided an internal reference spreadsheet (`Negative areas.xlsx`, read via `exceljs` since
+the Read tool can't open binary files directly) listing 55 high-risk addresses across 12 cities/
+provinces (BULACAN, CALOOCAN, MAKATI, MANDALUYONG, MANILA, PARAÑAQUE, PASAY, PASIG, QUEZON CITY,
+TAGUIG, VALENZUELA, MALABON), and asked whether a Loan Application whose address falls in this
+list could be counted toward PREDECLINED automatically.
+
+Confirmed two design decisions with the user before building (AskUserQuestion):
+1. **Storage**: a real DB table with an admin management screen (not hardcoded in code, unlike the
+   earlier Position/Bank reference lists - the user separately confirmed "gawin nating
+   configurable" mid-build) - the list needs to stay editable by MIS without a redeploy, since
+   negative areas are exactly the kind of thing that changes over time.
+2. **Effect**: advisory only, same posture as the existing three pre-qualification checks (Age,
+   Income vs. Loan Amount, Employment) - a match contributes to PREDECLINED, never an autonomous
+   decline. Staff still review every application.
+
+**Matching approach**: case-insensitive substring match of the applicant's raw address text
+against each negative area's name - deliberately NOT geocoding. `LoanApplicationPreQualification
+Service`'s own `employment` check doc comment already documents why the previous `distance`
+(geocoding-based) check was removed on 2026-09-09 - free Nominatim geocoding almost never resolves
+informal Philippine barangay addresses, so it was "always passing, never informative." Reusing that
+lesson here rather than repeating the mistake.
+
+**Implementation**:
+- New `NegativeArea` table (`city`, `areaName`, unique on the pair) - hand-written migration
+  (shadow-DB pattern), `scripts/scratch-import-negative-areas.ts` transcribes the 55 rows directly
+  from the spreadsheet (idempotent upsert, dry-run by default, `--apply` to write) - 55 imported,
+  verified against the source file row-by-row.
+- New `negative_area.manage` permission (MIS-only by default, same posture as
+  `document_template.manage`) gating a new `src/modules/negative-area/` module: list/create/delete,
+  read-only pattern lifted from `interest-rate-chart`, mutable-admin pattern lifted from
+  `document-templates`.
+- `LoanApplicationPreQualificationService.evaluateCriteria()` gained a 4th check (`negativeArea`) -
+  **N+1 avoidance was the main design constraint**: `evaluateCriteria` is called once per
+  application on every list-view read (`LoanApplicationController.presentMany`, looped per row),
+  so the negative-area list is now fetched ONCE per HTTP request by the controller (`present`/
+  `presentMany`) and passed down as a plain array, not queried from inside `evaluateCriteria`
+  itself (which stays synchronous/pure, same as before). All 6 other callers of
+  `preQualificationService.classify()` (Create/Update/UpdateSelfService/UpdateIntake/Revert/
+  RecheckDocumentCompleteness use cases) were updated the same way - fetch once, pass through.
+- New Settings > System > "Negative Areas" tab (`negative_area.manage`-gated) - add/list-by-city/
+  delete, mirrors `BulkExportsPage`'s card+table shape rather than `DocumentTemplatesTab`'s more
+  complex draft-state pattern (not needed here - no toggle/mapping state, just rows).
+- Verified the matching logic directly (a standalone Node script exercising `evaluateCriteria`
+  before deploying): case-insensitive match found, no false positive on an unrelated address, "no
+  address on record" correctly does NOT fail the check (distinct from a genuine non-match), and
+  overall `status` correctly flips to PREDECLINED when a check fails.
+
+Commits: `0a39413b` (feature), `d961ce5d` (build-info).
+
+## Docker build hiccup, again — buildkit crash on the very next rebuild
+
+Immediately after the Export History deploy's builds succeeded, kicking off the Negative Areas
+feature's build hit the SAME `frontend grpc server closed unexpectedly` crash from earlier this
+session - not a one-off. Applied the same fix (`docker buildx stop desktop-linux && docker buildx
+use desktop-linux`) proactively this time before the first build attempt, and both backend and
+frontend builds succeeded cleanly afterward. Worth noting this crash can recur within the same
+session, not just as an isolated incident.
+
 ## Current state
 
-- All four feature changes deployed and verified: `/health` OK, both containers' `build-info.json`
-  confirmed stamped at the final commit (`3a1b29d2` app code, `19e15a4b` build-info-only follow-up).
-- Commits, in order: `309604a1` (agency address/contact auto-fill in two parts - address then
-  contact), `c3999bc1` (Position dropdown), `e19a0890` (Bank dropdown), `3a1b29d2` (Export History
-  requester), `19e15a4b` (build-info).
+- All five feature changes deployed and verified this session: `/health` OK, both containers'
+  `build-info.json` confirmed stamped at each feature's final commit, the Negative Areas endpoint
+  confirmed wired (401 Unauthorized without a token, not 404).
+- Commits, in order: `309604a1` (agency address/contact auto-fill), `c3999bc1` (Position dropdown),
+  `e19a0890` (Bank dropdown), `3a1b29d2` + `19e15a4b` (Export History requester), `0a39413b` +
+  `d961ce5d` (Negative Areas).
 - Not yet tested end-to-end in the live UI by me (cannot log in) - user still needs to confirm all
-  four changes look/behave as expected in production, especially the Export History page now
-  showing other users' exports.
+  five changes look/behave as expected in production: the three dropdowns, Export History now
+  showing other users' exports, and the new Negative Areas tab (add/remove an area, then confirm a
+  test Loan Application with a matching address shows the new "Negative Area" row in Decision
+  Scoring and lands PREDECLINED).
