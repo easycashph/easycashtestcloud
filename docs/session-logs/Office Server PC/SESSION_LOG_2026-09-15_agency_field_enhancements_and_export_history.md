@@ -187,17 +187,60 @@ type-checked clean and deployed on that basis, same as every other frontend chan
 
 Commits: `b5c6b539` (feature), `acea03d8` (build-info).
 
+## Reforma, Ricky [20100283]: manual attachment import + rename
+
+Not a scan/matcher case - user directly located and provided a local folder
+(`E:\201_Files\2011\08 AUGUST 2011\A-0244-SL REFORMA, RICKY`) for a borrower the 2026-08-13 missing-
+attachments report had listed as "no local match found" (the automated matcher's folder-depth limit
+missed it). Asked to rename the files to "a file naming convention" - none existed in the codebase
+(`import-attachments-from-local-archive.ts` keeps scanner-generated names verbatim), so before
+guessing, checked the DB and found a real ambiguity worth surfacing: two physical loan-cycle
+folders on disk (original + a "(2ND)" renewal subfolder, 11 + 15 scanned images) but only ONE
+LoanAccount for this borrower in the LMS (`20100283`, ACTIVE_IN_ARREARS). Asked the user which cycle
+the LMS account corresponds to and what naming pattern they wanted; user said "tuloy mo na" (use
+your judgment) - proceeded with the safe default (attach both cycles to the one existing account,
+nothing dropped) and a self-documenting naming pattern: `REFORMA_RICKY_20100283_{1ST|2ND}_##.jpg`.
+
+Wrote a one-off idempotent script (`scratch-import-reforma-ricky-attachments.ts`, same
+`legacyId = local-archive:<path>` upsert-safety convention as the general import script), dry-run
+verified, then applied - 26 files imported, both DB rows and on-disk files confirmed, and confirmed
+visible from inside the running backend container (same storage volume). No code/deploy involved -
+pure data operation.
+
+## Member edit: added Contact Number
+
+User asked why Contact Number wasn't in the admin "Edit Member" dialog (only visible in the
+read-only "View" panel). Traced it to an intentional-but-incomplete split: `PATCH /users/:id`
+(MIS editing another member, `UpdateUserUseCase`) only ever covered account-control fields (name,
+email, role, branch, status, password), while `contactNumber`/`address`/`birthday` were scoped to
+self-service-only (`PATCH /users/me`, `UpdateOwnProfileUseCase`) - by design, per that use case's
+own doc comment, for fields like email/role/status (escalation risk), but contactNumber had simply
+never been added to the admin path at all, seemingly an oversight rather than a deliberate
+exclusion for that specific field (nothing sensitive about MIS setting a colleague's phone number).
+
+User asked to add it as editable. Turned out to be a small, low-risk change - `UpdateUserUseCase`
+and `IUserRepository.UpdateUserInput` already accepted `contactNumber` (only the API-layer zod
+schema, `updateUserSchema`, was missing it), and `UserPresenter` already returned it. Added the
+zod field, the frontend `MemberDraft`/`MemberForm` input, prefill on opening Edit, and the PATCH
+payload. Commit `53311710`.
+
 ## Current state
 
-- All six feature/design changes deployed and verified this session: `/health` OK, both
-  containers' `build-info.json` confirmed stamped at each change's final commit, the Negative Areas
-  endpoint confirmed wired (401 Unauthorized without a token, not 404), the redesigned System page
-  confirmed serving (HTTP 200).
+- All seven feature/design changes plus the manual attachment import deployed and verified this
+  session: `/health` OK, both containers' `build-info.json` confirmed stamped at each change's
+  final commit, the Negative Areas endpoint confirmed wired (401 Unauthorized without a token, not
+  404), the redesigned System page confirmed serving (HTTP 200), Ricky Reforma's 26 imported
+  attachments confirmed in the DB, on disk, and visible to the running container.
 - Commits, in order: `309604a1` (agency address/contact auto-fill), `c3999bc1` (Position dropdown),
   `e19a0890` (Bank dropdown), `3a1b29d2` + `19e15a4b` (Export History requester), `0a39413b` +
-  `d961ce5d` (Negative Areas), `b5c6b539` + `acea03d8` (System nav redesign).
+  `d961ce5d` (Negative Areas), `b5c6b539` + `acea03d8` (System nav redesign), `53311710` +
+  `83816b0d` (member Contact Number editable + Reforma import script).
+- Noted twice this session: a container recreate can have a noticeably slow cold start (backend
+  took ~25-30s to bind port 4000 on one recreate, well past the few-second delay seen on every
+  other recreate today) - not the [[project_stale_docker_wsl_port_forward]] pattern (no duplicate
+  listener, and the in-container port genuinely wasn't bound yet, not just unreachable from the
+  host) and resolved on its own without intervention. Worth a longer wait before assuming something
+  is actually wrong on a slow-to-heal recreate.
 - Not yet tested end-to-end in the live UI by me (cannot log in) - user still needs to confirm all
-  six changes look/behave as expected in production: the three dropdowns, Export History now
-  showing other users' exports, the Negative Areas tab (add/remove an area, then confirm a test
-  Loan Application with a matching address shows the new "Negative Area" row in Decision Scoring
-  and lands PREDECLINED), and the new grouped left-rail Settings nav (including the search filter).
+  seven changes look/behave as expected in production, including the new editable Contact Number
+  field in Edit Member.
