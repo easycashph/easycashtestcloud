@@ -26,6 +26,11 @@ export const updateUserSchema = z.object({
   roleClassId: z.string().uuid().nullable().optional(),
   email: z.string().email().optional(),
   password: z.string().min(1).optional(),
+  // 2026-09-15 (user request): MIS may now set/update a member's contact number from the admin
+  // Edit Member dialog, not just the member themselves via self-service (PATCH /users/me) -
+  // UpdateUserUseCase/IUserRepository already accepted this field, only the API-layer schema
+  // rejected it.
+  contactNumber: z.string().min(1).nullable().optional(),
 });
 
 export type UpdateUserRequestBody = z.infer<typeof updateUserSchema>;

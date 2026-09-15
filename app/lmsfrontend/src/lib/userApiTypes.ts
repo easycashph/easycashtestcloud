@@ -50,6 +50,9 @@ export interface UpdateUserRequest {
   email?: string;
   /** MIS resetting a member's forgotten password - omit to leave the current password unchanged. */
   password?: string;
+  /** 2026-09-15 (user request): MIS may now set this on another member's behalf, not just the
+   * member themselves via `PATCH /users/me`. */
+  contactNumber?: string | null;
 }
 
 /** Body for `PATCH /users/me` - self-service only, excludes email/status/roles/companyId. */

@@ -55,6 +55,7 @@ function getSortValue(user: User, key: string): string | number | Date | null | 
 interface MemberDraft {
   firstName: string;
   lastName: string;
+  contactNumber: string;
   email: string;
   password: string;
   role: LmsRole;
@@ -67,6 +68,7 @@ function emptyDraft(): MemberDraft {
   return {
     firstName: '',
     lastName: '',
+    contactNumber: '',
     email: '',
     password: '',
     role: 'Collection Officer',
@@ -115,6 +117,10 @@ function MemberForm({
       <div className="space-y-1.5">
         <Label>Last Name</Label>
         <Input value={value.lastName} onChange={(e) => onChange({ ...value, lastName: e.target.value })} />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Contact Number</Label>
+        <Input value={value.contactNumber} onChange={(e) => onChange({ ...value, contactNumber: e.target.value })} />
       </div>
       <div className="space-y-1.5 sm:col-span-2">
         <div className="flex items-center justify-between">
@@ -612,6 +618,7 @@ export function MemberListPage() {
       return apiClient.patch<User>(`/users/${editingUser.id}`, {
         firstName: editDraft.firstName,
         lastName: editDraft.lastName,
+        contactNumber: editDraft.contactNumber || null,
         status: editDraft.status,
         roleNames: [editDraft.role],
         companyId: editDraft.companyId || undefined,
@@ -645,6 +652,7 @@ export function MemberListPage() {
     setEditDraft({
       firstName: user.firstName,
       lastName: user.lastName,
+      contactNumber: user.contactNumber ?? '',
       email: user.email,
       password: '',
       role: (user.roles[0] as LmsRole) ?? 'Collection Officer',
