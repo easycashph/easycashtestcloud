@@ -1,6 +1,6 @@
 ﻿{
-    "commitDate":  "2026-09-15T08:34:20+08:00",
-    "commitMessage":  "Show who requested each export in Export History",
-    "commit":  "3a1b29d2",
-    "builtAt":  "2026-09-15T00:34:56.1121010Z"
+    "commitDate":  "2026-09-15T09:06:59+08:00",
+    "commitMessage":  "Add MIS-configurable Negative Areas list to Loan Application pre-qualification",
+    "commit":  "0a39413b",
+    "builtAt":  "2026-09-15T01:07:13.2732077Z"
 }
