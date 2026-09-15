@@ -200,6 +200,11 @@ export interface LoanApplicationProps {
    * optional/best-effort). See schema.prisma's doc comment. */
   submissionLatitude?: number;
   submissionLongitude?: number;
+  /** 2026-09-14 (user request: "Geotagging / Location Verification feature") — see
+   * schema.prisma's doc comment on the matching columns. */
+  submissionLocationAccuracyMeters?: number;
+  submissionLocationCapturedAt?: Date;
+  submissionLocationPermissionStatus?: string;
   assignedLoanProductVersionId?: string;
 
   reviewedByUserId?: string;
@@ -286,6 +291,9 @@ export interface CreateLoanApplicationProps {
   distanceFromBranchKm?: number;
   submissionLatitude?: number;
   submissionLongitude?: number;
+  submissionLocationAccuracyMeters?: number;
+  submissionLocationCapturedAt?: Date;
+  submissionLocationPermissionStatus?: string;
   /** Computed by LoanApplicationRiskAssessmentService before construction, same reasoning as
    * `status`/`distanceFromBranchKm` above. */
   dtiPercent?: number;
@@ -371,6 +379,9 @@ export class LoanApplication {
       distanceFromBranchKm: input.distanceFromBranchKm,
       submissionLatitude: input.submissionLatitude,
       submissionLongitude: input.submissionLongitude,
+      submissionLocationAccuracyMeters: input.submissionLocationAccuracyMeters,
+      submissionLocationCapturedAt: input.submissionLocationCapturedAt,
+      submissionLocationPermissionStatus: input.submissionLocationPermissionStatus,
       dtiPercent: input.dtiPercent,
       riskTier: input.riskTier,
       createdAt: now,

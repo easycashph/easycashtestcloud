@@ -59,4 +59,8 @@ export interface CreateLoanApplicationInput {
    * best-effort). See schema.prisma's doc comment on LoanApplication.submissionLatitude. */
   submissionLatitude?: number;
   submissionLongitude?: number;
+  /** 2026-09-14 (user request: "Geotagging / Location Verification feature"). */
+  submissionLocationAccuracyMeters?: number;
+  submissionLocationCapturedAt?: Date;
+  submissionLocationPermissionStatus?: string;
 }

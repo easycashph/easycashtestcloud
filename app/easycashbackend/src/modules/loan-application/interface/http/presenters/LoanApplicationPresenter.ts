@@ -79,12 +79,23 @@ export function presentLoanApplication(application: LoanApplication, breakdown?:
     requestedTermMonths: p.requestedTermMonths,
     submittedDocuments: p.submittedDocuments,
     encodedByUserId: p.encodedByUserId ?? null,
+    // 2026-09-15 (user request: staff "View" access to the client's Portal profile photo) - the
+    // owning PortalAccount's own id, distinct from `borrowerId`/`createdBorrowerId` - lets the LMS
+    // look up the account-level PROFILE_PICTURE attachment (AttachmentOwnerType.PORTAL_ACCOUNT)
+    // that isn't tied to this specific application. `undefined` for a staff-encoded walk-in.
+    portalAccountId: p.portalAccountId ?? null,
     status: p.status,
     distanceFromBranchKm: p.distanceFromBranchKm ?? null,
     dtiPercent: p.dtiPercent ?? null,
     riskTier: p.riskTier ?? null,
     submissionLatitude: p.submissionLatitude ?? null,
     submissionLongitude: p.submissionLongitude ?? null,
+    // 2026-09-14 (user request: "Geotagging / Location Verification feature") - staff/LMS-facing
+    // presenter is the "authorized backend/admin process" the spec permits to see full location
+    // detail, unlike the portal's own presentLocationVerification() which withholds raw lat/long.
+    submissionLocationAccuracyMeters: p.submissionLocationAccuracyMeters ?? null,
+    submissionLocationCapturedAt: p.submissionLocationCapturedAt ?? null,
+    submissionLocationPermissionStatus: p.submissionLocationPermissionStatus ?? null,
     assignedLoanProductVersionId: p.assignedLoanProductVersionId ?? null,
     reviewedByUserId: p.reviewedByUserId ?? null,
     reviewedAt: p.reviewedAt?.toISOString() ?? null,

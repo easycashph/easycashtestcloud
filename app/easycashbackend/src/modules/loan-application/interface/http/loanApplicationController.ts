@@ -24,6 +24,7 @@ import type { DeleteLoanApplicationUseCase } from '../../application/use-cases/D
 import type { GenerateLoanApplicationFormUseCase } from '../../application/use-cases/GenerateLoanApplicationFormUseCase';
 import type { GenerateCrmReportUseCase } from '../../application/use-cases/GenerateCrmReportUseCase';
 import type { GetLoanApplicationRiskSummaryUseCase } from '../../application/use-cases/GetLoanApplicationRiskSummaryUseCase';
+import type { GetLoanApplicationNearestLandmarkUseCase } from '../../application/use-cases/GetLoanApplicationNearestLandmarkUseCase';
 import type { LoanApplicationPreQualificationService } from '../../application/services/LoanApplicationPreQualificationService';
 import type { INegativeAreaRepository, NegativeAreaEntry } from '@modules/negative-area/application/ports/INegativeAreaRepository';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
@@ -119,6 +120,7 @@ export interface LoanApplicationControllerDeps {
   generateLoanApplicationFormUseCase: GenerateLoanApplicationFormUseCase;
   generateCrmReportUseCase: GenerateCrmReportUseCase;
   getLoanApplicationRiskSummaryUseCase: GetLoanApplicationRiskSummaryUseCase;
+  getLoanApplicationNearestLandmarkUseCase: GetLoanApplicationNearestLandmarkUseCase;
   preQualificationService: LoanApplicationPreQualificationService;
   negativeAreaRepository: INegativeAreaRepository;
   borrowerRepository: IBorrowerRepository;
@@ -250,6 +252,21 @@ export class LoanApplicationController {
   /** 2026-09-12 (user request): counts for the list's risk-summary tiles - branch-scoped only,
    * not affected by the list's own search/status/category/date filters (see the use case's own
    * doc comment for why). */
+  /** 2026-09-15 (user request: "nearest landmark" next to the applicant's submission coordinates
+   * on the Applicant Details page) - resolved live on every call, not cached, since it's a display
+   * convenience only (see the use case's own doc comment for why this isn't stored). */
+  getNearestLandmark = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const application = await this.deps.getLoanApplicationUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, application.branchId);
+      const nearestLandmark = await this.deps.getLoanApplicationNearestLandmarkUseCase.execute(req.params.id as string);
+      res.status(200).json({ nearestLandmark });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   riskSummary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);

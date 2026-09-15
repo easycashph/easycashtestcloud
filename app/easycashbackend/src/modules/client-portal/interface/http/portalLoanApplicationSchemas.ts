@@ -59,6 +59,16 @@ export const submitLoanApplicationSchema = z.object({
   // needed for a purely informational signal).
   submissionLatitude: z.coerce.number().min(-90).max(90).optional(),
   submissionLongitude: z.coerce.number().min(-180).max(180).optional(),
+  // 2026-09-14 (user request: "Geotagging / Location Verification feature") - metadata about the
+  // capture attempt above. `submissionLocationPermissionStatus` covers every outcome the browser's
+  // Geolocation API (or the client's own pre-prompt choice) can produce - see
+  // LocationPermissionModal.tsx's own doc comment on the frontend for where each value comes from.
+  // `SKIPPED` is distinct from `DENIED`: it means the applicant chose "Continue Without Location"
+  // on our own pre-prompt modal, so the browser's native permission prompt was never even shown -
+  // `DENIED` is reserved for an actual browser-level denial.
+  submissionLocationAccuracyMeters: z.coerce.number().positive().optional(),
+  submissionLocationCapturedAt: z.coerce.date().optional(),
+  submissionLocationPermissionStatus: z.enum(['GRANTED', 'DENIED', 'UNAVAILABLE', 'TIMEOUT', 'UNSUPPORTED', 'ERROR', 'SKIPPED']).optional(),
 });
 export type SubmitLoanApplicationRequestBody = z.infer<typeof submitLoanApplicationSchema>;
 
@@ -66,11 +76,20 @@ export type SubmitLoanApplicationRequestBody = z.infer<typeof submitLoanApplicat
  * (enforced by LoanApplication.updateSelfServiceIntake's own guard, not this schema). Same field
  * set as submitLoanApplicationSchema, but every field is optional (including requestedCategory/
  * Amount/TermMonths) since this is a partial PATCH against an already-valid record, not a fresh
- * submission. submissionLatitude/Longitude are deliberately EXCLUDED (not just left optional) -
- * that's a one-time-at-submission signal, not something re-editable after the fact; omitting it
- * here means updateSelfServiceIntake() (whose patch type also excludes it) never even sees it,
- * regardless of what a caller sends in the request body. */
-export const updateLoanApplicationSchema = submitLoanApplicationSchema.omit({ submissionLatitude: true, submissionLongitude: true }).partial();
+ * submission. submissionLatitude/Longitude (and, 2026-09-14, the location metadata fields beside
+ * them) are deliberately EXCLUDED (not just left optional) - that's a one-time-at-submission
+ * signal, not something re-editable after the fact; omitting it here means
+ * updateSelfServiceIntake() (whose patch type also excludes it) never even sees it, regardless of
+ * what a caller sends in the request body. */
+export const updateLoanApplicationSchema = submitLoanApplicationSchema
+  .omit({
+    submissionLatitude: true,
+    submissionLongitude: true,
+    submissionLocationAccuracyMeters: true,
+    submissionLocationCapturedAt: true,
+    submissionLocationPermissionStatus: true,
+  })
+  .partial();
 export type UpdateLoanApplicationRequestBody = z.infer<typeof updateLoanApplicationSchema>;
 
 /** Same category enum as document module's AttachmentDocumentCategory. PROFILE_PICTURE added

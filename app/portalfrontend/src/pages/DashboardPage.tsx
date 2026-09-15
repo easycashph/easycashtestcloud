@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { motion, type Variants } from 'framer-motion';
-import { FileText } from 'lucide-react';
+import { FileText, LayoutGrid, ShieldCheck, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -17,7 +17,7 @@ import { PortalLoanOfficerCard } from '@/components/PortalLoanOfficerCard';
 import { PortalTwoFactorNudgeCard } from '@/components/PortalTwoFactorNudgeCard';
 import { useAuth } from '@/lib/authContext';
 import { usePortalDialogs } from '@/lib/portalDialogContext';
-import { apiClient } from '@/lib/apiClient';
+import { apiClient, fetchFileBlob } from '@/lib/apiClient';
 import { DISBURSEMENT_METHOD } from '@/lib/companyInfo';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { PortalLoanApplicationDetail, PortalLoanApplicationSummary, PortalLoanApplicationTimelineEntry } from '@/lib/portalApiTypes';
@@ -112,19 +112,36 @@ export function DashboardPage() {
   const { account } = useAuth();
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const { openApplicationDialog } = usePortalDialogs();
+  const { openApplicationDialog, openSecurityDialog } = usePortalDialogs();
   const [applications, setApplications] = React.useState<PortalLoanApplicationSummary[] | null>(null);
   const [viewingApplicationId, setViewingApplicationId] = React.useState<string | null>(null);
   const [viewingDetail, setViewingDetail] = React.useState<PortalLoanApplicationDetail | null>(null);
   const [viewingTimeline, setViewingTimeline] = React.useState<PortalLoanApplicationTimelineEntry[] | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = React.useState(false);
   const [detailError, setDetailError] = React.useState<string | null>(null);
+  // Hero avatar (2026-09-14 dashboard polish, user request: "improve design of the client
+  // dashboard") - the same account-level photo `PortalProfilePhoto`/the onboarding gate manage,
+  // shown read-only here since it's now a required part of every complete profile.
+  const [heroPhotoUrl, setHeroPhotoUrl] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     apiClient
       .get<PortalLoanApplicationSummary[]>('/portal/loan-applications')
       .then(setApplications)
       .catch(() => setApplications([]));
+  }, []);
+
+  React.useEffect(() => {
+    let objectUrl: string | null = null;
+    fetchFileBlob('/portal/profile/photo')
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        setHeroPhotoUrl(objectUrl);
+      })
+      .catch(() => {});
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
   }, []);
 
   const hasPendingApplication = (applications ?? []).some((application) => application.status !== 'DECLINED');
@@ -164,12 +181,21 @@ export function DashboardPage() {
             className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand-green/30 blur-3xl"
           />
           <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/70">{t.dashboard.subtitle}</p>
-              <h1 className="mt-1.5 text-2xl font-bold tracking-tight sm:text-3xl">
-                {t.dashboard.welcomeBack}
-                {firstName ? `, ${firstName}` : ''}
-              </h1>
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/30 bg-white/10 text-base font-semibold text-white sm:h-16 sm:w-16">
+                {heroPhotoUrl ? (
+                  <img src={heroPhotoUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <UserRound className="h-7 w-7 text-white/70" />
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-white/70">{t.dashboard.subtitle}</p>
+                <h1 className="mt-1.5 text-2xl font-bold tracking-tight sm:text-3xl">
+                  {t.dashboard.welcomeBack}
+                  {firstName ? `, ${firstName}` : ''}
+                </h1>
+              </div>
             </div>
             <Button
               className="bg-white text-primary shadow-md hover:bg-white/90 hover:brightness-100 sm:shrink-0"
@@ -180,6 +206,32 @@ export function DashboardPage() {
               <FileText className="h-4 w-4" /> {t.dashboard.createApplication}
             </Button>
           </div>
+
+          {/* Quick actions (2026-09-14 dashboard polish) - one-tap access to the pages/dialogs a
+              client reaches for most often, so they don't have to hunt the nav for them. */}
+          <div className="relative mt-6 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/profile')}
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/20"
+            >
+              <UserRound className="h-3.5 w-3.5" /> {t.portalHeader.myProfile}
+            </button>
+            <button
+              type="button"
+              onClick={openSecurityDialog}
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/20"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" /> {t.portalHeader.security}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/products')}
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/20"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" /> {t.loanProductsPage.title}
+            </button>
+          </div>
         </div>
       </motion.div>
 
@@ -189,8 +241,10 @@ export function DashboardPage() {
           manages its own conditional rendering (returns null when it has nothing to show), and
           CSS grid simply reflows around whichever ones are actually present. The two list/table
           widgets below (My Loans, Recent Payments) stay full-width - they hold multi-column rows
-          and per-row action buttons that would cramp badly at half width. */}
-        <div className="grid gap-5 sm:grid-cols-2">
+          and per-row action buttons that would cramp badly at half width.
+          2026-09-14 (dashboard polish): the `[&>*]:...` wrapper adds a shared subtle hover-lift to
+          whichever of these cards actually render, without needing to touch each one's own file. */}
+        <div className="grid gap-5 sm:grid-cols-2 [&>*]:transition-all [&>*]:duration-200 [&>*]:hover:-translate-y-0.5 [&>*]:hover:shadow-md">
           <PortalSignDocumentsCard />
           <PortalTwoFactorNudgeCard />
           <PortalNextPaymentDueCard />
@@ -269,7 +323,14 @@ export function DashboardPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    {EDITABLE_STATUSES.has(application.status) && (
+                    {/* 2026-09-14 (bug fix - user report: "This doesn't have any continue with my
+                        application button") - an INCOMPLETE application (missing documents) was
+                        previously a dead end: it's not in EDITABLE_STATUSES (form fields are
+                        locked once submitted), and the only place to upload documents was the
+                        one-time post-submit screen, never reachable again afterward. Reuses the
+                        same "application" dialog - LoanApplicationFormPage now recognizes
+                        INCOMPLETE and renders a documents-only view instead of the full form. */}
+                    {(EDITABLE_STATUSES.has(application.status) || application.status === 'INCOMPLETE') && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -278,7 +339,7 @@ export function DashboardPage() {
                           openApplicationDialog(application.id);
                         }}
                       >
-                        {t.dashboard.edit}
+                        {application.status === 'INCOMPLETE' ? t.dashboard.continueApplication : t.dashboard.edit}
                       </Button>
                     )}
                     <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_TONE[application.status]}`}>

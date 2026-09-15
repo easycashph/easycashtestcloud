@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/Select';
 import { Alert } from '@/components/ui/Alert';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
+import { PortalProfilePhoto } from '@/components/PortalProfilePhoto';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -160,6 +161,18 @@ export function ProfileForm() {
     setSaveState('saving');
     setSaveError('');
     try {
+      // 2026-09-14 (bug fix - user report: "the first name, middle name, last name doesn't save,
+      // i need to reenter it for it to be saved") - the backend's optional address subfields are
+      // `z.string().min(1).optional()`; they must be omitted entirely when blank, not sent as `''`
+      // (which fails `.min(1)`). `PortalAddressPicker` always returns every key, so an untouched
+      // optional subfield here is `''`, not `undefined`. Without this sanitization (already
+      // applied in PortalProfileSetupGate.tsx, just missed here), a partially-filled address made
+      // the WHOLE PATCH 400 - silently dropping every other field in the same request, including
+      // name, even though those fields were themselves valid.
+      const sanitizedAddress = Object.fromEntries(
+        Object.entries(addressDraft).map(([key, value]) => [key, value.trim() ? value.trim() : undefined]),
+      ) as AddressDraft;
+
       const body: UpdatePortalProfileRequest = {
         firstName: !isLinked ? firstName.trim() || undefined : undefined,
         middleName: !isLinked ? middleName.trim() || undefined : undefined,
@@ -187,7 +200,7 @@ export function ProfileForm() {
         reference1Mobile: reference1Mobile.trim() || undefined,
         reference2Name: reference2Name.trim() || undefined,
         reference2Mobile: reference2Mobile.trim() || undefined,
-        addresses: Object.values(addressDraft).some((v) => v.trim()) ? [addressDraft] : undefined,
+        addresses: Object.values(addressDraft).some((v) => v.trim()) ? [sanitizedAddress] : undefined,
       };
       await apiClient.patch<PortalProfile>('/portal/profile', body, true);
       setSaveState('saved');
@@ -216,6 +229,16 @@ export function ProfileForm() {
                 <p className="text-sm text-muted-foreground">{t.profile.unlinkedNote}</p>
               </Card>
             )}
+
+            {/* 2026-09-14 (user request: "make profile picture mandatory" / "profile photo should
+                be displayed prominently") - same account-level upload the first-login onboarding
+                gate uses (size="md" there), just larger here since this is its dedicated home. */}
+            <Card className="p-6">
+              <h2 className="text-sm font-semibold">{t.portalOnboarding.photoTitle}</h2>
+              <div className="mt-4">
+                <PortalProfilePhoto size="lg" initials={[firstName?.[0], lastName?.[0]].filter(Boolean).join('').toUpperCase()} />
+              </div>
+            </Card>
 
             <Card className="p-6">
               <h2 className="text-sm font-semibold">{t.profile.personalInfo.title}</h2>
@@ -418,11 +441,19 @@ export function ProfileForm() {
 
 /** Full-page route wrapper (direct-link/bookmark entry point) - the everyday in-app flow now opens
  * `ProfileForm` inside a Dialog instead (see PortalDialogHost). */
+/** 2026-09-14 (client portal UX pass, user request: "polished, modern fintech dashboard design
+ * consistent with the EasyCash brand ... Do NOT use a pop-up/modal for My Profile") - the same
+ * navy hero-banner language DashboardPage.tsx introduced, so this dedicated page reads as a real
+ * sibling of Dashboard rather than a plain settings form bolted onto the app. */
 export function ProfilePage() {
   const { t } = useLanguage();
   return (
-    <main className="container max-w-3xl py-10">
-      <h1 className="text-2xl font-bold tracking-tight">{t.profile.pageTitle}</h1>
+    <main className="container max-w-3xl py-8 sm:py-10">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary to-primary/85 p-6 text-white shadow-lg sm:p-8">
+        <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand-green/30 blur-3xl" />
+        <p className="relative text-xs font-semibold uppercase tracking-wider text-white/70">{t.portalHeader.myProfile}</p>
+        <h1 className="relative mt-1.5 text-2xl font-bold tracking-tight sm:text-3xl">{t.profile.pageTitle}</h1>
+      </div>
       <div className="mt-8">
         <ProfileForm />
       </div>

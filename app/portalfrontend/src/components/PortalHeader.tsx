@@ -12,21 +12,28 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
  * stay in one place as more authenticated pages get added. "Loan Products" tab removed 2026-07-27
  * (user request) - the /products page itself still exists, just no longer linked from the nav.
  *
- * 2026-07-31 (user request): "My Profile" and "Security" now open as a Dialog on top of the
- * current page (via PortalDialogHost) instead of navigating to a separate route.
+ * 2026-07-31 (user request): "My Profile" and "Security" opened as a Dialog on top of the current
+ * page (via PortalDialogHost) instead of navigating to a separate route.
  *
  * 2026-09-14 (semi-major portal redesign, user request: "persistent navbar ... must not disappear
  * or shift when navigating between pages"): now rendered exactly once by `PortalAppShell` (the
  * parent route element for every authenticated page), instead of separately by each page - a plain
  * React Router navigation between sibling routes no longer remounts it. Also gained the mobile nav
  * drawer it never had before (the desktop links were simply `hidden` below `sm:`, with nothing to
- * replace them - Dashboard/My Profile/Security were unreachable from a phone). */
+ * replace them - Dashboard/My Profile/Security were unreachable from a phone).
+ *
+ * 2026-09-14 (client portal UX pass, user request: "Do NOT use a pop-up/modal for My Profile...
+ * must be a dedicated page"): "My Profile" reverses the 2026-07-31 dialog decision and links to
+ * the real `/profile` route instead, with its own active-state highlight. Security deliberately
+ * keeps the dialog behavior - it wasn't named in this request and changing it isn't needed to
+ * satisfy "navbar stays visible while navigating" (a dialog never navigates away in the first
+ * place, so the nav was never at risk of disappearing under it). */
 export function PortalHeader() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useLanguage();
-  const { openProfileDialog, openSecurityDialog } = usePortalDialogs();
+  const { openSecurityDialog } = usePortalDialogs();
   const [menuOpen, setMenuOpen] = React.useState(false);
 
   const handleLogout = () => {
@@ -35,6 +42,7 @@ export function PortalHeader() {
   };
 
   const isDashboard = location.pathname === '/dashboard';
+  const isProfile = location.pathname === '/profile';
 
   const navLinkClass = (active: boolean) =>
     `rounded-full px-3.5 py-2 text-sm font-medium transition-colors ${
@@ -53,9 +61,9 @@ export function PortalHeader() {
           <Link to="/dashboard" className={navLinkClass(isDashboard)}>
             {t.portalHeader.dashboard}
           </Link>
-          <button type="button" onClick={openProfileDialog} className={navLinkClass(false)}>
+          <Link to="/profile" className={navLinkClass(isProfile)}>
             {t.portalHeader.myProfile}
-          </button>
+          </Link>
           <button type="button" onClick={openSecurityDialog} className={navLinkClass(false)}>
             {t.portalHeader.security}
           </button>
@@ -99,16 +107,15 @@ export function PortalHeader() {
             >
               <LayoutDashboard className="h-4 w-4" /> {t.portalHeader.dashboard}
             </Link>
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                openProfileDialog();
-              }}
-              className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-foreground hover:bg-secondary"
+            <Link
+              to="/profile"
+              onClick={() => setMenuOpen(false)}
+              className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium ${
+                isProfile ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-secondary'
+              }`}
             >
               <UserRound className="h-4 w-4" /> {t.portalHeader.myProfile}
-            </button>
+            </Link>
             <button
               type="button"
               onClick={() => {

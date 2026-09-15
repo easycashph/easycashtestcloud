@@ -19,6 +19,7 @@ export function createPortalLoanApplicationRouter(deps: PortalLoanApplicationCon
   // Branch list rarely changes - 1h private caching (2026-08-06 performance audit) removes a DB
   // round trip from every loan application form load.
   router.get('/branches', requirePortalAuth, cacheControl(3600, 'private'), controller.listBranches);
+  router.get('/licensed-recruitment-agencies', requirePortalAuth, controller.searchAgencies);
   router.post('/loan-applications', requirePortalAuth, validateBody(submitLoanApplicationSchema), controller.submit);
   router.get('/loan-applications', requirePortalAuth, controller.list);
   router.get('/loan-applications/:id', requirePortalAuth, controller.get);

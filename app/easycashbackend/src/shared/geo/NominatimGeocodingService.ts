@@ -12,6 +12,7 @@ import type { GeocodedCoordinates, IGeocodingService } from './IGeocodingService
  */
 export class NominatimGeocodingService implements IGeocodingService {
   private readonly baseUrl = 'https://nominatim.openstreetmap.org/search';
+  private readonly reverseUrl = 'https://nominatim.openstreetmap.org/reverse';
   private readonly timeoutMs = 8000;
 
   async geocode(addressText: string): Promise<GeocodedCoordinates | null> {
@@ -37,6 +38,31 @@ export class NominatimGeocodingService implements IGeocodingService {
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
 
       return { latitude, longitude };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  /** 2026-09-15 (user request: "nearest landmark" on the Applicant Details page) - Nominatim's own
+   * `display_name` for the point, which reads as a nearby address/area description (road,
+   * neighbourhood, city) rather than a named point-of-interest - the free public instance has no
+   * dedicated landmark/POI-search endpoint, so this is the closest honest equivalent without
+   * introducing a paid Places API. */
+  async reverseGeocode(latitude: number, longitude: number): Promise<string | null> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const url = `${this.reverseUrl}?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=0`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'EasycashLMS/1.0 (loan application applicant details - nearest landmark lookup)' },
+        signal: controller.signal,
+      });
+      if (!res.ok) return null;
+
+      const result = (await res.json()) as { display_name?: string; error?: string };
+      return result.display_name?.trim() || null;
     } catch {
       return null;
     } finally {

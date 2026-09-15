@@ -3,23 +3,21 @@ import { Dialog } from '@/components/ui/Dialog';
 import { usePortalDialogs } from '@/lib/portalDialogContext';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
-const ProfileForm = React.lazy(() => import('@/pages/ProfilePage').then((m) => ({ default: m.ProfileForm })));
 const SecurityForm = React.lazy(() => import('@/pages/SecurityPage').then((m) => ({ default: m.SecurityForm })));
 const LoanApplicationFormPage = React.lazy(() => import('@/pages/LoanApplicationFormPage').then((m) => ({ default: m.LoanApplicationFormPage })));
 
-/** 2026-07-31 (user request): the single place that actually renders the "My Profile"/"Security"/
- * "Edit Loan Application" Dialog - mounted once near the app root (see App.tsx) so it can be
- * opened from anywhere (header nav, Dashboard's per-application Edit button) via
- * `usePortalDialogs()`, regardless of which page is currently showing underneath. */
+/** 2026-07-31 (user request): the single place that actually renders the "Security"/"Edit Loan
+ * Application" Dialog - mounted once near the app root (see App.tsx) so it can be opened from
+ * anywhere via `usePortalDialogs()`, regardless of which page is currently showing underneath.
+ *
+ * 2026-09-14 (user request: "Do NOT use a pop-up/modal for My Profile") - the `profile` dialog
+ * that used to render here is gone; My Profile is the real `/profile` route now. */
 export function PortalDialogHost() {
   const { dialog, closeDialog } = usePortalDialogs();
   const { t } = useLanguage();
 
   return (
     <>
-      <Dialog open={dialog?.type === 'profile'} onClose={closeDialog} title={t.profile.pageTitle}>
-        <React.Suspense fallback={<DialogLoading />}>{dialog?.type === 'profile' && <ProfileForm />}</React.Suspense>
-      </Dialog>
       <Dialog open={dialog?.type === 'security'} onClose={closeDialog} title={t.security.pageTitle}>
         <React.Suspense fallback={<DialogLoading />}>{dialog?.type === 'security' && <SecurityForm />}</React.Suspense>
       </Dialog>

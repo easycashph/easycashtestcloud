@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, MapPin, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -13,6 +13,10 @@ import { apiClient, ApiError } from '@/lib/apiClient';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
 import { DOCUMENT_LABELS, DOCUMENT_SLOTS, type UploadableDocumentCategory } from '@/lib/loanRequirements';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
+import { LocationPermissionModal, type CapturedLocation } from '@/components/LocationPermissionModal';
+import { AgencyNameCombobox } from '@/components/AgencyNameCombobox';
+import { StaticSuggestionsCombobox } from '@/components/StaticSuggestionsCombobox';
+import { SEAFARER_POSITIONS } from '@/lib/seafarerPositions';
 import { NumberInput } from '@/components/NumberInput';
 import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
 import { PhoneInput } from '@/components/PhoneInput';
@@ -20,12 +24,15 @@ import { TermsContent } from '@/pages/TermsPage';
 import { PrivacyContent } from '@/pages/PrivacyPolicyPage';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type {
+  LicensedRecruitmentAgency,
+  LocationPermissionStatus,
   PortalBranch,
   PortalDocumentCategory,
   PortalLoanApplicationDetail,
-  PortalLoanApplicationSummary,
+  PortalLocationVerification,
   PortalProfile,
   SubmitLoanApplicationRequest,
+  SubmitLoanApplicationResponse,
   UpdatePortalProfileRequest,
   UploadedDocument,
 } from '@/lib/portalApiTypes';
@@ -35,6 +42,9 @@ const GENDER_OPTIONS = ['Female', 'Male'];
 const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widower', 'Separated'];
 const HOME_OWNERSHIP_OPTIONS = ['Owned', 'Renting', 'Living with family'];
 const REFERRAL_OPTIONS = ['Walk-in', 'Website', 'Facebook', 'Internet', 'Flyers/Signages/Streamers', 'Agent/Referral', 'Others'];
+/** See the progress-bar JSX's own doc comment - count of this form's actual `required` fields
+ * (branch, loan type, amount, term, first/last name, birth date, agreed-to-terms). */
+const REQUIRED_FIELD_COUNT = 8;
 
 /* DOCUMENT_LABELS and DOCUMENT_SLOTS moved to @/lib/loanRequirements on 2026-07-28 so the public
  * Requirements page reads the same definitions this form does, and the two can never drift. */
@@ -60,10 +70,82 @@ function SectionCard({ number, title, description, children }: { number: string;
   );
 }
 
-function Field({ label, hint, className, children }: { label: string; hint?: string; className?: string; children: React.ReactNode }) {
+/** 2026-09-14 (client portal UX pass, user request: "Clearly distinguish auto-populated fields ...
+ * add a subtle visual feedback such as a 'From My Profile' indicator") - a small pill next to the
+ * label, shown only for fields `applyProfilePrefill` actually filled from a real, already-saved
+ * profile value (tracked in `prefilledFields` state below - never a guess). Stays visible even if
+ * the client edits the value afterward: it's a provenance note ("this started from your saved
+ * profile"), not a live "still matches your profile" indicator. */
+function ProfileSourceBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-brand-green/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-green-foreground">
+      From My Profile
+    </span>
+  );
+}
+
+/** 2026-09-14 (user request: "Geotagging / Location Verification feature") - the compact
+ * post-submission status shown on the success screen. Deliberately never shows the raw
+ * latitude/longitude (the server response never even includes them here - see the backend's
+ * presentLocationVerification()) - just a verified/not-provided badge plus accuracy and capture
+ * time when available, per "do NOT display the user's exact coordinates prominently." */
+function LocationStatusBadge({ verification }: { verification: PortalLocationVerification }) {
+  const { t } = useLanguage();
+  const copy = t.loanApplicationForm.locationVerification;
+
+  if (verification.captured) {
+    return (
+      <div className="mt-4 flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-success">
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+        <div>
+          <p className="font-medium">{copy.verifiedBadge}</p>
+          <p className="text-xs text-success/80">{copy.verifiedDetail}</p>
+          <p className="mt-1 text-xs text-success/80">
+            {verification.accuracyMeters !== null && (
+              <>
+                {copy.accuracyLabel}: {copy.accuracyMeters.replace('{value}', Math.round(verification.accuracyMeters).toString())}
+              </>
+            )}
+            {verification.capturedAt && (
+              <>
+                {verification.accuracyMeters !== null ? ' · ' : ''}
+                {copy.capturedAtLabel}: {new Date(verification.capturedAt).toLocaleString()}
+              </>
+            )}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-secondary/40 p-3 text-sm text-muted-foreground">
+      <MapPin className="h-4 w-4 shrink-0" />
+      <span>{copy.notProvidedBadge}</span>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  className,
+  prefilled,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  className?: string;
+  /** See `ProfileSourceBadge`'s own doc comment. */
+  prefilled?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div className={`space-y-1.5${className ? ` ${className}` : ''}`}>
-      <Label>{label}</Label>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Label>{label}</Label>
+        {prefilled && <ProfileSourceBadge />}
+      </div>
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
@@ -282,15 +364,23 @@ function detailToFormState(detail: PortalLoanApplicationDetail): FormState {
 
 /** 2026-07-31 (user request): prefills a brand-new application from whatever the applicant has
  * already saved on My Profile - only fills fields the form doesn't already have a value for
- * (e.g. from a `?category=` deep link), never overwrites something the applicant already typed. */
-function applyProfilePrefill(prev: FormState, profile: PortalProfile): FormState {
+ * (e.g. from a `?category=` deep link), never overwrites something the applicant already typed.
+ *
+ * 2026-09-14 (client portal UX pass, user request: "Do not create duplicate data unnecessarily...
+ * reuse it in the Loan Application" / "From My Profile indicator") - now also returns which keys
+ * it actually filled, so the form can show `ProfileSourceBadge` next to exactly those fields
+ * instead of guessing from the value alone (a value could just as easily be something the client
+ * typed themselves). */
+function applyProfilePrefill(prev: FormState, profile: PortalProfile): { form: FormState; filledKeys: Set<keyof FormState> } {
   const presentAddress = profile.addresses[0];
   const next = { ...prev };
+  const filledKeys = new Set<keyof FormState>();
   const fillIfEmpty = <K extends keyof FormState>(key: K, value: FormState[K] | null | undefined) => {
     if (value === null || value === undefined || value === '') return;
     const current = next[key];
     if (typeof current === 'string' && current.trim()) return;
     next[key] = value;
+    filledKeys.add(key);
   };
   fillIfEmpty('firstName', profile.firstName);
   fillIfEmpty('middleName', profile.middleName ?? '');
@@ -315,6 +405,7 @@ function applyProfilePrefill(prev: FormState, profile: PortalProfile): FormState
   fillIfEmpty('reference2Mobile', profile.reference2Mobile ?? '');
   if (next.dependants.length === 0 && profile.dependants.length > 0) {
     next.dependants = profile.dependants.map((d) => ({ name: d.name, age: d.age ?? '', relationship: d.relationship ?? '' }));
+    filledKeys.add('dependants');
   }
   if (presentAddress) {
     const hasTypedAddress = Object.values(next.presentAddress).some((v) => v.trim());
@@ -327,9 +418,10 @@ function applyProfilePrefill(prev: FormState, profile: PortalProfile): FormState
         province: presentAddress.province ?? '',
         zipCode: presentAddress.zipCode ?? '',
       };
+      filledKeys.add('presentAddress');
     }
   }
-  return next;
+  return { form: next, filledKeys };
 }
 
 /** 2026-07-31 (user request): the "Other" slot's idle-state hint explains its dual purpose - a
@@ -443,25 +535,6 @@ function computeAge(birthDate: string): number | null {
   return value;
 }
 
-/** 2026-07-24 (user request) — best-effort device GPS capture at submission time via the
- * browser's Geolocation API. Deliberately never blocks/delays submission on a denial, timeout, or
- * unsupported browser - resolves null in every failure case instead of rejecting, so callers can
- * just await it and move on. A short 5s timeout keeps a slow/stuck GPS fix from stalling the whole
- * form; `maximumAge` allows a recently-cached fix instead of always forcing a fresh one. */
-function getBestEffortGeolocation(): Promise<{ latitude: number; longitude: number } | null> {
-  return new Promise((resolve) => {
-    if (!('geolocation' in navigator)) {
-      resolve(null);
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-      () => resolve(null),
-      { timeout: 5000, maximumAge: 60000 },
-    );
-  });
-}
-
 /** Client-facing loan application form (Phase 2, 2026-07-23; expanded to the full field set
  * 2026-07-24) - the same fields the staff-facing form captures (app/frontend's
  * LoanApplicationCreatePage.tsx), following the same section numbering/grouping/order, minus what
@@ -516,13 +589,28 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [showTerms, setShowTerms] = React.useState(false);
   const [showPrivacy, setShowPrivacy] = React.useState(false);
-  const [submitted, setSubmitted] = React.useState<PortalLoanApplicationSummary | null>(null);
+  const [submitted, setSubmitted] = React.useState<SubmitLoanApplicationResponse | null>(null);
   const [uploadState, setUploadState] = React.useState<Partial<Record<PortalDocumentCategory, 'idle' | 'uploading' | 'done' | 'error'>>>({});
   // Edit mode only: null while loading, 'not-editable' once loaded but status has moved past
   // PREAPPROVED/PREDECLINED (mirrors the backend's own updateSelfServiceIntake() guard), 'ready'
   // once the fetched record has been mapped into `form`.
-  const [editState, setEditState] = React.useState<'loading' | 'not-editable' | 'ready' | 'error'>(isEditMode ? 'loading' : 'ready');
+  const [editState, setEditState] = React.useState<'loading' | 'not-editable' | 'documents-only' | 'ready' | 'error'>(isEditMode ? 'loading' : 'ready');
+  // 2026-09-14 (bug fix - user report: "This doesn't have any continue with my application
+  // button") - an INCOMPLETE application's form fields are locked (not in EDITABLE_STATUSES), but
+  // the applicant still needs a way back in to upload the documents that made it INCOMPLETE in
+  // the first place. Holds just enough of the fetched detail to filter DOCUMENT_SLOTS the same
+  // way the fresh-submission screen does, without loading the full form into `form`.
+  const [documentsOnlyMeta, setDocumentsOnlyMeta] = React.useState<{ requestedCategory: string; hasCoBorrower: boolean } | null>(null);
   const [editSaved, setEditSaved] = React.useState(false);
+  // See `ProfileSourceBadge`'s own doc comment - which fields `applyProfilePrefill` actually
+  // filled from a real saved profile value, so the "From My Profile" badge is never a guess.
+  const [prefilledFields, setPrefilledFields] = React.useState<Set<keyof FormState>>(new Set());
+  // 2026-09-14 (user request: "Geotagging / Location Verification feature") - null until the
+  // applicant has reached a decision on the LocationPermissionModal at least once this session;
+  // once set, re-clicking Submit (e.g. after a validation error) reuses it instead of asking
+  // again. `location` carries lat/lng/accuracy only for an actual GRANTED capture.
+  const [locationDecision, setLocationDecision] = React.useState<CapturedLocation | { permissionStatus: LocationPermissionStatus } | null>(null);
+  const [showLocationModal, setShowLocationModal] = React.useState(false);
 
   React.useEffect(() => {
     apiClient
@@ -536,6 +624,11 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
     apiClient
       .get<PortalLoanApplicationDetail>(`/portal/loan-applications/${editId}`)
       .then((detail) => {
+        if (detail.status === 'INCOMPLETE') {
+          setDocumentsOnlyMeta({ requestedCategory: detail.requestedCategory, hasCoBorrower: Boolean(detail.coBorrowerName) });
+          setEditState('documents-only');
+          return;
+        }
         if (!EDITABLE_STATUSES.has(detail.status)) {
           setEditState('not-editable');
           return;
@@ -573,7 +666,13 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
     if (isEditMode) return;
     apiClient
       .get<PortalProfile>('/portal/profile')
-      .then((profile) => setForm((prev) => applyProfilePrefill(prev, profile)))
+      .then((profile) => {
+        setForm((prev) => {
+          const { form: next, filledKeys } = applyProfilePrefill(prev, profile);
+          setPrefilledFields(filledKeys);
+          return next;
+        });
+      })
       .catch(() => {});
   }, [isEditMode]);
 
@@ -581,59 +680,89 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
 
   const age = React.useMemo(() => computeAge(form.birthDate), [form.birthDate]);
 
+  // 2026-09-15 (user request) - Seafarer Loan swaps section 4's generic "Name of employer"/
+  // "Occupation" fields for Agency-name/Position-aware dropdowns; still the same `employer`/
+  // `occupation` values underneath (a seafarer's manning agency IS their employer), so no new
+  // form fields or submission-payload changes are needed, only the input widget shown.
+  const isSeafarerLoan = form.requestedCategory === 'Seafarer Loan';
+
+  // 2026-09-15 (user request: "Office address should autopopulate based on the Agency Name") -
+  // covers every way `employer` can end up holding an agency name for a Seafarer Loan (My Profile
+  // prefill, a bookmarked/edited value, not just a fresh dropdown pick - AgencyNameCombobox's own
+  // onSelectAgency below only fires on an actual click, not a prefill) by re-resolving the office
+  // address from the DMW directory whenever the agency name changes. Debounced against the same
+  // portal search endpoint the combobox itself uses; only overwrites officeAddress on a real
+  // exact-name match, and only for Seafarer Loan - never for a manually-typed, no-match name.
+  React.useEffect(() => {
+    if (!isSeafarerLoan) return;
+    const agencyName = form.employer.trim();
+    if (!agencyName) return;
+    const timer = setTimeout(() => {
+      apiClient
+        .get<{ items: LicensedRecruitmentAgency[] }>(`/portal/licensed-recruitment-agencies?q=${encodeURIComponent(agencyName)}`)
+        .then((data) => {
+          const match = data.items.find((agency) => agency.name.toLowerCase() === agencyName.toLowerCase());
+          if (match?.address) update('officeAddress', match.address);
+        })
+        .catch(() => {});
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [isSeafarerLoan, form.employer]);
+
+  // See the progress-bar JSX's own doc comment - mirrors this form's actual `required` fields.
+  const requiredFieldsFilledCount = React.useMemo(() => {
+    const checks = [
+      Boolean(form.branchId),
+      Boolean(form.requestedCategory),
+      Boolean(form.requestedAmount),
+      Boolean(form.requestedTermMonths),
+      Boolean(form.firstName.trim()),
+      Boolean(form.lastName.trim()),
+      Boolean(form.birthDate),
+      form.agreedToTerms,
+    ];
+    return checks.filter(Boolean).length;
+  }, [form.branchId, form.requestedCategory, form.requestedAmount, form.requestedTermMonths, form.firstName, form.lastName, form.birthDate, form.agreedToTerms]);
+
   const visibleDocumentSlots = React.useMemo(
     () => DOCUMENT_SLOTS.filter((slot) => !slot.showWhen || slot.showWhen({ loanCategory: form.requestedCategory, hasCoBorrower: form.hasCoBorrower })),
     [form.requestedCategory, form.hasCoBorrower],
   );
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  const documentsOnlySlots = React.useMemo(
+    () =>
+      documentsOnlyMeta
+        ? DOCUMENT_SLOTS.filter(
+            (slot) => !slot.showWhen || slot.showWhen({ loanCategory: documentsOnlyMeta.requestedCategory, hasCoBorrower: documentsOnlyMeta.hasCoBorrower }),
+          )
+        : [],
+    [documentsOnlyMeta],
+  );
 
+  /** 2026-09-14 (user request: "Geotagging / Location Verification feature") - the actual
+   * submit/save call, run only once a location decision is settled (or immediately for an edit,
+   * which never captures location - see `location: null` doc comment below). Split out of
+   * `handleSubmit` so the LocationPermissionModal can trigger this same path once the applicant
+   * resolves it, without duplicating the request-building logic. */
+  const runSubmit = async (location: CapturedLocation | { permissionStatus: LocationPermissionStatus } | null) => {
     const applicantName = [form.firstName, form.middleName, form.lastName].map((p) => p.trim()).filter(Boolean).join(' ');
     const requestedAmount = Number(form.requestedAmount);
     const requestedTermMonths = Number(form.requestedTermMonths);
 
-    if (!applicantName) {
-      setError(t.loanApplicationForm.validation.applicantName);
-      return;
-    }
-    if (!form.branchId) {
-      setError(t.loanApplicationForm.validation.branch);
-      return;
-    }
-    if (!requestedAmount || requestedAmount <= 0) {
-      setError(t.loanApplicationForm.validation.amount);
-      return;
-    }
-    if (!requestedTermMonths || requestedTermMonths <= 0) {
-      setError(t.loanApplicationForm.validation.term);
-      return;
-    }
-    if (!isEditMode && !form.agreedToTerms) {
-      setError(t.loanApplicationForm.validation.terms);
-      return;
-    }
-    // 2026-07-30 (user request): hard eligibility gate - applicants under 18 or over 59 cannot
-    // submit at all. Only blocks when age is actually known; the backend enforces this too
-    // (CreateLoanApplicationUseCase) since client-side validation alone is never a real safeguard.
-    if (age !== null && (age < 18 || age > 59)) {
-      setError(t.loanApplicationForm.validation.age.replace('{age}', String(age)));
-      return;
-    }
-
     setIsSubmitting(true);
     try {
-      // Skipped entirely on an edit (PATCH) - the geotag is a one-time "where were they when they
-      // first applied" signal, not something re-captured on every save. Never blocks/delays a new
-      // submission for longer than the geolocation helper's own 5s timeout.
-      const geolocation = isEditMode ? null : await getBestEffortGeolocation();
       const body: SubmitLoanApplicationRequest = {
         branchId: form.branchId,
         applicantName,
         age: age ?? undefined,
-        submissionLatitude: geolocation?.latitude,
-        submissionLongitude: geolocation?.longitude,
+        // 'latitude' only exists on a real GRANTED capture (CapturedLocation) - every other
+        // decision (SKIPPED/DENIED/UNAVAILABLE/TIMEOUT/UNSUPPORTED/ERROR, or null on an edit)
+        // carries just the permission status, per "Do not store unnecessary location information."
+        submissionLatitude: location && 'latitude' in location ? location.latitude : undefined,
+        submissionLongitude: location && 'latitude' in location ? location.longitude : undefined,
+        submissionLocationAccuracyMeters: location && 'latitude' in location ? location.accuracyMeters : undefined,
+        submissionLocationCapturedAt: location && 'latitude' in location ? location.capturedAt : undefined,
+        submissionLocationPermissionStatus: location?.permissionStatus,
         birthDate: form.birthDate || undefined,
         gender: form.gender || undefined,
         civilStatus: form.civilStatus || undefined,
@@ -689,7 +818,7 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
         await apiClient.patch<PortalLoanApplicationDetail>(`/portal/loan-applications/${editId}`, body, true);
         setEditSaved(true);
       } else {
-        const result = await apiClient.post<PortalLoanApplicationSummary>('/portal/loan-applications', body, true);
+        const result = await apiClient.post<SubmitLoanApplicationResponse>('/portal/loan-applications', body, true);
         setSubmitted(result);
         // 2026-07-31 (user request): the reverse direction of the profile<->application sync -
         // some applicants fill out the application before ever touching My Profile, so mirror
@@ -723,6 +852,64 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
     }
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    const applicantName = [form.firstName, form.middleName, form.lastName].map((p) => p.trim()).filter(Boolean).join(' ');
+    const requestedAmount = Number(form.requestedAmount);
+    const requestedTermMonths = Number(form.requestedTermMonths);
+
+    if (!applicantName) {
+      setError(t.loanApplicationForm.validation.applicantName);
+      return;
+    }
+    if (!form.branchId) {
+      setError(t.loanApplicationForm.validation.branch);
+      return;
+    }
+    if (!requestedAmount || requestedAmount <= 0) {
+      setError(t.loanApplicationForm.validation.amount);
+      return;
+    }
+    if (!requestedTermMonths || requestedTermMonths <= 0) {
+      setError(t.loanApplicationForm.validation.term);
+      return;
+    }
+    if (!isEditMode && !form.agreedToTerms) {
+      setError(t.loanApplicationForm.validation.terms);
+      return;
+    }
+    // 2026-07-30 (user request): hard eligibility gate - applicants under 18 or over 59 cannot
+    // submit at all. Only blocks when age is actually known; the backend enforces this too
+    // (CreateLoanApplicationUseCase) since client-side validation alone is never a real safeguard.
+    if (age !== null && (age < 18 || age > 59)) {
+      setError(t.loanApplicationForm.validation.age.replace('{age}', String(age)));
+      return;
+    }
+
+    // 2026-09-14 (user request: "Geotagging / Location Verification feature") - location is only
+    // ever requested on a brand-new submission (never on an edit/PATCH - see runSubmit's own doc
+    // comment), and only requested once per session: if the applicant already reached a decision
+    // (granted, skipped, or a real denial/error) earlier in this form session, reuse it silently
+    // instead of showing the modal again.
+    if (isEditMode) {
+      void runSubmit(null);
+      return;
+    }
+    if (locationDecision) {
+      void runSubmit(locationDecision);
+      return;
+    }
+    setShowLocationModal(true);
+  };
+
+  const handleLocationResolved = (outcome: CapturedLocation | { permissionStatus: LocationPermissionStatus }) => {
+    setLocationDecision(outcome);
+    setShowLocationModal(false);
+    void runSubmit(outcome);
+  };
+
   const handleUpload = async (category: PortalDocumentCategory, file: File | undefined) => {
     const applicationId = submitted?.id ?? editId;
     if (!file || !applicationId) return;
@@ -748,6 +935,30 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
       <PageShell embedded={isEmbedded}>
         <Card className="p-8">
           <Alert>{t.loanApplicationForm.notEditable}</Alert>
+          <Button className="mt-6 w-full" onClick={goToDashboard}>
+            {t.loanApplicationForm.goToDashboard}
+          </Button>
+        </Card>
+      </PageShell>
+    );
+  }
+
+  if (isEditMode && editState === 'documents-only') {
+    return (
+      <PageShell embedded={isEmbedded}>
+        <Card className="p-8">
+          <h1 className="text-lg font-bold tracking-tight">{t.loanApplicationForm.documentsTitle}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t.loanApplicationForm.documentsIntro}</p>
+          <div className="mt-5 space-y-4">
+            {documentsOnlySlots.map((slot) => (
+              <DocumentSlotRow
+                key={slot.category}
+                category={slot.category}
+                status={uploadState[slot.category]}
+                onFileSelected={(file) => handleUpload(slot.category, file)}
+              />
+            ))}
+          </div>
           <Button className="mt-6 w-full" onClick={goToDashboard}>
             {t.loanApplicationForm.goToDashboard}
           </Button>
@@ -787,6 +998,7 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
       <PageShell embedded={isEmbedded}>
         <Card className="p-8">
           <Alert tone="success">{t.loanApplicationForm.submitted}</Alert>
+          <LocationStatusBadge verification={submitted.locationVerification} />
           <h1 className="mt-6 text-lg font-bold tracking-tight">{t.loanApplicationForm.documentsTitle}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t.loanApplicationForm.documentsIntro}</p>
           <div className="mt-5 space-y-4">
@@ -823,6 +1035,29 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                 {isEditMode ? t.loanApplicationForm.editTitle : t.loanApplicationForm.newTitle}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">{t.loanApplicationForm.requiredNote}</p>
+              {/* 2026-09-14 (client portal UX pass, user request: "Add a progress indicator if
+                  appropriate") - a plain count of this form's own `required` fields (branch,
+                  loan type/amount/term, name, birth date, agreed-to-terms), not a fabricated
+                  step-by-step wizard state - accurate to what Submit actually checks, and updates
+                  live as the client (or the profile prefill) fills each one in. New applications
+                  only: editing an already-submitted one isn't the "long form, first time" case
+                  this is meant to help with. */}
+              {!isEditMode && (
+                <div className="mt-4">
+                  <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                    <span>{t.loanApplicationForm.progressLabel}</span>
+                    <span>
+                      {requiredFieldsFilledCount} / {REQUIRED_FIELD_COUNT}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-primary to-brand-green transition-all duration-300"
+                      style={{ width: `${(requiredFieldsFilledCount / REQUIRED_FIELD_COUNT) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -898,16 +1133,16 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
 
             <SectionCard number="3" title={t.loanApplicationForm.section3.title}>
               <div className="grid gap-4 sm:grid-cols-3">
-                <Field label={t.loanApplicationForm.section3.firstName}>
+                <Field label={t.loanApplicationForm.section3.firstName} prefilled={prefilledFields.has('firstName')}>
                   <Input id="firstName" required value={form.firstName} onChange={(e) => update('firstName', e.target.value.toUpperCase())} />
                 </Field>
-                <Field label={t.loanApplicationForm.section3.middleName}>
+                <Field label={t.loanApplicationForm.section3.middleName} prefilled={prefilledFields.has('middleName')}>
                   <Input id="middleName" value={form.middleName} onChange={(e) => update('middleName', e.target.value.toUpperCase())} />
                 </Field>
-                <Field label={t.loanApplicationForm.section3.lastName}>
+                <Field label={t.loanApplicationForm.section3.lastName} prefilled={prefilledFields.has('lastName')}>
                   <Input id="lastName" required value={form.lastName} onChange={(e) => update('lastName', e.target.value.toUpperCase())} />
                 </Field>
-                <Field label={t.loanApplicationForm.section3.gender}>
+                <Field label={t.loanApplicationForm.section3.gender} prefilled={prefilledFields.has('gender')}>
                   <Select value={form.gender} onChange={(e) => update('gender', e.target.value)}>
                     <option value="">{t.loanApplicationForm.section2.select}</option>
                     {GENDER_OPTIONS.map((o) => (
@@ -917,7 +1152,7 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                     ))}
                   </Select>
                 </Field>
-                <Field label={t.loanApplicationForm.section3.civilStatus}>
+                <Field label={t.loanApplicationForm.section3.civilStatus} prefilled={prefilledFields.has('civilStatus')}>
                   <Select value={form.civilStatus} onChange={(e) => update('civilStatus', e.target.value)}>
                     <option value="">{t.loanApplicationForm.section2.select}</option>
                     {CIVIL_STATUS_OPTIONS.map((o) => (
@@ -930,19 +1165,23 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                 <Field
                   label={t.loanApplicationForm.section3.dateOfBirth}
                   hint={age !== null ? t.loanApplicationForm.section3.age.replace('{age}', String(age)) : undefined}
+                  prefilled={prefilledFields.has('birthDate')}
                 >
                   <Input id="birthDate" type="date" required value={form.birthDate} onChange={(e) => update('birthDate', e.target.value)} />
                 </Field>
-                <Field label={t.loanApplicationForm.section3.placeOfBirth}>
+                <Field label={t.loanApplicationForm.section3.placeOfBirth} prefilled={prefilledFields.has('placeOfBirth')}>
                   <Input value={form.placeOfBirth} onChange={(e) => update('placeOfBirth', e.target.value)} />
                 </Field>
-                <Field label={t.loanApplicationForm.section3.nationality}>
+                <Field label={t.loanApplicationForm.section3.nationality} prefilled={prefilledFields.has('nationality')}>
                   <Input value={form.nationality} onChange={(e) => update('nationality', e.target.value)} />
                 </Field>
               </div>
 
               <div className="space-y-3 border-t border-border pt-4">
-                <Label>{t.loanApplicationForm.section3.presentAddress}</Label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Label>{t.loanApplicationForm.section3.presentAddress}</Label>
+                  {prefilledFields.has('presentAddress') && <ProfileSourceBadge />}
+                </div>
                 <PortalAddressPicker value={form.presentAddress} onChange={(patch) => update('presentAddress', { ...form.presentAddress, ...patch })} />
               </div>
 
@@ -965,7 +1204,7 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label={t.loanApplicationForm.section3.homeOwnership}>
+                <Field label={t.loanApplicationForm.section3.homeOwnership} prefilled={prefilledFields.has('homeOwnership')}>
                   <Select value={form.homeOwnership} onChange={(e) => update('homeOwnership', e.target.value)}>
                     <option value="">{t.loanApplicationForm.section2.select}</option>
                     {HOME_OWNERSHIP_OPTIONS.map((o) => (
@@ -975,10 +1214,15 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                     ))}
                   </Select>
                 </Field>
-                <Field label={t.loanApplicationForm.section3.contactNumber}>
+                <Field label={t.loanApplicationForm.section3.contactNumber} prefilled={prefilledFields.has('mobilePhone')}>
                   <PhoneInput id="mobilePhone" value={form.mobilePhone} onChange={(e) => update('mobilePhone', e.target.value)} placeholder="09XX XXX XXXX" />
                 </Field>
-                <Field label={t.loanApplicationForm.section3.email} className="sm:col-span-2" hint={t.loanApplicationForm.section3.emailHint}>
+                <Field
+                  label={t.loanApplicationForm.section3.email}
+                  className="sm:col-span-2"
+                  hint={t.loanApplicationForm.section3.emailHint}
+                  prefilled={prefilledFields.has('email')}
+                >
                   <Input id="email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} />
                 </Field>
               </div>
@@ -986,22 +1230,61 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
 
             <SectionCard number="4" title={t.loanApplicationForm.section4.title} description={t.loanApplicationForm.section4.description}>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label={t.loanApplicationForm.section4.employer}>
-                  <Input id="employer" value={form.employer} onChange={(e) => update('employer', e.target.value)} />
+                <Field
+                  label={isSeafarerLoan ? t.loanApplicationForm.section4.agencyName : t.loanApplicationForm.section4.employer}
+                  prefilled={prefilledFields.has('employer')}
+                >
+                  {isSeafarerLoan ? (
+                    <AgencyNameCombobox
+                      id="employer"
+                      value={form.employer}
+                      onChange={(value) => update('employer', value)}
+                      onSelectAgency={(agency) => {
+                        // Instant fill on an explicit pick - the debounced effect above is the
+                        // general-purpose resolver (also covers a My-Profile-prefilled agency
+                        // name), this just avoids that effect's 400ms delay for a manual click.
+                        if (agency.address) update('officeAddress', agency.address);
+                      }}
+                    />
+                  ) : (
+                    <Input id="employer" value={form.employer} onChange={(e) => update('employer', e.target.value)} />
+                  )}
                 </Field>
-                <Field label={t.loanApplicationForm.section4.occupation}>
-                  <Input id="occupation" value={form.occupation} onChange={(e) => update('occupation', e.target.value)} />
+                <Field
+                  label={isSeafarerLoan ? t.loanApplicationForm.section4.position : t.loanApplicationForm.section4.occupation}
+                  prefilled={prefilledFields.has('occupation')}
+                >
+                  {isSeafarerLoan ? (
+                    <StaticSuggestionsCombobox
+                      id="occupation"
+                      value={form.occupation}
+                      onChange={(value) => update('occupation', value)}
+                      options={SEAFARER_POSITIONS}
+                      placeholder="Type to search seafarer positions…"
+                      icon={Briefcase}
+                    />
+                  ) : (
+                    <Input id="occupation" value={form.occupation} onChange={(e) => update('occupation', e.target.value)} />
+                  )}
                 </Field>
-                <Field label={t.loanApplicationForm.section4.officeAddress} className="sm:col-span-2">
+                <Field
+                  label={t.loanApplicationForm.section4.officeAddress}
+                  className="sm:col-span-2"
+                  // 2026-09-15 (user request) - for Seafarer Loan, this is now agency-derived (see
+                  // the officeAddress-from-agency-name effect above), not a raw My Profile value,
+                  // so the "From My Profile" badge would be misleading here even though the
+                  // underlying field is the same one that badge normally tracks.
+                  prefilled={!isSeafarerLoan && prefilledFields.has('officeAddress')}
+                >
                   <Input id="officeAddress" value={form.officeAddress} onChange={(e) => update('officeAddress', e.target.value)} />
                 </Field>
-                <Field label={t.loanApplicationForm.section4.monthlyIncome}>
+                <Field label={t.loanApplicationForm.section4.monthlyIncome} prefilled={prefilledFields.has('monthlyIncome')}>
                   <NumberInput id="monthlyIncome" min="0" value={form.monthlyIncome} onChange={(e) => update('monthlyIncome', e.target.value)} placeholder="0.00" />
                 </Field>
-                <Field label={t.loanApplicationForm.section4.tin}>
+                <Field label={t.loanApplicationForm.section4.tin} prefilled={prefilledFields.has('tinNumber')}>
                   <GroupedDigitsInput value={form.tinNumber} onChange={(e) => update('tinNumber', e.target.value)} />
                 </Field>
-                <Field label={t.loanApplicationForm.section4.sss}>
+                <Field label={t.loanApplicationForm.section4.sss} prefilled={prefilledFields.has('sssNumber')}>
                   <GroupedDigitsInput value={form.sssNumber} onChange={(e) => update('sssNumber', e.target.value)} />
                 </Field>
               </div>
@@ -1103,16 +1386,16 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
 
             <SectionCard number="8" title={t.loanApplicationForm.section8.title}>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label={t.loanApplicationForm.section8.name1}>
+                <Field label={t.loanApplicationForm.section8.name1} prefilled={prefilledFields.has('reference1Name')}>
                   <Input value={form.reference1Name} onChange={(e) => update('reference1Name', e.target.value.toUpperCase())} />
                 </Field>
-                <Field label={t.loanApplicationForm.section8.contact1}>
+                <Field label={t.loanApplicationForm.section8.contact1} prefilled={prefilledFields.has('reference1Mobile')}>
                   <PhoneInput value={form.reference1Mobile} onChange={(e) => update('reference1Mobile', e.target.value)} placeholder="09XX XXX XXXX" />
                 </Field>
-                <Field label={t.loanApplicationForm.section8.name2}>
+                <Field label={t.loanApplicationForm.section8.name2} prefilled={prefilledFields.has('reference2Name')}>
                   <Input value={form.reference2Name} onChange={(e) => update('reference2Name', e.target.value.toUpperCase())} />
                 </Field>
-                <Field label={t.loanApplicationForm.section8.contact2}>
+                <Field label={t.loanApplicationForm.section8.contact2} prefilled={prefilledFields.has('reference2Mobile')}>
                   <PhoneInput value={form.reference2Mobile} onChange={(e) => update('reference2Mobile', e.target.value)} placeholder="09XX XXX XXXX" />
                 </Field>
               </div>
@@ -1193,6 +1476,11 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
         <Dialog open={showPrivacy} onClose={() => setShowPrivacy(false)} title="Data Privacy Statement and Consent Form">
           <PrivacyContent />
         </Dialog>
+        <LocationPermissionModal
+          open={showLocationModal}
+          onResolve={handleLocationResolved}
+          onCancel={() => setShowLocationModal(false)}
+        />
       </>
     </PageShell>
   );

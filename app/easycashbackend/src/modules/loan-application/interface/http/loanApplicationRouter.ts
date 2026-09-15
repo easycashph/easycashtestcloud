@@ -38,6 +38,7 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
   // Registered before the `/:id` route below so "risk-summary" is never swallowed as an :id param.
   router.get('/loan-applications/risk-summary', requireAuth, requireApplicationAccess, controller.riskSummary);
   router.get('/loan-applications/:id', requireAuth, requireApplicationAccess, controller.get);
+  router.get('/loan-applications/:id/nearest-landmark', requireAuth, requireApplicationAccess, controller.getNearestLandmark);
   router.patch(
     '/loan-applications/:id',
     requireAuth,

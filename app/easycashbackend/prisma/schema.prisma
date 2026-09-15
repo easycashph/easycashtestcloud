@@ -61,6 +61,12 @@ enum AttachmentOwnerType {
   /// Added 2026-07-31 for the Portal<->LMS support chat (user request) - a file attached to one
   /// ChatMessage.
   CHAT_MESSAGE
+  /// Added 2026-09-14 (user request: "make profile picture mandatory") - a PortalAccount's own
+  /// profile photo (documentCategory=PROFILE_PICTURE), independent of any LoanApplication. Needed
+  /// because the existing PROFILE_PICTURE-on-LOAN_APPLICATION path (PortalAvatar.tsx) only exists
+  /// once a client has submitted an application - the first-login profile-completion gate runs
+  /// before that, so it has nothing to attach a required photo to without this.
+  PORTAL_ACCOUNT
 }
 
 /// Tags a Loan Application intake attachment by what it actually is (valid ID vs. payslip vs.
@@ -2922,6 +2928,23 @@ model LoanApplication {
   /// above, which is geocoded from the typed address text, not the device's actual location.
   submissionLatitude  Decimal? @db.Decimal(9, 6)
   submissionLongitude Decimal? @db.Decimal(9, 6)
+  /// 2026-09-14 (user request: "Geotagging / Location Verification feature") — metadata about the
+  /// capture above, so staff (and the client's own status display) can tell "granted with a good
+  /// reading" apart from "denied"/"unavailable"/etc. without having to infer it from
+  /// submissionLatitude being null (null is ambiguous - could mean denied, timeout, unsupported,
+  /// or simply never attempted on an old pre-2026-09-14 row). Deliberately three plain fields, not
+  /// a nested Json blob - this is a small, fixed, queryable shape (see CLAUDE.md "Coding
+  /// Standards": strong typing preferred over loosely-typed blobs where the shape is known).
+  /// `submissionLocationPermissionStatus` is a plain string (`GRANTED` | `DENIED` | `UNAVAILABLE` |
+  /// `TIMEOUT` | `UNSUPPORTED` | `ERROR` | `SKIPPED`), matching this schema's existing convention
+  /// of a descriptive String column rather than a Postgres enum for values that are UI-facing
+  /// labels, not core domain vocabulary (e.g. homeOwnership, civilStatus above use the same
+  /// pattern). `SKIPPED` means the applicant chose "Continue Without Location" on the portal's own
+  /// pre-prompt modal - the browser's native permission prompt was never shown, which is distinct
+  /// from an actual browser-level `DENIED`.
+  submissionLocationAccuracyMeters   Decimal?  @db.Decimal(8, 2)
+  submissionLocationCapturedAt       DateTime?
+  submissionLocationPermissionStatus String?
 
   /// Staff picks the specific product sub-type during review — approval is
   /// blocked until this is set (mirrors the mock UI's rule).

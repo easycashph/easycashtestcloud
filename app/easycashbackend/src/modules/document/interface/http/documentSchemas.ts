@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-export const attachmentOwnerTypeSchema = z.enum(['BORROWER', 'LOAN_ACCOUNT', 'LOAN_APPLICATION']);
+// 2026-09-15 (user request: staff "View" access to a client's Portal profile photo) - PORTAL_ACCOUNT
+// itself was added to the Prisma AttachmentOwnerType enum back on 2026-09-14 for the portal's own
+// profile-photo upload, but never added HERE, so staff's generic GET /attachments (and its
+// download endpoint) couldn't query it - this was the missing piece, not a new capability.
+export const attachmentOwnerTypeSchema = z.enum(['BORROWER', 'LOAN_ACCOUNT', 'LOAN_APPLICATION', 'PORTAL_ACCOUNT']);
 
 export const attachmentDocumentCategorySchema = z.enum([
   'PROFILE_PICTURE',

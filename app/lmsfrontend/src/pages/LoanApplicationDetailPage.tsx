@@ -21,6 +21,7 @@ import {
   Heart,
   Home,
   IdCard,
+  Image as ImageIcon,
   Landmark,
   Lock,
   Mail,
@@ -70,6 +71,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { RoleAbbr } from '@/components/RoleAbbr';
 import { AttachmentsPanel } from '@/components/AttachmentsPanel';
+import { AttachmentPreviewModal } from '@/components/AttachmentPreviewModal';
 import { ProfileNotesPanel } from '@/components/ProfileNotesPanel';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { AgencyNameCombobox } from '@/components/AgencyNameCombobox';
@@ -2565,6 +2567,30 @@ export function LoanApplicationDetailPage() {
   });
   const application = applicationQuery.data;
 
+  // 2026-09-15 (user request: "nearest landmark" next to the applicant's submission coordinates) -
+  // resolved live on the backend (free OpenStreetMap/Nominatim reverse-geocode, best-effort, never
+  // stored) rather than baked into the main application payload, since it's a display convenience
+  // only fetched with the detail page open, not something every list/export call should pay for.
+  const nearestLandmarkQuery = useQuery({
+    queryKey: ['loan-application', applicationId, 'nearest-landmark'],
+    queryFn: () => apiClient.get<{ nearestLandmark: string | null }>(`/loan-applications/${applicationId}/nearest-landmark`),
+    enabled: canAccessLoanApplications && Boolean(application?.submissionLatitude != null && application?.submissionLongitude != null),
+  });
+
+  // 2026-09-15 (user request: "include [the profile photo] in the applicant details card with
+  // view button") - the client's account-level Portal profile photo (AttachmentOwnerType.
+  // PORTAL_ACCOUNT, uploaded via the Portal's My Profile/onboarding gate) isn't tied to this
+  // specific application the way PROFILE_PICTURE under LOAN_APPLICATION would be, so it's looked
+  // up separately by the application's own `portalAccountId` - null (query stays disabled) for a
+  // staff-encoded walk-in with no Portal account at all.
+  const portalProfilePhotoQuery = useQuery({
+    queryKey: ['attachments', 'PORTAL_ACCOUNT', application?.portalAccountId],
+    queryFn: () => apiClient.get<Attachment[]>(`/attachments?ownerType=PORTAL_ACCOUNT&ownerId=${application!.portalAccountId}`),
+    enabled: canAccessLoanApplications && Boolean(application?.portalAccountId),
+  });
+  const portalProfilePhoto = portalProfilePhotoQuery.data?.find((a) => a.documentCategory === 'PROFILE_PICTURE') ?? null;
+  const [previewAttachment, setPreviewAttachment] = React.useState<Attachment | null>(null);
+
   // "Create Loan Account" (moved here from the Client Profile page, 2026-07-14) - only fetched
   // once this application's client actually exists.
   const clientBorrowerQuery = useQuery({
@@ -2876,20 +2902,40 @@ export function LoanApplicationDetailPage() {
                 {productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, application.requestedCategory)} · Submitted{' '}
                 {formatDate(application.createdAt)}
                 {encodedByName ? ` · Encoded by ${encodedByName}` : ''}
-                {application.submissionLatitude !== null && application.submissionLongitude !== null && (
-                  <>
-                    {' · '}
-                    <a
-                      href={`https://www.google.com/maps?q=${application.submissionLatitude},${application.submissionLongitude}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline decoration-dotted underline-offset-2 hover:text-foreground"
-                    >
-                      View submission location
-                    </a>
-                  </>
+                {/* 2026-09-14 (user request: "Geotagging / Location Verification feature") - shown
+                    whenever the portal recorded an outcome that ISN'T a successful capture, so
+                    staff can tell "client declined/couldn't provide location" apart from "never
+                    attempted" (a pre-2026-09-14 row, where this is simply null). A real coordinate
+                    pair gets its own "Location" line below instead of a mention here. */}
+                {application.submissionLatitude === null && application.submissionLocationPermissionStatus !== null && (
+                  <> · Location not provided ({application.submissionLocationPermissionStatus.toLowerCase()})</>
                 )}
               </p>
+              {/* 2026-09-15 (user request: "include the coordinates in the applicant details...
+                  clickable... nearest landmark") - the raw lat/long shown as text (not just hidden
+                  behind a "View submission location" link), staying clickable through to Google
+                  Maps, plus a best-effort reverse-geocoded "nearest landmark" resolved by the
+                  backend's free Nominatim service (see nearestLandmarkQuery above) - approximate,
+                  not a dedicated points-of-interest search, so it reads as a nearby area/address
+                  rather than a named landmark. */}
+              {application.submissionLatitude !== null && application.submissionLongitude !== null && (
+                <p className="font-mono text-xs text-muted-foreground">
+                  Location:{' '}
+                  <a
+                    href={`https://www.google.com/maps?q=${application.submissionLatitude},${application.submissionLongitude}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+                  >
+                    {application.submissionLatitude.toFixed(6)}, {application.submissionLongitude.toFixed(6)}
+                  </a>
+                  {application.submissionLocationAccuracyMeters !== null && (
+                    <> (±{Math.round(application.submissionLocationAccuracyMeters)}m)</>
+                  )}
+                  {nearestLandmarkQuery.isLoading && <> · Looking up nearest landmark…</>}
+                  {nearestLandmarkQuery.data?.nearestLandmark && <> · Near {nearestLandmarkQuery.data.nearestLandmark}</>}
+                </p>
+              )}
               {isPreApprovalStage && (
                 <p className="text-xs text-muted-foreground">
                   System pre-qualification -{' '}
@@ -3045,6 +3091,36 @@ export function LoanApplicationDetailPage() {
               <dd className="text-right font-medium">
                 {application.previousAddressSameAsPresent ? 'Same as present address' : toProperCase(application.previousAddress) || '-'}
               </dd>
+              {/* 2026-09-15 (user request: "pop up coordinates in the applicant details...
+                  clickable... nearest landmark") - the applicant's device GPS at submission time,
+                  shown as clickable coordinates (opens Google Maps) plus a best-effort
+                  reverse-geocoded nearest landmark (see nearestLandmarkQuery above - free
+                  OpenStreetMap/Nominatim, approximate, never a dedicated POI/landmark search).
+                  Omitted entirely when the applicant never captured a location. */}
+              {application.submissionLatitude !== null && application.submissionLongitude !== null && (
+                <>
+                  <IconDt icon={MapPin}>Location</IconDt>
+                  <dd className="text-right font-medium">
+                    <a
+                      href={`https://www.google.com/maps?q=${application.submissionLatitude},${application.submissionLongitude}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      {application.submissionLatitude.toFixed(6)}, {application.submissionLongitude.toFixed(6)}
+                    </a>
+                    {application.submissionLocationAccuracyMeters !== null && (
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        ±{Math.round(application.submissionLocationAccuracyMeters)}m accuracy
+                      </span>
+                    )}
+                  </dd>
+                  <IconDt icon={Landmark}>Nearest landmark</IconDt>
+                  <dd className="text-right font-medium">
+                    {nearestLandmarkQuery.isLoading ? 'Looking up…' : (nearestLandmarkQuery.data?.nearestLandmark ?? '-')}
+                  </dd>
+                </>
+              )}
               <IconDt icon={Phone}>Contact Number</IconDt>
               <dd className="text-right font-medium">{formatMobileNumber(application.mobilePhone)}</dd>
               <IconDt icon={Mail}>Email</IconDt>
@@ -3066,6 +3142,24 @@ export function LoanApplicationDetailPage() {
                   '-'
                 )}
               </dd>
+              {/* 2026-09-15 (user request: "[the profile photo] should also be included in the
+                  applicant details card with view button") - see portalProfilePhotoQuery above. */}
+              {application.portalAccountId && (
+                <>
+                  <IconDt icon={ImageIcon}>Profile Photo</IconDt>
+                  <dd className="text-right font-medium">
+                    {portalProfilePhotoQuery.isLoading ? (
+                      'Loading…'
+                    ) : portalProfilePhoto ? (
+                      <Button variant="outline" size="sm" onClick={() => setPreviewAttachment(portalProfilePhoto)}>
+                        View
+                      </Button>
+                    ) : (
+                      '-'
+                    )}
+                  </dd>
+                </>
+              )}
             </dl>
           </CardContent>
         </Card>
@@ -3656,6 +3750,8 @@ export function LoanApplicationDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AttachmentPreviewModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
           </>
         );
 

@@ -8,11 +8,11 @@ import { Select } from '@/components/ui/Select';
 import { Alert } from '@/components/ui/Alert';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
-import { PortalAvatar } from '@/components/PortalAvatar';
+import { PortalProfilePhoto } from '@/components/PortalProfilePhoto';
 import { PhoneInput } from '@/components/PhoneInput';
 import { apiClient } from '@/lib/apiClient';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import type { PortalLoanApplicationSummary, PortalProfile, UpdatePortalProfileRequest } from '@/lib/portalApiTypes';
+import type { PortalProfile, UpdatePortalProfileRequest } from '@/lib/portalApiTypes';
 
 const GENDER_OPTIONS = ['Female', 'Male'];
 const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widower', 'Separated'];
@@ -20,10 +20,12 @@ const HOME_OWNERSHIP_OPTIONS = ['Owned', 'Renting', 'Living with family'];
 
 /** The subset of `/portal/profile` fields treated as "must fill before continuing" for the
  * first-login gate below - deliberately NOT a new backend "profileComplete" flag (see this file's
- * own doc comment). A real address needs all three of these present, not just one. */
+ * own doc comment). A real address needs all three of these present, not just one. Profile photo
+ * (2026-09-14 user request: "make profile picture mandatory") is required too - backed by the
+ * real `hasProfilePhoto` flag the profile endpoint now returns, not a client-side guess. */
 function isProfileComplete(profile: PortalProfile): boolean {
   const hasAddress = Boolean(profile.addresses[0]?.barangay && profile.addresses[0]?.cityMunicipality && profile.addresses[0]?.province);
-  return Boolean(profile.gender && profile.civilStatus && profile.birthDate && profile.mobilePhone1 && hasAddress);
+  return Boolean(profile.gender && profile.civilStatus && profile.birthDate && profile.mobilePhone1 && hasAddress && profile.hasProfilePhoto);
 }
 
 function addressToDraft(address: PortalProfile['addresses'][number] | undefined): AddressDraft {
@@ -70,17 +72,17 @@ function GateSkeleton() {
  * genuinely saved, the very next completeness check already reads as complete, on this device or
  * any other the client logs into.
  *
- * The profile-photo upload is intentionally treated as encouraged, not gating: the existing avatar
- * endpoint (`PortalAvatar`) only accepts an upload against a real loan application id (it's stored
- * as that application's PROFILE_PICTURE attachment - see PortalAvatar.tsx's own doc comment), so an
- * account with no application yet has nothing to attach a photo to. Requiring a photo before that
- * exists would mean inventing upload capability the backend doesn't have.
+ * The profile photo is required (2026-09-14 user request: "make profile picture mandatory") via
+ * `PortalProfilePhoto`, which uploads to `/portal/profile/photo` - an Attachment owned directly by
+ * the PortalAccount, independent of any loan application. This exists specifically because the
+ * older `PortalAvatar` path only accepts an upload against a real loan application id, which a
+ * first-login client (right after signup, before ever applying) doesn't have yet.
  */
 export function PortalProfileSetupGate({ children }: { children: React.ReactNode }) {
   const { t } = useLanguage();
   const [status, setStatus] = React.useState<'loading' | 'complete' | 'incomplete' | 'error'>('loading');
   const [profile, setProfile] = React.useState<PortalProfile | null>(null);
-  const [latestApplicationId, setLatestApplicationId] = React.useState<string | null>(null);
+  const [hasPhoto, setHasPhoto] = React.useState(false);
 
   const [gender, setGender] = React.useState('');
   const [civilStatus, setCivilStatus] = React.useState('');
@@ -105,6 +107,7 @@ export function PortalProfileSetupGate({ children }: { children: React.ReactNode
       .then((data) => {
         if (cancelled) return;
         setProfile(data);
+        setHasPhoto(data.hasProfilePhoto);
         setGender(data.gender ?? '');
         setCivilStatus(data.civilStatus ?? '');
         setBirthDate(data.birthDate ?? '');
@@ -122,12 +125,6 @@ export function PortalProfileSetupGate({ children }: { children: React.ReactNode
       // Fails open: a transient network error must never trap a client outside their own
       // dashboard - the gate only ever blocks on a confirmed-incomplete profile, not on "unknown".
       .catch(() => setStatus('error'));
-    apiClient
-      .get<PortalLoanApplicationSummary[]>('/portal/loan-applications')
-      .then((apps) => {
-        if (!cancelled && apps.length > 0) setLatestApplicationId(apps[0].id);
-      })
-      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -137,6 +134,7 @@ export function PortalProfileSetupGate({ children }: { children: React.ReactNode
   if (status === 'complete' || status === 'error') return <>{children}</>;
 
   const missing = {
+    photo: !hasPhoto,
     gender: !gender,
     civilStatus: !civilStatus,
     birthDate: !birthDate,
@@ -198,17 +196,15 @@ export function PortalProfileSetupGate({ children }: { children: React.ReactNode
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <Card className="p-6">
-          <h2 className="text-sm font-semibold">{t.portalOnboarding.photoTitle}</h2>
+        <Card className={`p-6 ${showValidation && missing.photo ? 'ring-1 ring-destructive' : ''}`}>
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+            {t.portalOnboarding.photoTitle}
+            <span className="rounded-full bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
+              {t.portalOnboarding.requiredBadge}
+            </span>
+          </h2>
           <div className="mt-3">
-            {latestApplicationId ? (
-              <PortalAvatar loanApplicationId={latestApplicationId} initials={initials} />
-            ) : (
-              <div className="flex items-center gap-3">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{initials}</div>
-                <p className="max-w-xs text-xs text-muted-foreground">{t.portalOnboarding.photoHintUnavailable}</p>
-              </div>
-            )}
+            <PortalProfilePhoto initials={initials} onUploaded={() => setHasPhoto(true)} />
           </div>
         </Card>
 

@@ -1,4 +1,4 @@
-export type AttachmentOwnerType = 'BORROWER' | 'LOAN_ACCOUNT' | 'LOAN_APPLICATION' | 'CHAT_MESSAGE';
+export type AttachmentOwnerType = 'BORROWER' | 'LOAN_ACCOUNT' | 'LOAN_APPLICATION' | 'CHAT_MESSAGE' | 'PORTAL_ACCOUNT';
 
 export type AttachmentDocumentCategory =
   | 'PROFILE_PICTURE'

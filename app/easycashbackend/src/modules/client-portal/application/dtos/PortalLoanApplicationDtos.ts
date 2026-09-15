@@ -63,6 +63,10 @@ export interface SubmitLoanApplicationInput {
    * blocks submission on a denied/unavailable permission. */
   submissionLatitude?: number;
   submissionLongitude?: number;
+  /** 2026-09-14 (user request: "Geotagging / Location Verification feature"). */
+  submissionLocationAccuracyMeters?: number;
+  submissionLocationCapturedAt?: Date;
+  submissionLocationPermissionStatus?: string;
 }
 
 export interface PortalLoanApplicationSummary {

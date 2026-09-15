@@ -222,6 +222,10 @@ export interface LoanApplication {
   requestedTermMonths: number;
   submittedDocuments: string[];
   encodedByUserId: string | null;
+  /** 2026-09-15 (user request: staff "View" access to the client's Portal profile photo) - the
+   * owning PortalAccount's id, used to look up its account-level PROFILE_PICTURE attachment
+   * (AttachmentOwnerType.PORTAL_ACCOUNT) - null for a staff-encoded walk-in with no Portal account. */
+  portalAccountId: string | null;
   status: LoanApplicationStatus;
   distanceFromBranchKm: number | null;
   /** 2026-09-12 (user request) — Debt-to-Income risk triage, computed once at submission (and
@@ -234,6 +238,15 @@ export interface LoanApplication {
    * client who denied/lacks the browser's location permission). */
   submissionLatitude: number | null;
   submissionLongitude: number | null;
+  /** 2026-09-14 (user request: "Geotagging / Location Verification feature") - metadata about the
+   * capture attempt above, exposed here because staff/LMS is the "authorized backend/admin
+   * process" the feature's spec permits to see full location detail (mirrors backend's
+   * LoanApplicationPresenter.ts). `submissionLocationPermissionStatus` also covers `SKIPPED`
+   * (applicant chose "Continue Without Location" on the portal's own pre-prompt modal, without
+   * the browser's native permission prompt ever appearing) alongside the browser's own outcomes. */
+  submissionLocationAccuracyMeters: number | null;
+  submissionLocationCapturedAt: string | null;
+  submissionLocationPermissionStatus: 'GRANTED' | 'DENIED' | 'UNAVAILABLE' | 'TIMEOUT' | 'UNSUPPORTED' | 'ERROR' | 'SKIPPED' | null;
   assignedLoanProductVersionId: string | null;
   reviewedByUserId: string | null;
   reviewedAt: string | null;

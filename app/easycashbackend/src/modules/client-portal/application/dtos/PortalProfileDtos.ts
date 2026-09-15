@@ -72,4 +72,9 @@ export interface PortalProfileDto {
     province: string | null;
     zipCode: string | null;
   }[];
+  /** 2026-09-14 (user request: "make profile picture mandatory") - whether a photo has been
+   * uploaded via `/portal/profile/photo` (PortalAccount-owned, not the LoanApplication-scoped
+   * attachment `PortalAvatar.tsx` uses). Lets the frontend gate/dashboard check completeness
+   * without a second round trip. */
+  hasProfilePhoto: boolean;
 }

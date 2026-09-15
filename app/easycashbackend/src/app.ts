@@ -100,6 +100,8 @@ import { createPortalNotificationRouter } from '@modules/client-portal/interface
 import { createPortalProfileRouter } from '@modules/client-portal/interface/http/portalProfileRouter';
 import { GetPortalProfileUseCase } from '@modules/client-portal/application/use-cases/GetPortalProfileUseCase';
 import { UpdatePortalProfileUseCase } from '@modules/client-portal/application/use-cases/UpdatePortalProfileUseCase';
+import { UploadPortalProfilePhotoUseCase } from '@modules/client-portal/application/use-cases/UploadPortalProfilePhotoUseCase';
+import { DownloadPortalProfilePhotoUseCase } from '@modules/client-portal/application/use-cases/DownloadPortalProfilePhotoUseCase';
 import { createPortalSecurityRouter } from '@modules/client-portal/interface/http/portalSecurityRouter';
 import { ChangePortalPasswordUseCase } from '@modules/client-portal/application/use-cases/ChangePortalPasswordUseCase';
 import { ChangePortalEmailUseCase } from '@modules/client-portal/application/use-cases/ChangePortalEmailUseCase';
@@ -223,6 +225,7 @@ import { DeleteLoanApplicationUseCase } from '@modules/loan-application/applicat
 import { GenerateLoanApplicationFormUseCase } from '@modules/loan-application/application/use-cases/GenerateLoanApplicationFormUseCase';
 import { GenerateCrmReportUseCase } from '@modules/loan-application/application/use-cases/GenerateCrmReportUseCase';
 import { GetLoanApplicationRiskSummaryUseCase } from '@modules/loan-application/application/use-cases/GetLoanApplicationRiskSummaryUseCase';
+import { GetLoanApplicationNearestLandmarkUseCase } from '@modules/loan-application/application/use-cases/GetLoanApplicationNearestLandmarkUseCase';
 import { StartLoanApplicationReviewUseCase } from '@modules/loan-application/application/use-cases/StartLoanApplicationReviewUseCase';
 import { SubmitLoanApplicationReviewReportUseCase } from '@modules/loan-application/application/use-cases/SubmitLoanApplicationReviewReportUseCase';
 import { SetMitigationAccountOwnerUseCase } from '@modules/loan-application/application/use-cases/SetMitigationAccountOwnerUseCase';
@@ -1530,6 +1533,7 @@ export function createApp(): Express {
         fileStorage: new LocalFileStorage(),
       }),
       getLoanApplicationRiskSummaryUseCase: new GetLoanApplicationRiskSummaryUseCase({ loanApplicationRepository }),
+      getLoanApplicationNearestLandmarkUseCase: new GetLoanApplicationNearestLandmarkUseCase({ loanApplicationRepository, geocodingService }),
       preQualificationService,
       negativeAreaRepository,
       borrowerRepository,
@@ -1637,12 +1641,14 @@ export function createApp(): Express {
   app.use('/api/v1', interestRateChartRouter);
 
   // --- licensed-recruitment-agency module wiring: Agency name search (Seafarer Loan's Agency/contract verification) ---
+  // 2026-09-15 (user request): shared as one instance - reused below by the portal's own
+  // Seafarer Loan Agency name field (SubmitLoanApplicationUseCase's applicant-facing surface),
+  // not just this staff-only route.
+  const searchLicensedRecruitmentAgenciesUseCase = new SearchLicensedRecruitmentAgenciesUseCase({
+    licensedRecruitmentAgencyRepository: new PrismaLicensedRecruitmentAgencyRepository(),
+  });
   const licensedRecruitmentAgencyRouter = createLicensedRecruitmentAgencyRouter(
-    {
-      searchLicensedRecruitmentAgenciesUseCase: new SearchLicensedRecruitmentAgenciesUseCase({
-        licensedRecruitmentAgencyRepository: new PrismaLicensedRecruitmentAgencyRepository(),
-      }),
-    },
+    { searchLicensedRecruitmentAgenciesUseCase },
     tokenService,
   );
   app.use('/api/v1', licensedRecruitmentAgencyRouter);
@@ -1757,6 +1763,7 @@ export function createApp(): Express {
         }),
       }),
       listPortalBranchesUseCase: new ListPortalBranchesUseCase({ branchRepository }),
+      searchLicensedRecruitmentAgenciesUseCase,
       uploadPortalLoanApplicationDocumentUseCase: new UploadPortalLoanApplicationDocumentUseCase({
         loanApplicationRepository,
         uploadAttachmentUseCase: portalUploadAttachmentUseCase,
@@ -1901,7 +1908,7 @@ export function createApp(): Express {
   // Delegates writes to the same UpdateBorrowerUseCase staff uses (own instance here, same
   // stateless-Prisma-wrapper reuse pattern as elsewhere in this file) so both surfaces share one
   // write path and one activity-log trail.
-  const getPortalProfileUseCase = new GetPortalProfileUseCase({ portalAccountRepository, borrowerRepository });
+  const getPortalProfileUseCase = new GetPortalProfileUseCase({ portalAccountRepository, borrowerRepository, attachmentRepository });
   const portalProfileRouter = createPortalProfileRouter(
     {
       getPortalProfileUseCase,
@@ -1912,6 +1919,11 @@ export function createApp(): Express {
       }),
       // "Chat with your loan officer" dashboard card (2026-08-06 user request).
       getPortalAssignedLoanOfficerUseCase: new GetPortalAssignedLoanOfficerUseCase({ portalAccountRepository, borrowerRepository, userRepository }),
+      // Profile photo (2026-09-14 user request: "make profile picture mandatory") - reuses the
+      // same portalUploadAttachmentUseCase/attachmentRepository/fileStorage instances wired above
+      // for the loan-application document upload.
+      uploadPortalProfilePhotoUseCase: new UploadPortalProfilePhotoUseCase({ uploadAttachmentUseCase: portalUploadAttachmentUseCase }),
+      downloadPortalProfilePhotoUseCase: new DownloadPortalProfilePhotoUseCase({ attachmentRepository, fileStorage }),
     },
     portalTokenService,
   );

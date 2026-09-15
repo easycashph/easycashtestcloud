@@ -117,6 +117,19 @@ export interface PortalBranch {
   address: string | null;
 }
 
+/** 2026-09-15 (user request): backs the Seafarer Loan Agency name field's searchable dropdown -
+ * mirrors app/lmsfrontend's own licensedRecruitmentAgencyApiTypes.ts (the staff-facing search
+ * result shape), returned by the portal's own /portal/licensed-recruitment-agencies endpoint. */
+export interface LicensedRecruitmentAgency {
+  id: string;
+  name: string;
+  address: string | null;
+  contactName: string | null;
+  phone: string | null;
+  licenseNumber: string | null;
+  status: string;
+}
+
 /** 2026-07-24 (user request): mirrors the staff-facing form's full field set - see backend's
  * PortalLoanApplicationDtos.ts doc comment for exactly what's excluded (AI Auto-fill, "use a
  * previous co-borrower", encodedByUserId) and why. */
@@ -180,6 +193,25 @@ export interface SubmitLoanApplicationRequest {
    * best-effort only (see LoanApplicationFormPage's getBestEffortGeolocation()). */
   submissionLatitude?: number;
   submissionLongitude?: number;
+  /** 2026-09-14 (user request: "Geotagging / Location Verification feature"). `SKIPPED` is a
+   * portal-frontend-only outcome (see LocationPermissionModal.tsx) for "Continue Without Location"
+   * - the applicant declined at our own pre-prompt modal, so the browser's native permission
+   * prompt was never even shown, which is a distinct outcome from a real browser-level `DENIED`. */
+  submissionLocationAccuracyMeters?: number;
+  submissionLocationCapturedAt?: string;
+  submissionLocationPermissionStatus?: LocationPermissionStatus;
+}
+
+export type LocationPermissionStatus = 'GRANTED' | 'DENIED' | 'UNAVAILABLE' | 'TIMEOUT' | 'UNSUPPORTED' | 'ERROR' | 'SKIPPED';
+
+/** 2026-09-14 (user request) - mirrors the backend's presentLocationVerification(): deliberately
+ * never carries raw latitude/longitude to the portal client ("Do not expose latitude/longitude
+ * publicly" / "Do NOT display the user's exact coordinates prominently"). */
+export interface PortalLocationVerification {
+  captured: boolean;
+  accuracyMeters: number | null;
+  capturedAt: string | null;
+  permissionStatus: LocationPermissionStatus | null;
 }
 
 export type LoanApplicationStatus = 'INCOMPLETE' | 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
@@ -195,6 +227,20 @@ export interface PortalLoanApplicationSummary {
   /** 2026-07-31 (user request) — true once every document this product requires has been
    * attached; backs the dashboard's missing-documents indicator. */
   documentsComplete: boolean;
+}
+
+/** 2026-09-14 (user request) - the `submit` endpoint's own response shape (a subset of
+ * PortalLoanApplicationSummary, plus locationVerification) - mirrors backend's
+ * portalLoanApplicationController.ts `submit` handler exactly. */
+export interface SubmitLoanApplicationResponse {
+  id: string;
+  branchId: string;
+  status: LoanApplicationStatus;
+  requestedCategory: string;
+  requestedAmount: number;
+  requestedTermMonths: number;
+  createdAt: string;
+  locationVerification: PortalLocationVerification;
 }
 
 /** 2026-07-24 (user request) - the full record shape returned by GET/PATCH
@@ -254,6 +300,7 @@ export interface PortalLoanApplicationDetail {
   requestedTermMonths: number;
   createdAt: string;
   updatedAt: string;
+  locationVerification: PortalLocationVerification;
 }
 
 export type PortalDocumentCategory =
@@ -368,6 +415,9 @@ export interface PortalProfile {
   reference2Name: string | null;
   reference2Mobile: string | null;
   addresses: PortalProfileAddress[];
+  /** 2026-09-14 (user request: "make profile picture mandatory") - whether a photo has been
+   * uploaded via POST /portal/profile/photo. */
+  hasProfilePhoto: boolean;
 }
 
 export interface UpdatePortalProfileRequest {

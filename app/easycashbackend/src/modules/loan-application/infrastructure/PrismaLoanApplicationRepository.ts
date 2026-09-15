@@ -77,6 +77,9 @@ function toDomain(row: LoanApplicationRow): LoanApplication {
     riskTier: row.riskTier ?? undefined,
     submissionLatitude: row.submissionLatitude ? Number(row.submissionLatitude) : undefined,
     submissionLongitude: row.submissionLongitude ? Number(row.submissionLongitude) : undefined,
+    submissionLocationAccuracyMeters: row.submissionLocationAccuracyMeters ? Number(row.submissionLocationAccuracyMeters) : undefined,
+    submissionLocationCapturedAt: row.submissionLocationCapturedAt ?? undefined,
+    submissionLocationPermissionStatus: row.submissionLocationPermissionStatus ?? undefined,
     assignedLoanProductVersionId: row.assignedLoanProductVersionId ?? undefined,
     reviewedByUserId: row.reviewedByUserId ?? undefined,
     reviewedAt: row.reviewedAt ?? undefined,
@@ -164,6 +167,11 @@ async function write(client: PrismaWriteClient, application: LoanApplication): P
       riskTier: p.riskTier,
       submissionLatitude: p.submissionLatitude,
       submissionLongitude: p.submissionLongitude,
+      // Create-only, same as submissionLatitude/Longitude above (never listed in `update:` below) -
+      // location is captured once, at initial submission, never touched by any later edit path.
+      submissionLocationAccuracyMeters: p.submissionLocationAccuracyMeters,
+      submissionLocationCapturedAt: p.submissionLocationCapturedAt,
+      submissionLocationPermissionStatus: p.submissionLocationPermissionStatus,
       assignedLoanProductVersionId: p.assignedLoanProductVersionId,
       reviewedByUserId: p.reviewedByUserId,
       reviewedAt: p.reviewedAt,

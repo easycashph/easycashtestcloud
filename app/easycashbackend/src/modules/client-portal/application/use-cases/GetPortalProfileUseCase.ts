@@ -1,12 +1,15 @@
 import { NotFoundError } from '@shared/errors/DomainError';
 import type { Borrower } from '@modules/borrower/domain/Borrower';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
+import type { IAttachmentRepository } from '@modules/document/application/ports/IAttachmentRepository';
 import type { IPortalAccountRepository, PortalAccountRecord } from '../ports/IPortalAccountRepository';
 import type { PortalProfileDto } from '../dtos/PortalProfileDtos';
+import { GetPortalProfilePhotoUseCase } from './GetPortalProfilePhotoUseCase';
 
-function fromBorrower(borrower: Borrower): PortalProfileDto {
+function fromBorrower(borrower: Borrower, hasProfilePhoto: boolean): PortalProfileDto {
   return {
     id: borrower.id,
+    hasProfilePhoto,
     firstName: borrower.name.firstName,
     middleName: borrower.name.middleName ?? null,
     lastName: borrower.name.lastName,
@@ -47,9 +50,10 @@ function fromBorrower(borrower: Borrower): PortalProfileDto {
  * has run "Create Client Profile") still gets a real, editable profile - backed by the new
  * pre-application profile columns on PortalAccount itself rather than a Borrower record that
  * doesn't exist yet. `id` is the PortalAccount's own id here (there's no Borrower id to use). */
-function fromPortalAccount(account: PortalAccountRecord): PortalProfileDto {
+function fromPortalAccount(account: PortalAccountRecord, hasProfilePhoto: boolean): PortalProfileDto {
   return {
     id: account.id,
+    hasProfilePhoto,
     firstName: account.firstName ?? '',
     middleName: account.middleName,
     lastName: account.lastName ?? '',
@@ -103,7 +107,13 @@ function fromPortalAccount(account: PortalAccountRecord): PortalProfileDto {
  * own pre-application profile view/edit surface instead (`fromPortalAccount` above).
  */
 export class GetPortalProfileUseCase {
-  constructor(private readonly deps: { portalAccountRepository: IPortalAccountRepository; borrowerRepository: IBorrowerRepository }) {}
+  constructor(
+    private readonly deps: {
+      portalAccountRepository: IPortalAccountRepository;
+      borrowerRepository: IBorrowerRepository;
+      attachmentRepository: IAttachmentRepository;
+    },
+  ) {}
 
   async execute(portalAccountId: string): Promise<PortalProfileDto> {
     const account = await this.deps.portalAccountRepository.findById(portalAccountId);
@@ -111,14 +121,20 @@ export class GetPortalProfileUseCase {
       throw new NotFoundError('PortalAccount', portalAccountId);
     }
 
+    // Always keyed by the PortalAccount's own id, not the Borrower's - a profile photo is a
+    // property of the account/login, not of whichever Borrower record it may or may not be
+    // linked to yet (see UploadPortalProfilePhotoUseCase's own doc comment).
+    const getPortalProfilePhotoUseCase = new GetPortalProfilePhotoUseCase(this.deps);
+    const photo = await getPortalProfilePhotoUseCase.execute(portalAccountId);
+
     if (!account.borrowerId) {
-      return fromPortalAccount(account);
+      return fromPortalAccount(account, photo !== null);
     }
 
     const borrower = await this.deps.borrowerRepository.findById(account.borrowerId);
     if (!borrower) {
       throw new NotFoundError('Borrower', account.borrowerId);
     }
-    return fromBorrower(borrower);
+    return fromBorrower(borrower, photo !== null);
   }
 }

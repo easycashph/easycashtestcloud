@@ -10,6 +10,8 @@ import type { UploadPortalLoanApplicationDocumentUseCase } from '../../applicati
 import type { ListPortalLoanApplicationDocumentsUseCase } from '../../application/use-cases/ListPortalLoanApplicationDocumentsUseCase';
 import type { DownloadPortalLoanApplicationDocumentUseCase } from '../../application/use-cases/DownloadPortalLoanApplicationDocumentUseCase';
 import type { GetPortalLoanApplicationStatusTimelineUseCase } from '../../application/use-cases/GetPortalLoanApplicationStatusTimelineUseCase';
+import type { SearchLicensedRecruitmentAgenciesUseCase } from '@modules/licensed-recruitment-agency/application/use-cases/SearchLicensedRecruitmentAgenciesUseCase';
+import { presentLicensedRecruitmentAgency } from '@modules/licensed-recruitment-agency/interface/http/presenters/LicensedRecruitmentAgencyPresenter';
 import { getCurrentPortalAccount } from './requirePortalAuth';
 import type {
   SubmitLoanApplicationRequestBody,
@@ -28,6 +30,11 @@ export interface PortalLoanApplicationControllerDeps {
   listPortalLoanApplicationDocumentsUseCase: ListPortalLoanApplicationDocumentsUseCase;
   downloadPortalLoanApplicationDocumentUseCase: DownloadPortalLoanApplicationDocumentUseCase;
   getPortalLoanApplicationStatusTimelineUseCase: GetPortalLoanApplicationStatusTimelineUseCase;
+  /** 2026-09-15 (user request): backs the Seafarer Loan Agency name field's dropdown - same
+   * DMW-licensed-agency search the LMS staff side uses (AgencyNameCombobox), just reachable under
+   * portal auth instead of staff auth. Read-only, no portal-specific business logic, so reusing
+   * the identical use case instance app.ts already built for the staff route is safe. */
+  searchLicensedRecruitmentAgenciesUseCase: SearchLicensedRecruitmentAgenciesUseCase;
 }
 
 /** The full self-service-editable shape - same field set updateSelfServiceIntake() accepts, plus
@@ -89,6 +96,23 @@ function presentFullApplication(application: LoanApplication) {
     requestedTermMonths: p.requestedTermMonths,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
+    locationVerification: presentLocationVerification(p),
+  };
+}
+
+/** 2026-09-14 (user request: "Geotagging / Location Verification feature" - "Do not expose
+ * latitude/longitude publicly" / "Do NOT display the user's exact coordinates prominently in the
+ * client UI") - deliberately excludes `submissionLatitude`/`submissionLongitude` from every portal
+ * response; only the internal LMS's own presenter (LoanApplicationPresenter.ts, an
+ * authorized-staff-only surface) returns the raw coordinates. `captured` is derived from
+ * `permissionStatus` rather than stored as its own column - "GRANTED" already means "captured",
+ * so a separate boolean would just be a second source of truth that could drift from it. */
+function presentLocationVerification(p: ReturnType<LoanApplication['toProps']>) {
+  return {
+    captured: p.submissionLocationPermissionStatus === 'GRANTED',
+    accuracyMeters: p.submissionLocationAccuracyMeters ?? null,
+    capturedAt: p.submissionLocationCapturedAt ?? null,
+    permissionStatus: p.submissionLocationPermissionStatus ?? null,
   };
 }
 
@@ -110,6 +134,7 @@ export class PortalLoanApplicationController {
         requestedAmount: props.requestedAmount,
         requestedTermMonths: props.requestedTermMonths,
         createdAt: props.createdAt,
+        locationVerification: presentLocationVerification(props),
       });
     } catch (error) {
       next(error);
@@ -151,6 +176,19 @@ export class PortalLoanApplicationController {
     try {
       const branches = await this.deps.listPortalBranchesUseCase.execute();
       res.status(200).json(branches);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-09-15 (user request): backs the Seafarer Loan Agency name field's searchable dropdown
+   * on the portal's own loan application form - same DMW-licensed-agency directory the LMS staff
+   * side searches, just under portal auth. */
+  searchAgencies = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const q = typeof req.query.q === 'string' ? req.query.q : '';
+      const entries = await this.deps.searchLicensedRecruitmentAgenciesUseCase.execute(q);
+      res.status(200).json({ items: entries.map(presentLicensedRecruitmentAgency) });
     } catch (error) {
       next(error);
     }
