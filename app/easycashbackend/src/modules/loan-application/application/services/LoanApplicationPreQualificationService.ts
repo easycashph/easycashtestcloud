@@ -1,5 +1,6 @@
 import type { IGeocodingService } from '@shared/geo/IGeocodingService';
 import { haversineDistanceKm } from '@shared/geo/haversineDistanceKm';
+import type { NegativeAreaEntry } from '@modules/negative-area/application/ports/INegativeAreaRepository';
 import type { IBranchRepository } from '../ports/IBranchRepository';
 import { computeEstimatedAmortization } from '../config/loanApplicationContractualRates';
 
@@ -21,6 +22,10 @@ export interface PreQualificationInput {
   applicantAddressText: string | undefined;
   occupation: string | undefined;
   employer: string | undefined;
+  /** Current NegativeArea list (2026-09-15 user request) - fetched once by the caller (never
+   * inside this service, to avoid an N+1 query when scoring a whole list of applications) and
+   * passed straight through to `evaluateCriteria`. */
+  negativeAreas: NegativeAreaEntry[];
 }
 
 export interface PreQualificationResult {
@@ -52,6 +57,13 @@ export interface PreQualificationBreakdown {
      * passing" on nearly every application, never actually informative). Employment/occupation is
      * captured at intake on every application and is a real, always-available signal. */
     employment: PreQualificationCheck;
+    /** 2026-09-15 (user request): the applicant's address text matched against the MIS-configurable
+     * NegativeArea list (Settings > System > Negative Areas). Text-substring matching, not
+     * geocoding - the `employment` check's own doc comment above explains why geocoding free-text
+     * Philippine addresses was already abandoned for the old `distance` check. Same advisory-only
+     * posture as every other check here: a match contributes to PREDECLINED, never an autonomous
+     * decline. */
+    negativeArea: PreQualificationCheck;
   };
   /** Same estimate the income check's own `detail` text already describes in words - exposed as a
    * raw number too (2026-07-20, Underwriting rework) so the Detail page can compute a Debt-to-
@@ -81,8 +93,10 @@ export class LoanApplicationPreQualificationService {
   }
 
   /**
-   * Pure, no I/O - re-evaluates the same three rules from already-known inputs so the Detail page
-   * can show a live "why" breakdown on every read without an extra network call.
+   * Pure, no I/O - re-evaluates the same four rules from already-known inputs so the Detail page
+   * can show a live "why" breakdown on every read without an extra network call. `negativeAreas`
+   * must be fetched by the caller beforehand (see `PreQualificationInput.negativeAreas`'s doc
+   * comment) - this method itself never queries the database.
    */
   evaluateCriteria(input: {
     age: number | undefined;
@@ -92,6 +106,8 @@ export class LoanApplicationPreQualificationService {
     requestedCategory: string;
     occupation: string | undefined;
     employer: string | undefined;
+    applicantAddressText: string | undefined;
+    negativeAreas: NegativeAreaEntry[];
   }): PreQualificationBreakdown {
     const ageOk = input.age !== undefined && input.age >= MIN_AGE && input.age <= MAX_AGE;
     const ageCheck: PreQualificationCheck = {
@@ -125,9 +141,22 @@ export class LoanApplicationPreQualificationService {
         : 'No occupation or employer on record.',
     };
 
+    const addressText = input.applicantAddressText?.trim().toLowerCase() ?? '';
+    const matchedArea = addressText ? input.negativeAreas.find((a) => addressText.includes(a.areaName.toLowerCase())) : undefined;
+    const negativeAreaCheck: PreQualificationCheck = {
+      passed: !matchedArea,
+      label: 'Negative Area',
+      detail: matchedArea
+        ? `Address matches a listed negative area: "${matchedArea.areaName}" (${matchedArea.city}).`
+        : addressText
+          ? 'No match against the current Negative Areas list.'
+          : 'No address on record to check against the Negative Areas list.',
+    };
+
     return {
-      status: ageCheck.passed && incomeCheck.passed && employmentCheck.passed ? 'PREAPPROVED' : 'PREDECLINED',
-      checks: { age: ageCheck, income: incomeCheck, employment: employmentCheck },
+      status:
+        ageCheck.passed && incomeCheck.passed && employmentCheck.passed && negativeAreaCheck.passed ? 'PREAPPROVED' : 'PREDECLINED',
+      checks: { age: ageCheck, income: incomeCheck, employment: employmentCheck, negativeArea: negativeAreaCheck },
       estimatedMonthlyAmortization: amortization,
     };
   }

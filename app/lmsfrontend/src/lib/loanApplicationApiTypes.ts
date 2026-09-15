@@ -142,6 +142,10 @@ export interface PreQualificationBreakdown {
      * breakdown computed before this change is still stored in the old `distance`-only shape until
      * the application is next edited/reverted (re-triggers classification). */
     employment?: PreQualificationCheck;
+    /** 2026-09-15: applicant address text matched against the MIS-configurable Negative Areas
+     * list - optional for the same reason `employment` is (a breakdown computed before this check
+     * existed won't have it until the application is next edited/reverted). */
+    negativeArea?: PreQualificationCheck;
   };
   /** Same figure the income check's own `detail` text already describes in words - a raw number
    * too (2026-07-20, Underwriting rework) so the Debt-to-Income ratio can be computed without

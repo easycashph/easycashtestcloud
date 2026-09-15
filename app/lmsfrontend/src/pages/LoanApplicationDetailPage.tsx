@@ -1926,6 +1926,10 @@ const UnderwritingCard = React.forwardRef<
                 breakdown stored until it's next edited/reverted (re-triggers classification) - shown
                 blank rather than a broken/undefined row until then. */}
             {breakdown.checks.employment && <DecisionScoringRow {...breakdown.checks.employment} />}
+            {/* 2026-09-15 (user request): Negative Area check - applicant's address text matched
+                against the MIS-configurable Negative Areas list (Settings > System > Negative
+                Areas). Same "recomputed fresh every read" shape/guard as `employment` above. */}
+            {breakdown.checks.negativeArea && <DecisionScoringRow {...breakdown.checks.negativeArea} />}
             {dtiPercent !== null && (
               <div className={cn('mt-2 flex items-center gap-4 rounded-md bg-muted/40 p-3', dtiBandClass(dtiPercent))}>
                 <DtiGauge percent={dtiPercent} />

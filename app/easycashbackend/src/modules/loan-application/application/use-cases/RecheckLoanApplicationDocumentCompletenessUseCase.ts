@@ -1,4 +1,5 @@
 import type { IAttachmentRepository } from '@modules/document/application/ports/IAttachmentRepository';
+import type { INegativeAreaRepository } from '@modules/negative-area/application/ports/INegativeAreaRepository';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
 import { assessLoanApplicationRisk } from '../services/LoanApplicationRiskAssessmentService';
@@ -8,6 +9,7 @@ export interface RecheckLoanApplicationDocumentCompletenessUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
   attachmentRepository: IAttachmentRepository;
   preQualificationService: LoanApplicationPreQualificationService;
+  negativeAreaRepository: INegativeAreaRepository;
 }
 
 /**
@@ -31,6 +33,7 @@ export class RecheckLoanApplicationDocumentCompletenessUseCase {
     const attachments = await this.deps.attachmentRepository.listByOwner('LOAN_APPLICATION', loanApplicationId);
     if (!isDocumentComplete(required, attachments.map((a) => a.documentCategory))) return;
 
+    const negativeAreas = await this.deps.negativeAreaRepository.list();
     const classification = await this.deps.preQualificationService.classify({
       branchId: p.branchId,
       age: p.age,
@@ -41,6 +44,7 @@ export class RecheckLoanApplicationDocumentCompletenessUseCase {
       applicantAddressText: p.address,
       occupation: p.occupation,
       employer: p.employer,
+      negativeAreas,
     });
     const riskAssessment = assessLoanApplicationRisk(p.monthlyIncome, classification.estimatedMonthlyAmortization);
 

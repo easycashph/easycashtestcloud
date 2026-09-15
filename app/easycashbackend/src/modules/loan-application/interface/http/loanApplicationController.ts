@@ -25,6 +25,7 @@ import type { GenerateLoanApplicationFormUseCase } from '../../application/use-c
 import type { GenerateCrmReportUseCase } from '../../application/use-cases/GenerateCrmReportUseCase';
 import type { GetLoanApplicationRiskSummaryUseCase } from '../../application/use-cases/GetLoanApplicationRiskSummaryUseCase';
 import type { LoanApplicationPreQualificationService } from '../../application/services/LoanApplicationPreQualificationService';
+import type { INegativeAreaRepository, NegativeAreaEntry } from '@modules/negative-area/application/ports/INegativeAreaRepository';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
 import type {
@@ -119,6 +120,7 @@ export interface LoanApplicationControllerDeps {
   generateCrmReportUseCase: GenerateCrmReportUseCase;
   getLoanApplicationRiskSummaryUseCase: GetLoanApplicationRiskSummaryUseCase;
   preQualificationService: LoanApplicationPreQualificationService;
+  negativeAreaRepository: INegativeAreaRepository;
   borrowerRepository: IBorrowerRepository;
   loanAccountRepository: ILoanAccountRepository;
 }
@@ -128,10 +130,13 @@ export class LoanApplicationController {
   constructor(private readonly deps: LoanApplicationControllerDeps) {}
 
   /** Re-derives the "why" breakdown behind the application's current PREAPPROVED/PREDECLINED
-   * verdict, purely from already-known fields — no I/O, so this is cheap and safe to call on every
-   * read. Since this recomputes fresh every time, every application (old or new) shows the current
-   * `checks.employment` shape immediately, not just ones edited after 2026-09-09's check swap. */
-  private buildBreakdown(application: LoanApplication) {
+   * verdict, purely from already-known fields plus the caller-supplied `negativeAreas` snapshot
+   * (fetched once per request by `present`/`presentMany`, not per application — see
+   * `INegativeAreaRepository.list`'s doc comment) — cheap and safe to call on every read. Since
+   * this recomputes fresh every time, every application (old or new) shows the current
+   * `checks.employment`/`checks.negativeArea` shape immediately, not just ones edited after the
+   * corresponding check was added. */
+  private buildBreakdown(application: LoanApplication, negativeAreas: NegativeAreaEntry[]) {
     const p = application.toProps();
     return this.deps.preQualificationService.evaluateCriteria({
       age: p.age,
@@ -141,6 +146,8 @@ export class LoanApplicationController {
       requestedCategory: p.requestedCategory,
       occupation: p.occupation,
       employer: p.employer,
+      applicantAddressText: p.address,
+      negativeAreas,
     });
   }
 
@@ -169,8 +176,8 @@ export class LoanApplicationController {
   }
 
   private async present(application: LoanApplication): Promise<ReturnType<typeof presentLoanApplication>> {
-    const linkage = await this.buildLinkage(application);
-    return presentLoanApplication(application, this.buildBreakdown(application), linkage);
+    const [linkage, negativeAreas] = await Promise.all([this.buildLinkage(application), this.deps.negativeAreaRepository.list()]);
+    return presentLoanApplication(application, this.buildBreakdown(application, negativeAreas), linkage);
   }
 
   /** Batched variant of `present` for list views - one borrower query and one loan-account
@@ -196,6 +203,10 @@ export class LoanApplicationController {
     const loanAccounts = await this.deps.loanAccountRepository.findManyBySourceApplicationIds(applications.map((a) => a.id));
     const loanAccountByApplicationId = new Map(loanAccounts.map((la) => [la.sourceApplicationId as string, la]));
 
+    // Fetched once for the whole page, not once per application — same N+1 avoidance as the
+    // borrower/loan-account lookups above (see INegativeAreaRepository.list's doc comment).
+    const negativeAreas = await this.deps.negativeAreaRepository.list();
+
     return applications.map((application) => {
       const borrower = borrowerByApplicationId.get(application.id);
       const loanAccount = loanAccountByApplicationId.get(application.id);
@@ -204,7 +215,7 @@ export class LoanApplicationController {
         createdLoanAccountId: loanAccount?.id ?? null,
         createdLoanAccountCode: loanAccount?.loanCode ?? null,
       };
-      return presentLoanApplication(application, this.buildBreakdown(application), linkage);
+      return presentLoanApplication(application, this.buildBreakdown(application, negativeAreas), linkage);
     });
   }
 

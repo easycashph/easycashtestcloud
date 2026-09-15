@@ -20,6 +20,7 @@ import { ActivityLogPage } from '@/pages/ActivityLogPage';
 import { DocumentTemplatesTab } from '@/pages/DocumentTemplatesTab';
 import { AnnouncementsTab } from '@/pages/AnnouncementsTab';
 import { BulkExportsPage } from '@/pages/BulkExportsPage';
+import { NegativeAreasTab } from '@/pages/NegativeAreasTab';
 
 /** 2026-07-18: temporarily prevented anyone from accidentally toggling these switches on via the
  * UI while content/test sends were still being verified. 2026-07-23 (user request): unlocked -
@@ -30,7 +31,16 @@ import { BulkExportsPage } from '@/pages/BulkExportsPage';
  * channel is in right now is untouched by this - it only blocks further clicks via the UI. */
 const REMINDER_TOGGLES_LOCKED = true;
 
-type SystemTab = 'reminders' | 'members' | 'products' | 'documents' | 'announcements' | 'activity-logs' | 'exports' | 'security';
+type SystemTab =
+  | 'reminders'
+  | 'members'
+  | 'products'
+  | 'documents'
+  | 'announcements'
+  | 'activity-logs'
+  | 'exports'
+  | 'negative-areas'
+  | 'security';
 const SYSTEM_TABS: SystemTab[] = [
   'reminders',
   'members',
@@ -39,6 +49,7 @@ const SYSTEM_TABS: SystemTab[] = [
   'announcements',
   'activity-logs',
   'exports',
+  'negative-areas',
   'security',
 ];
 
@@ -447,6 +458,7 @@ export function SystemPage() {
           <TabsTrigger value="announcements">Announcements</TabsTrigger>
           <TabsTrigger value="activity-logs">Activity Logs</TabsTrigger>
           <TabsTrigger value="exports">Exports</TabsTrigger>
+          <TabsTrigger value="negative-areas">Negative Areas</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
         </TabsList>
       </Tabs>
@@ -463,6 +475,7 @@ export function SystemPage() {
       {tab === 'announcements' && <AnnouncementsTab />}
       {tab === 'activity-logs' && <ActivityLogPage />}
       {tab === 'exports' && <BulkExportsPage embedded />}
+      {tab === 'negative-areas' && <NegativeAreasTab />}
       {tab === 'security' && <TwoFactorEnforcementCard />}
     </div>
   );

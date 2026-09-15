@@ -2,6 +2,7 @@ import { NotFoundError } from '@shared/errors/DomainError';
 import type { IAuditLogger } from '@modules/identity/application/ports/IAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { IAttachmentRepository } from '@modules/document/application/ports/IAttachmentRepository';
+import type { INegativeAreaRepository } from '@modules/negative-area/application/ports/INegativeAreaRepository';
 import type { LoanApplication } from '../../domain/LoanApplication';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
@@ -12,6 +13,7 @@ export interface RevertLoanApplicationDecisionUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
   auditLogger: IAuditLogger;
   preQualificationService: LoanApplicationPreQualificationService;
+  negativeAreaRepository: INegativeAreaRepository;
   attachmentRepository: IAttachmentRepository;
   profileActivityLogService?: ProfileActivityLogService;
 }
@@ -30,6 +32,7 @@ export class RevertLoanApplicationDecisionUseCase {
     const props = application.toProps();
     // Revert always reflects current data (a fresh classification), never a memorized old value —
     // e.g. income recorded after the original decision now factors into where it lands.
+    const negativeAreas = await this.deps.negativeAreaRepository.list();
     const classification = await this.deps.preQualificationService.classify({
       branchId: props.branchId,
       age: props.age,
@@ -40,6 +43,7 @@ export class RevertLoanApplicationDecisionUseCase {
       applicantAddressText: props.address,
       occupation: props.occupation,
       employer: props.employer,
+      negativeAreas,
     });
 
     // 2026-09-12 (user request): revert also has to reflect the INCOMPLETE stage, not just

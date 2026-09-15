@@ -158,6 +158,10 @@ async function main() {
     // other role's default grant below, so behavior is unchanged today (MIS-only) until MIS
     // explicitly extends it.
     'bulk_export.use': 'Export borrower/loan attachments and database dumps in bulk',
+    // 2026-09-15 (Negative Areas admin config, user request): MIS-only-by-default admin permission
+    // for the high-risk address list that feeds the pre-qualification Negative Area check - same
+    // posture as `document_template.manage`.
+    'negative_area.manage': 'Manage the Negative Areas high-risk address list',
   };
   const permissionCodes = Object.keys(permissionDescriptions);
 

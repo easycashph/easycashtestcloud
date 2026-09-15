@@ -327,6 +327,11 @@ import { PrismaInterestRateChartRepository } from '@modules/interest-rate-chart/
 import { createLicensedRecruitmentAgencyRouter } from '@modules/licensed-recruitment-agency/interface/http/licensedRecruitmentAgencyRouter';
 import { SearchLicensedRecruitmentAgenciesUseCase } from '@modules/licensed-recruitment-agency/application/use-cases/SearchLicensedRecruitmentAgenciesUseCase';
 import { PrismaLicensedRecruitmentAgencyRepository } from '@modules/licensed-recruitment-agency/infrastructure/PrismaLicensedRecruitmentAgencyRepository';
+import { createNegativeAreaRouter } from '@modules/negative-area/interface/http/negativeAreaRouter';
+import { ListNegativeAreasUseCase } from '@modules/negative-area/application/use-cases/ListNegativeAreasUseCase';
+import { CreateNegativeAreaUseCase } from '@modules/negative-area/application/use-cases/CreateNegativeAreaUseCase';
+import { DeleteNegativeAreaUseCase } from '@modules/negative-area/application/use-cases/DeleteNegativeAreaUseCase';
+import { PrismaNegativeAreaRepository } from '@modules/negative-area/infrastructure/PrismaNegativeAreaRepository';
 import { createReportingRouter } from '@modules/reporting/interface/http/reportingRouter';
 import { GetLoanOriginationReportUseCase } from '@modules/reporting/application/use-cases/GetLoanOriginationReportUseCase';
 import { GetCollectionReportUseCase } from '@modules/reporting/application/use-cases/GetCollectionReportUseCase';
@@ -1425,6 +1430,7 @@ export function createApp(): Express {
   const branchRepository = new PrismaBranchRepository();
   const geocodingService = new NominatimGeocodingService();
   const preQualificationService = new LoanApplicationPreQualificationService({ branchRepository, geocodingService });
+  const negativeAreaRepository = new PrismaNegativeAreaRepository();
 
   // 2026-08-21 ("Print Application" feature): the document module's shared attachmentRepository/
   // fileStorage/uploadAttachmentUseCase are wired further below (see "document module wiring"),
@@ -1442,6 +1448,7 @@ export function createApp(): Express {
       createLoanApplicationUseCase: new CreateLoanApplicationUseCase({
         loanApplicationRepository,
         preQualificationService,
+        negativeAreaRepository,
         profileActivityLogService,
         loanAccountRepository,
         notificationService,
@@ -1469,6 +1476,7 @@ export function createApp(): Express {
         loanApplicationRepository,
         auditLogger,
         preQualificationService,
+        negativeAreaRepository,
         attachmentRepository: new PrismaAttachmentRepository(),
         profileActivityLogService,
       }),
@@ -1497,8 +1505,17 @@ export function createApp(): Express {
         auditLogger,
         profileActivityLogService,
       }),
-      updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, profileActivityLogService }),
-      updateLoanApplicationIntakeUseCase: new UpdateLoanApplicationIntakeUseCase({ loanApplicationRepository, preQualificationService }),
+      updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({
+        loanApplicationRepository,
+        preQualificationService,
+        negativeAreaRepository,
+        profileActivityLogService,
+      }),
+      updateLoanApplicationIntakeUseCase: new UpdateLoanApplicationIntakeUseCase({
+        loanApplicationRepository,
+        preQualificationService,
+        negativeAreaRepository,
+      }),
       deleteLoanApplicationUseCase: new DeleteLoanApplicationUseCase({ loanApplicationRepository, auditLogger }),
       generateLoanApplicationFormUseCase: new GenerateLoanApplicationFormUseCase({
         loanApplicationRepository,
@@ -1514,6 +1531,7 @@ export function createApp(): Express {
       }),
       getLoanApplicationRiskSummaryUseCase: new GetLoanApplicationRiskSummaryUseCase({ loanApplicationRepository }),
       preQualificationService,
+      negativeAreaRepository,
       borrowerRepository,
       loanAccountRepository,
     },
@@ -1629,6 +1647,20 @@ export function createApp(): Express {
   );
   app.use('/api/v1', licensedRecruitmentAgencyRouter);
 
+  // --- negative-area module wiring: MIS-configurable high-risk address list feeding
+  // LoanApplicationPreQualificationService's Negative Area check (2026-09-15 user request).
+  // negativeAreaRepository itself is declared earlier, alongside preQualificationService, since
+  // the loan-application module's own use cases need it too. ---
+  const negativeAreaRouter = createNegativeAreaRouter(
+    {
+      listNegativeAreasUseCase: new ListNegativeAreasUseCase({ negativeAreaRepository }),
+      createNegativeAreaUseCase: new CreateNegativeAreaUseCase({ negativeAreaRepository }),
+      deleteNegativeAreaUseCase: new DeleteNegativeAreaUseCase({ negativeAreaRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', negativeAreaRouter);
+
   // --- reporting module wiring: Loan/Collection/Transaction Report pages ---
   const reportingRepository = new PrismaReportingRepository();
   const reportingRouter = createReportingRouter(
@@ -1670,6 +1702,7 @@ export function createApp(): Express {
         loanApplicationRepository,
         attachmentRepository,
         preQualificationService,
+        negativeAreaRepository,
       }),
     },
     tokenService,
@@ -1706,13 +1739,22 @@ export function createApp(): Express {
     {
       submitLoanApplicationUseCase: new SubmitLoanApplicationUseCase({
         portalAccountRepository,
-        createLoanApplicationUseCase: new CreateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, notificationService }),
+        createLoanApplicationUseCase: new CreateLoanApplicationUseCase({
+          loanApplicationRepository,
+          preQualificationService,
+          negativeAreaRepository,
+          notificationService,
+        }),
       }),
       listPortalLoanApplicationsUseCase: new ListPortalLoanApplicationsUseCase({ loanApplicationRepository, attachmentRepository }),
       getPortalLoanApplicationUseCase: new GetPortalLoanApplicationUseCase({ loanApplicationRepository }),
       updatePortalLoanApplicationUseCase: new UpdatePortalLoanApplicationUseCase({
         loanApplicationRepository,
-        updateLoanApplicationSelfServiceUseCase: new UpdateLoanApplicationSelfServiceUseCase({ loanApplicationRepository, preQualificationService }),
+        updateLoanApplicationSelfServiceUseCase: new UpdateLoanApplicationSelfServiceUseCase({
+          loanApplicationRepository,
+          preQualificationService,
+          negativeAreaRepository,
+        }),
       }),
       listPortalBranchesUseCase: new ListPortalBranchesUseCase({ branchRepository }),
       uploadPortalLoanApplicationDocumentUseCase: new UploadPortalLoanApplicationDocumentUseCase({
@@ -1722,6 +1764,7 @@ export function createApp(): Express {
           loanApplicationRepository,
           attachmentRepository,
           preQualificationService,
+          negativeAreaRepository,
         }),
       }),
       listPortalLoanApplicationDocumentsUseCase: new ListPortalLoanApplicationDocumentsUseCase({ loanApplicationRepository, attachmentRepository }),

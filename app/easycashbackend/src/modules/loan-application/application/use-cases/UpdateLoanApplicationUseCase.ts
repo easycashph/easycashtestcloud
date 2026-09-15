@@ -1,5 +1,6 @@
 import { NotFoundError } from '@shared/errors/DomainError';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import type { INegativeAreaRepository } from '@modules/negative-area/application/ports/INegativeAreaRepository';
 import type { LoanApplication } from '../../domain/LoanApplication';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
@@ -8,6 +9,7 @@ import { assessLoanApplicationRisk } from '../services/LoanApplicationRiskAssess
 export interface UpdateLoanApplicationUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
   preQualificationService: LoanApplicationPreQualificationService;
+  negativeAreaRepository: INegativeAreaRepository;
   profileActivityLogService?: ProfileActivityLogService;
 }
 
@@ -30,6 +32,7 @@ export class UpdateLoanApplicationUseCase {
     // Re-classify with the freshly saved income — no-ops (via applySystemClassification's own
     // guard) once a human has already made the real APPROVED/DECLINED decision.
     const props = application.toProps();
+    const negativeAreas = await this.deps.negativeAreaRepository.list();
     const classification = await this.deps.preQualificationService.classify({
       branchId: props.branchId,
       age: props.age,
@@ -40,6 +43,7 @@ export class UpdateLoanApplicationUseCase {
       applicantAddressText: props.address,
       occupation: props.occupation,
       employer: props.employer,
+      negativeAreas,
     });
     const riskAssessment = assessLoanApplicationRisk(props.monthlyIncome, classification.estimatedMonthlyAmortization);
     application.applySystemClassification({ ...classification, dtiPercent: riskAssessment?.dtiPercent, riskTier: riskAssessment?.riskTier });

@@ -6,6 +6,7 @@ const MAX_ELIGIBLE_AGE = 59;
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
 import type { NotificationService } from '@modules/notification/application/NotificationService';
+import type { INegativeAreaRepository } from '@modules/negative-area/application/ports/INegativeAreaRepository';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { CreateLoanApplicationInput } from '../dtos/LoanApplicationDtos';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
@@ -20,6 +21,7 @@ const APPLICATION_SUBMITTED_NOTIFY_ROLES = ['MIS', 'Loan Operation Manager', 'CR
 export interface CreateLoanApplicationUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
   preQualificationService: LoanApplicationPreQualificationService;
+  negativeAreaRepository: INegativeAreaRepository;
   profileActivityLogService?: ProfileActivityLogService;
   /** Only needed to enforce the one-application-at-a-time rule below - undefined for callers that
    * don't set `input.borrowerId` (the original walk-in intake flow has no borrower yet). */
@@ -71,6 +73,7 @@ export class CreateLoanApplicationUseCase {
       if (hasPendingApplication) throw new BorrowerHasInFlightLoanError('PENDING_APPLICATION');
     }
 
+    const negativeAreas = await this.deps.negativeAreaRepository.list();
     const classification = await this.deps.preQualificationService.classify({
       branchId: input.branchId,
       age: input.age,
@@ -81,6 +84,7 @@ export class CreateLoanApplicationUseCase {
       applicantAddressText: input.address,
       occupation: input.occupation,
       employer: input.employer,
+      negativeAreas,
     });
 
     const riskAssessment = assessLoanApplicationRisk(input.monthlyIncome, classification.estimatedMonthlyAmortization);

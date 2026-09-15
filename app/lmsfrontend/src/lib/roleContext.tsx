@@ -82,7 +82,8 @@ export type PermissionCode =
   | 'two_factor_enforcement.manage'
   | 'profile_activity_log.manage'
   | 'chat_canned_response.manage'
-  | 'bulk_export.use';
+  | 'bulk_export.use'
+  | 'negative_area.manage';
 
 interface RoleContextValue {
   currentAccount: AuthenticatedAccount;
@@ -167,6 +168,10 @@ interface RoleContextValue {
   /** 2026-08-24: the Exports hub (client/loan attachments, database dump) - MIS-only by default,
    * now configurable from the Roles & Permissions screen instead of a hardcoded role check. */
   canUseBulkExport: boolean;
+  /** 2026-09-15: the Negative Areas admin config screen (high-risk address list feeding the Loan
+   * Application pre-qualification Negative Area check) - MIS-only by default, configurable from
+   * Roles & Permissions. */
+  canManageNegativeAreas: boolean;
   /** True if the signed-in user's role currently has the given permission code granted - the
    * general-purpose escape hatch for a check that doesn't already have its own named `can*`
    * boolean above. */
@@ -372,6 +377,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canManageClients: hasPermission('borrower.write'),
     canManageLoanProducts: hasPermission('loan_product.write'),
     canManageDocumentTemplates: hasPermission('document_template.manage'),
+    canManageNegativeAreas: hasPermission('negative_area.manage'),
     canUseBulkExport: hasPermission('bulk_export.use'),
     hasPermission,
     refreshCurrentUser,

@@ -919,6 +919,25 @@ model LicensedRecruitmentAgency {
   @@map("licensed_recruitment_agencies")
 }
 
+/// MIS-configurable list of high-risk addresses (2026-09-15 user request, seeded from an internal
+/// "Negative Areas" reference spreadsheet) - `city` groups related `areaName` rows (a barangay,
+/// village, street, or compound) for display only; matching is done against `areaName` text. Feeds
+/// LoanApplicationPreQualificationService's advisory Negative Area check, never an autonomous
+/// decline (same posture as the other three pre-qualification checks) - a match just contributes
+/// to the PREDECLINED pre-classification staff then review.
+model NegativeArea {
+  id       String @id @default(uuid())
+  city     String
+  areaName String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([city, areaName])
+  @@index([city])
+  @@map("negative_areas")
+}
+
 /// LPV-1: every approved LoanAccount references a specific, immutable
 /// version. Editing a product never affects loans already approved under
 /// a prior version (LPV-3).
