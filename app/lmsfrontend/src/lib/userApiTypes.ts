@@ -23,6 +23,10 @@ export interface User {
   birthday: string | null;
   createdAt: string;
   updatedAt: string;
+  /** 2026-09-15 (user request, "naka-online ba ang user"): most recent session refresh - a
+   * session-backed "online" signal (see backend UserRecord.lastActiveAt's doc comment), not the
+   * Chat module's separate self-reported agent presence. null means never logged in. */
+  lastActiveAt: string | null;
 }
 
 /** Body for `POST /users`. */

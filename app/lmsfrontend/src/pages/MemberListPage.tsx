@@ -47,9 +47,30 @@ function getSortValue(user: User, key: string): string | number | Date | null | 
       return user.status;
     case 'createdAt':
       return new Date(user.createdAt);
+    case 'lastActiveAt':
+      return user.lastActiveAt ? new Date(user.lastActiveAt) : null;
     default:
       return undefined;
   }
+}
+
+/** 2026-09-15 (user request, "naka-online ba ang user"): the access token TTL is 15 minutes and the
+ * frontend proactively refreshes ~1 minute before expiry (see apiClient.ts's
+ * scheduleProactiveRefresh), so an open tab's session refreshes roughly every ~14 minutes - a
+ * 20-minute window comfortably covers that cadence without reading as "online" long after a tab
+ * was actually closed. */
+const ONLINE_THRESHOLD_MS = 20 * 60 * 1000;
+
+function describeLastActive(lastActiveAt: string | null): { label: string; online: boolean } {
+  if (!lastActiveAt) return { label: 'Never logged in', online: false };
+  const ms = Date.now() - new Date(lastActiveAt).getTime();
+  if (ms <= ONLINE_THRESHOLD_MS) return { label: 'Online', online: true };
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return { label: `${minutes}m ago`, online: false };
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return { label: `${hours}h ago`, online: false };
+  const days = Math.round(hours / 24);
+  return { label: `${days}d ago`, online: false };
 }
 
 interface MemberDraft {
@@ -747,10 +768,15 @@ export function MemberListPage() {
                 <SortableTableHead sortKey="createdAt" currentSort={sort} onSort={toggleSort} isDateColumn>
                   Created
                 </SortableTableHead>
+                <SortableTableHead sortKey="lastActiveAt" currentSort={sort} onSort={toggleSort} isDateColumn>
+                  Last Active
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((user) => (
+              {sorted.map((user) => {
+                const presence = describeLastActive(user.lastActiveAt);
+                return (
                 <TableRow key={user.id}>
                   <TableCell>
                     <button
@@ -758,17 +784,25 @@ export function MemberListPage() {
                       onClick={() => setViewingUser(user)}
                       className="flex items-center gap-2 text-left hover:underline"
                     >
-                      <Avatar className="h-7 w-7">
-                        <AvatarFallback className={cn('text-xs', avatarColorClasses(user.fullName))}>
-                          {user.fullName
-                            .split(' ')
-                            .filter(Boolean)
-                            .map((p) => p[0])
-                            .slice(0, 2)
-                            .join('')
-                            .toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                      <span className="relative inline-flex h-7 w-7 shrink-0">
+                        <Avatar className="h-7 w-7">
+                          <AvatarFallback className={cn('text-xs', avatarColorClasses(user.fullName))}>
+                            {user.fullName
+                              .split(' ')
+                              .filter(Boolean)
+                              .map((p) => p[0])
+                              .slice(0, 2)
+                              .join('')
+                              .toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        {presence.online && (
+                          <span
+                            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-success"
+                            title="Online"
+                          />
+                        )}
+                      </span>
                       <span className="font-medium">{user.fullName}</span>
                     </button>
                   </TableCell>
@@ -783,11 +817,18 @@ export function MemberListPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDate(user.createdAt)}</TableCell>
+                  <TableCell className="text-xs">
+                    <span className={cn('flex items-center gap-1.5', presence.online ? 'font-medium text-success' : 'text-muted-foreground')}>
+                      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', presence.online ? 'bg-success' : 'bg-muted-foreground/50')} />
+                      {presence.label}
+                    </span>
+                  </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
               {sorted.length === 0 && !usersQuery.isLoading && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                     No staff accounts found.
                   </TableCell>
                 </TableRow>
@@ -828,11 +869,24 @@ export function MemberListPage() {
                       .toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <div>
+                <div className="space-y-1">
                   <p className="text-sm font-semibold">{viewingUser.fullName}</p>
-                  <Badge variant={viewingUser.status === 'ACTIVE' ? 'success' : viewingUser.status === 'SUSPENDED' ? 'destructive' : 'secondary'}>
-                    {viewingUser.status === 'ACTIVE' ? 'Active' : viewingUser.status === 'SUSPENDED' ? 'Suspended' : 'Inactive'}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant={viewingUser.status === 'ACTIVE' ? 'success' : viewingUser.status === 'SUSPENDED' ? 'destructive' : 'secondary'}>
+                      {viewingUser.status === 'ACTIVE' ? 'Active' : viewingUser.status === 'SUSPENDED' ? 'Suspended' : 'Inactive'}
+                    </Badge>
+                    {(() => {
+                      const presence = describeLastActive(viewingUser.lastActiveAt);
+                      return (
+                        <span
+                          className={cn('flex items-center gap-1.5 text-xs', presence.online ? 'font-medium text-success' : 'text-muted-foreground')}
+                        >
+                          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', presence.online ? 'bg-success' : 'bg-muted-foreground/50')} />
+                          {presence.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
               <div className="space-y-1">

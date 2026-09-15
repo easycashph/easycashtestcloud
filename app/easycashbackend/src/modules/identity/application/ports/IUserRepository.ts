@@ -26,6 +26,16 @@ export interface UserRecord {
   twoFactorChannel: 'EMAIL' | 'SMS' | null;
   createdAt: Date;
   updatedAt: Date;
+  /** 2026-09-15 (user request, "naka-online ba ang user"): most recent RefreshToken.createdAt for
+   * this user - each refresh rotates the token (see RefreshTokenUseCase's doc comment: revoke old +
+   * issue new), so this IS effectively "last time this user's browser tab silently refreshed its
+   * session," which happens roughly every access-token-TTL-minus-safety-margin interval (~14 min
+   * today) while a tab stays open - a real, session-backed "online" signal, not a self-reported one
+   * like the Chat module's separate agent presence. Only `findMany`/`findById` populate this with a
+   * real value (a batched query, not per-row N+1); every other IUserRepository method returns
+   * `null` here since presence isn't needed on those paths (login, create, update, notification
+   * recipient resolution) - `null` from those callers means "not computed," not "never logged in." */
+  lastActiveAt: Date | null;
 }
 
 export interface CreateUserInput {

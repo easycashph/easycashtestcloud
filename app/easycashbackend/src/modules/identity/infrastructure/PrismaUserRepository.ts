@@ -18,7 +18,7 @@ const USER_WITH_ROLES_INCLUDE = {
 
 type UserWithRoles = Prisma.UserGetPayload<{ include: typeof USER_WITH_ROLES_INCLUDE }>;
 
-function toUserRecord(row: UserWithRoles): UserRecord {
+function toUserRecord(row: UserWithRoles, lastActiveAt: Date | null = null): UserRecord {
   return {
     id: row.id,
     branchId: row.branchId,
@@ -39,6 +39,7 @@ function toUserRecord(row: UserWithRoles): UserRecord {
     twoFactorChannel: row.twoFactorChannel as 'EMAIL' | 'SMS' | null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    lastActiveAt,
   };
 }
 
@@ -70,7 +71,9 @@ export class PrismaUserRepository implements IUserRepository {
       where: { id },
       include: USER_WITH_ROLES_INCLUDE,
     });
-    return row ? toUserRecord(row) : null;
+    if (!row) return null;
+    const lastActive = await prisma.refreshToken.aggregate({ where: { userId: id }, _max: { createdAt: true } });
+    return toUserRecord(row, lastActive._max.createdAt ?? null);
   }
 
   /** Mirrors PrismaLoanApplicationRepository.findMany: cursor pagination, newest first. LMS staff accounts have no branch dimension to filter by here — every authenticated user may view the roster. */
@@ -91,7 +94,19 @@ export class PrismaUserRepository implements IUserRepository {
       ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
       include: USER_WITH_ROLES_INCLUDE,
     });
-    return rows.map(toUserRecord);
+    // Batched (one query for the whole page), not N+1 - see UserRecord.lastActiveAt's doc comment.
+    const lastActiveByUserId = new Map<string, Date>();
+    if (rows.length > 0) {
+      const grouped = await prisma.refreshToken.groupBy({
+        by: ['userId'],
+        where: { userId: { in: rows.map((r) => r.id) } },
+        _max: { createdAt: true },
+      });
+      for (const g of grouped) {
+        if (g._max.createdAt) lastActiveByUserId.set(g.userId, g._max.createdAt);
+      }
+    }
+    return rows.map((row) => toUserRecord(row, lastActiveByUserId.get(row.id) ?? null));
   }
 
   async create(input: CreateUserInput): Promise<UserRecord> {
@@ -169,7 +184,7 @@ export class PrismaUserRepository implements IUserRepository {
       },
       include: USER_WITH_ROLES_INCLUDE,
     });
-    return rows.map(toUserRecord);
+    return rows.map((row) => toUserRecord(row));
   }
 
   async findByRoles(roleNames: string[]): Promise<UserRecord[]> {
@@ -180,6 +195,6 @@ export class PrismaUserRepository implements IUserRepository {
       },
       include: USER_WITH_ROLES_INCLUDE,
     });
-    return rows.map(toUserRecord);
+    return rows.map((row) => toUserRecord(row));
   }
 }

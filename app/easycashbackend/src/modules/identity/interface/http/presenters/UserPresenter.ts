@@ -20,6 +20,9 @@ export interface UserResponse {
   twoFactorChannel: 'EMAIL' | 'SMS' | null;
   createdAt: string;
   updatedAt: string;
+  /** 2026-09-15: see UserRecord.lastActiveAt's doc comment - a session-backed "online" signal, only
+   * accurate on responses that came from ListUsersUseCase/GetUserUseCase (findMany/findById). */
+  lastActiveAt: string | null;
 }
 
 /** Never include passwordHash — presenters are the one enforced boundary between UserRecord and the wire. */
@@ -44,5 +47,6 @@ export function presentUser(record: UserRecord): UserResponse {
     twoFactorChannel: record.twoFactorChannel,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    lastActiveAt: record.lastActiveAt ? record.lastActiveAt.toISOString() : null,
   };
 }
