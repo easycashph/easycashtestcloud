@@ -157,16 +157,47 @@ use desktop-linux`) proactively this time before the first build attempt, and bo
 frontend builds succeeded cleanly afterward. Worth noting this crash can recur within the same
 session, not just as an isolated incident.
 
+## System settings page: grouped left-rail navigation
+
+Adding the Negative Areas tab pushed the Settings > System page to 9 tabs, and the existing
+`TabsList` was hardcoded to `grid-cols-8` - Security wrapped onto its own second line (visible in a
+screenshot the user shared). User asked for a redesign suggestion "para mag kasya ang menu...
+Gawan mo ng high end, advance design," and to see a mockup first.
+
+Built three mockup options with the visualize tool (matching the app's real navy/gold theme
+tokens, not generic placeholder colors) for the user to compare side by side: (A) a grouped
+left-rail nav, (B) compact icon tabs, (C) a segmented row with a "More" overflow menu. Recommended
+(A) - the only option that never wraps again regardless of how many settings get added later, and
+reads as the more "enterprise admin panel" pattern (Stripe/Linear/Vercel-style settings). User
+asked to see a full-page version of (A) next (header + rail + Negative Areas panel as example
+content) before approving - shown, then approved as-is ("ok na yan, tuloy mo").
+
+Implemented in `SystemPage.tsx`: replaced the flat `SYSTEM_TABS` array and `Tabs`/`TabsList`/
+`TabsTrigger` row with `SYSTEM_NAV_GROUPS` (two groups - "Configuration" and "Access &
+monitoring" - each an array of `{ value, label, icon }`), a left-rail `<nav>` rendering those
+groups as plain buttons (`w-56` fixed width at `lg:` and up, stacks full-width in a 2-column grid
+below `lg:` so it still works at phone width per CLAUDE.md), plus a filter `<Input>` above the
+groups that hides non-matching items/empty groups live as the user types. `SYSTEM_TABS` is now
+derived (`flatMap`) from `SYSTEM_NAV_GROUPS` rather than hand-duplicated, so a future new tab is
+one entry in one place. Purely a navigation-chrome change - which `SystemTab` value renders which
+panel component is byte-identical to before.
+
+Could not visually verify the authenticated page myself (same standing limitation - no login);
+type-checked clean and deployed on that basis, same as every other frontend change this session.
+
+Commits: `b5c6b539` (feature), `acea03d8` (build-info).
+
 ## Current state
 
-- All five feature changes deployed and verified this session: `/health` OK, both containers'
-  `build-info.json` confirmed stamped at each feature's final commit, the Negative Areas endpoint
-  confirmed wired (401 Unauthorized without a token, not 404).
+- All six feature/design changes deployed and verified this session: `/health` OK, both
+  containers' `build-info.json` confirmed stamped at each change's final commit, the Negative Areas
+  endpoint confirmed wired (401 Unauthorized without a token, not 404), the redesigned System page
+  confirmed serving (HTTP 200).
 - Commits, in order: `309604a1` (agency address/contact auto-fill), `c3999bc1` (Position dropdown),
   `e19a0890` (Bank dropdown), `3a1b29d2` + `19e15a4b` (Export History requester), `0a39413b` +
-  `d961ce5d` (Negative Areas).
+  `d961ce5d` (Negative Areas), `b5c6b539` + `acea03d8` (System nav redesign).
 - Not yet tested end-to-end in the live UI by me (cannot log in) - user still needs to confirm all
-  five changes look/behave as expected in production: the three dropdowns, Export History now
-  showing other users' exports, and the new Negative Areas tab (add/remove an area, then confirm a
-  test Loan Application with a matching address shows the new "Negative Area" row in Decision
-  Scoring and lands PREDECLINED).
+  six changes look/behave as expected in production: the three dropdowns, Export History now
+  showing other users' exports, the Negative Areas tab (add/remove an area, then confirm a test
+  Loan Application with a matching address shows the new "Negative Area" row in Decision Scoring
+  and lands PREDECLINED), and the new grouped left-rail Settings nav (including the search filter).
