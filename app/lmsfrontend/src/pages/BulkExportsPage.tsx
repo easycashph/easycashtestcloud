@@ -112,11 +112,16 @@ function StatusPill({ status }: { status: BulkExportStatus }) {
  * Notification bell entry was already missed or cleared. Polls while any job is still PENDING/
  * PROCESSING so the status updates without a manual refresh; stops polling once everything visible
  * has settled.
+ *
+ * 2026-09-15 (user request): Export History shows every requester's jobs, not just the viewer's
+ * own, with a "Requested By" column - so MIS can see who exported what. Download/Cancel stay
+ * restricted to the original requester (unchanged backend behavior), so those actions are hidden
+ * for rows someone else requested rather than shown and then rejected by the API.
  */
 export function BulkExportsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { canUseBulkExport } = useRole();
+  const { canUseBulkExport, currentAccount } = useRole();
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
   // 2026-08-25 (Cancel Export, user request, mocked up first): confirming inline in the row's own
@@ -251,6 +256,7 @@ export function BulkExportsPage({ embedded = false }: { embedded?: boolean } = {
                     <th className="px-3 py-2 text-right font-medium">Records / Files</th>
                     <th className="px-3 py-2 text-right font-medium">Size</th>
                     <th className="px-3 py-2 font-medium">Requested</th>
+                    <th className="px-3 py-2 font-medium">Requested By</th>
                     <th className="px-3 py-2" />
                   </tr>
                 </thead>
@@ -284,8 +290,9 @@ export function BulkExportsPage({ embedded = false }: { embedded?: boolean } = {
                           {job.resultFileSize !== null ? formatFileSize(job.resultFileSize) : '—'}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-muted-foreground">{formatDateTime(job.createdAt)}</td>
+                        <td className="px-3 py-2.5 text-xs text-muted-foreground">{job.requestedByName ?? '—'}</td>
                         <td className="px-3 py-2.5 text-right">
-                          {job.status === 'COMPLETED' && (
+                          {job.status === 'COMPLETED' && job.requestedByUserId === currentAccount.id && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -302,6 +309,7 @@ export function BulkExportsPage({ embedded = false }: { embedded?: boolean } = {
                             </Button>
                           )}
                           {(job.status === 'PENDING' || job.status === 'PROCESSING') &&
+                            job.requestedByUserId === currentAccount.id &&
                             (confirmingCancelId === job.id ? (
                               <div className="flex items-center justify-end gap-1.5 text-xs">
                                 <span className="text-muted-foreground">Stop this export?</span>

@@ -14,4 +14,6 @@ export interface BulkExportJob {
   errorMessage: string | null;
   createdAt: string;
   completedAt: string | null;
+  requestedByUserId: string;
+  requestedByName: string | null;
 }

@@ -3,7 +3,7 @@ import { getCurrentUser } from '@shared/middleware/requireAuth';
 import { resolveBranchScope, resolveBranchFilter } from '@shared/http/branchScope';
 import { ValidationError } from '@shared/errors/DomainError';
 import type { CreateBulkExportJobUseCase } from '../../application/use-cases/CreateBulkExportJobUseCase';
-import type { ListMyBulkExportJobsUseCase } from '../../application/use-cases/ListMyBulkExportJobsUseCase';
+import type { ListAllBulkExportJobsUseCase } from '../../application/use-cases/ListAllBulkExportJobsUseCase';
 import type { DownloadBulkExportJobUseCase } from '../../application/use-cases/DownloadBulkExportJobUseCase';
 import type { GetBulkExportDefaultRangeUseCase } from '../../application/use-cases/GetBulkExportDefaultRangeUseCase';
 import type { CancelBulkExportJobUseCase } from '../../application/use-cases/CancelBulkExportJobUseCase';
@@ -12,7 +12,7 @@ import { presentBulkExportJob } from './presenters/BulkExportJobPresenter';
 
 export interface BulkExportControllerDeps {
   createBulkExportJobUseCase: CreateBulkExportJobUseCase;
-  listMyBulkExportJobsUseCase: ListMyBulkExportJobsUseCase;
+  listAllBulkExportJobsUseCase: ListAllBulkExportJobsUseCase;
   downloadBulkExportJobUseCase: DownloadBulkExportJobUseCase;
   getBulkExportDefaultRangeUseCase: GetBulkExportDefaultRangeUseCase;
   cancelBulkExportJobUseCase: CancelBulkExportJobUseCase;
@@ -50,11 +50,10 @@ export class BulkExportController {
     }
   };
 
-  listMine = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  listAll = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const currentUser = getCurrentUser(req);
-      const jobs = await this.deps.listMyBulkExportJobsUseCase.execute(currentUser.sub);
-      res.status(200).json({ items: jobs.map(presentBulkExportJob) });
+      const results = await this.deps.listAllBulkExportJobsUseCase.execute();
+      res.status(200).json({ items: results.map(({ job, requestedByName }) => presentBulkExportJob(job, requestedByName)) });
     } catch (error) {
       next(error);
     }

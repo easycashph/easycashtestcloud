@@ -67,12 +67,11 @@ export class PrismaBulkExportJobRepository implements IBulkExportJobRepository {
     return row ? toDomain(row) : null;
   }
 
-  async findManyByRequester(requestedByUserId: string, ctx?: TransactionContext): Promise<BulkExportJob[]> {
+  async findMany(ctx?: TransactionContext): Promise<BulkExportJob[]> {
     const client = resolveClient(ctx);
     const rows = await client.bulkExportJob.findMany({
-      where: { requestedByUserId },
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take: 200,
     });
     return rows.map(toDomain);
   }

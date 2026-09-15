@@ -1,6 +1,6 @@
 import type { BulkExportJob } from '../../../domain/BulkExportJob';
 
-export function presentBulkExportJob(job: BulkExportJob) {
+export function presentBulkExportJob(job: BulkExportJob, requestedByName: string | null = null) {
   return {
     id: job.id,
     exportType: job.exportType,
@@ -14,5 +14,7 @@ export function presentBulkExportJob(job: BulkExportJob) {
     errorMessage: job.errorMessage,
     createdAt: job.createdAt.toISOString(),
     completedAt: job.completedAt?.toISOString() ?? null,
+    requestedByUserId: job.requestedByUserId,
+    requestedByName,
   };
 }

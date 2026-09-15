@@ -253,7 +253,7 @@ import { DownloadAllBorrowerDocumentsUseCase } from '@modules/document/applicati
 import { PrismaBulkExportJobRepository } from '@modules/bulk-export/infrastructure/PrismaBulkExportJobRepository';
 import { ProcessBulkExportJobUseCase } from '@modules/bulk-export/application/use-cases/ProcessBulkExportJobUseCase';
 import { CreateBulkExportJobUseCase } from '@modules/bulk-export/application/use-cases/CreateBulkExportJobUseCase';
-import { ListMyBulkExportJobsUseCase } from '@modules/bulk-export/application/use-cases/ListMyBulkExportJobsUseCase';
+import { ListAllBulkExportJobsUseCase } from '@modules/bulk-export/application/use-cases/ListAllBulkExportJobsUseCase';
 import { DownloadBulkExportJobUseCase } from '@modules/bulk-export/application/use-cases/DownloadBulkExportJobUseCase';
 import { GetBulkExportDefaultRangeUseCase } from '@modules/bulk-export/application/use-cases/GetBulkExportDefaultRangeUseCase';
 import { CancelBulkExportJobUseCase } from '@modules/bulk-export/application/use-cases/CancelBulkExportJobUseCase';
@@ -1977,7 +1977,7 @@ export function createApp(): Express {
   const bulkExportRouter = createBulkExportRouter(
     {
       createBulkExportJobUseCase: new CreateBulkExportJobUseCase({ bulkExportJobRepository, processBulkExportJobUseCase }),
-      listMyBulkExportJobsUseCase: new ListMyBulkExportJobsUseCase({ bulkExportJobRepository }),
+      listAllBulkExportJobsUseCase: new ListAllBulkExportJobsUseCase({ bulkExportJobRepository, userRepository }),
       downloadBulkExportJobUseCase: new DownloadBulkExportJobUseCase({ bulkExportJobRepository, fileStorage }),
       getBulkExportDefaultRangeUseCase: new GetBulkExportDefaultRangeUseCase({ borrowerRepository, loanAccountRepository }),
       cancelBulkExportJobUseCase: new CancelBulkExportJobUseCase({ bulkExportJobRepository, cancellationRegistry: bulkExportCancellationRegistry }),

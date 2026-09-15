@@ -17,7 +17,7 @@ export function createBulkExportRouter(deps: BulkExportControllerDeps, tokenServ
   const canExport = requirePermission('bulk_export.use');
 
   router.get('/bulk-exports/default-range', requireAuth, canExport, controller.defaultRange);
-  router.get('/bulk-exports', requireAuth, canExport, controller.listMine);
+  router.get('/bulk-exports', requireAuth, canExport, controller.listAll);
   router.post('/bulk-exports', requireAuth, canExport, validateBody(createBulkExportJobSchema), controller.create);
   router.get('/bulk-exports/:id/download', requireAuth, canExport, controller.download);
   router.post('/bulk-exports/:id/cancel', requireAuth, canExport, controller.cancel);
