@@ -224,17 +224,57 @@ schema, `updateUserSchema`, was missing it), and `UserPresenter` already returne
 zod field, the frontend `MemberDraft`/`MemberForm` input, prefill on opening Edit, and the PATCH
 payload. Commit `53311710`.
 
+## Undo Create Client Profile: Test DELA CRUZ Applicant
+
+User asked to undo "Create Client Profile" on a test Loan Application (`Test DELA CRUZ Applicant`,
+APPROVED, id `811d7768...`) and put it back to just a Loan Application. No "undo" feature exists
+for this (Borrower deletion isn't a built capability at all - deliberately, real client records are
+dangerous to delete). Checked before touching anything: the created Borrower (`1d4232a5...`) had no
+LoanAccount, no attachments, no profile notes - nothing downstream to worry about. Tested the
+DELETE inside an uncommitted transaction first (confirmed no FK violation, then let it roll back on
+disconnect since no COMMIT was issued) before actually deleting for real. Application stayed
+APPROVED throughout - only the Borrower row was removed, which should make "Create Client Profile"
+available again on that application. Pure data operation, no code/deploy.
+
+## Online indicator for Staff Accounts
+
+User asked how to tell if a user is online, then who specifically is online right now. Checked
+first whether anything already answered this: the Chat module has an agent presence system
+(ONLINE/AWAY/OFFLINE, `UpdateAgentPresenceUseCase`/`ListAgentPresenceUseCase`), but it's
+self-reported and only updates while a staff member has the Chat page open specifically - not a
+general "is this person using the LMS" signal, and its own `GET /chat/presence` listing endpoint
+wasn't even consumed by any frontend page. Proposed an alternative grounded in real session
+activity instead of self-reported/chat-scoped status; user asked to see how the indicator would
+look before approving, then said to proceed.
+
+Derived `lastActiveAt` from `RefreshToken.createdAt` rather than adding a new column: each token
+refresh is a full rotate (revoke old row + insert new one, per `RefreshTokenUseCase`'s existing
+doc comment), and the frontend proactively refreshes the access token ~1 minute before its
+15-minute TTL expires while a tab stays open (`apiClient.ts`'s `scheduleProactiveRefresh`) - so the
+newest `refresh_tokens` row per user already IS "last time their session was alive," no schema
+change needed. Added `lastActiveAt: Date | null` to `IUserRepository.UserRecord`, populated only by
+`findMany`/`findById` (one batched query per page load, not per-row N+1) - every other repository
+method (login, create, update, notification-recipient lookups) passes `null` since presence isn't
+needed there and a `groupBy` on every login would be wasted cost. "Online" = refreshed within the
+last 20 minutes (a little past the ~14-minute refresh cadence, so it doesn't read "online" long
+after a tab was actually closed). Surfaced as a green dot on the avatar + "Online"/"Xm/h/d ago"/
+"Never logged in" text, both in the Staff Accounts list (new sortable "Last Active" column) and the
+View Member panel. Verified the underlying query against real data before deploying (top 5 most
+recently active users all showed sensible, recent timestamps). Commit `3539ff11`.
+
 ## Current state
 
-- All seven feature/design changes plus the manual attachment import deployed and verified this
+- All eight feature/design changes plus two manual data operations deployed and verified this
   session: `/health` OK, both containers' `build-info.json` confirmed stamped at each change's
   final commit, the Negative Areas endpoint confirmed wired (401 Unauthorized without a token, not
   404), the redesigned System page confirmed serving (HTTP 200), Ricky Reforma's 26 imported
-  attachments confirmed in the DB, on disk, and visible to the running container.
+  attachments confirmed in the DB/disk/container, the online-indicator query verified against real
+  session data.
 - Commits, in order: `309604a1` (agency address/contact auto-fill), `c3999bc1` (Position dropdown),
   `e19a0890` (Bank dropdown), `3a1b29d2` + `19e15a4b` (Export History requester), `0a39413b` +
   `d961ce5d` (Negative Areas), `b5c6b539` + `acea03d8` (System nav redesign), `53311710` +
-  `83816b0d` (member Contact Number editable + Reforma import script).
+  `83816b0d` (member Contact Number editable + Reforma import script), `3539ff11` + `60ec74bb`
+  (online indicator).
 - Noted twice this session: a container recreate can have a noticeably slow cold start (backend
   took ~25-30s to bind port 4000 on one recreate, well past the few-second delay seen on every
   other recreate today) - not the [[project_stale_docker_wsl_port_forward]] pattern (no duplicate
@@ -242,5 +282,5 @@ payload. Commit `53311710`.
   host) and resolved on its own without intervention. Worth a longer wait before assuming something
   is actually wrong on a slow-to-heal recreate.
 - Not yet tested end-to-end in the live UI by me (cannot log in) - user still needs to confirm all
-  seven changes look/behave as expected in production, including the new editable Contact Number
-  field in Edit Member.
+  eight changes look/behave as expected in production, including the new editable Contact Number
+  field and the online indicator (green dot + Last Active column) in Staff Accounts.
