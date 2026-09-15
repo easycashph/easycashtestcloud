@@ -1,13 +1,28 @@
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Lock } from 'lucide-react';
+import {
+  AlertCircle,
+  ChevronRight,
+  Download,
+  FileStack,
+  FileText,
+  History,
+  Lock,
+  Mail,
+  MapPinOff,
+  Megaphone,
+  Search,
+  ShieldCheck,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { AuditLog } from '@/lib/auditLogApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { apiClient, ApiError } from '@/lib/apiClient';
@@ -41,17 +56,33 @@ type SystemTab =
   | 'exports'
   | 'negative-areas'
   | 'security';
-const SYSTEM_TABS: SystemTab[] = [
-  'reminders',
-  'members',
-  'products',
-  'documents',
-  'announcements',
-  'activity-logs',
-  'exports',
-  'negative-areas',
-  'security',
+/** 2026-09-15 (user request): "gawan mo ng high end, advance design" - replaced the flat 9-tab
+ * horizontal row (had grown past a single line, wrapping awkwardly with `grid-cols-8`) with a
+ * grouped left-rail nav that scales to more entries without ever wrapping, plus a filter so a
+ * specific setting is one search away rather than a scan. Grouping is purely presentational -
+ * `tab`/`SystemTab` still drives which panel renders, unchanged from the flat-tabs version. */
+const SYSTEM_NAV_GROUPS: { label: string; items: { value: SystemTab; label: string; icon: LucideIcon }[] }[] = [
+  {
+    label: 'Configuration',
+    items: [
+      { value: 'reminders', label: 'Messaging & alerts', icon: Mail },
+      { value: 'products', label: 'Loan products', icon: FileStack },
+      { value: 'documents', label: 'Document templates', icon: FileText },
+      { value: 'negative-areas', label: 'Negative areas', icon: MapPinOff },
+      { value: 'announcements', label: 'Announcements', icon: Megaphone },
+    ],
+  },
+  {
+    label: 'Access & monitoring',
+    items: [
+      { value: 'members', label: 'User accounts', icon: Users },
+      { value: 'activity-logs', label: 'Activity logs', icon: History },
+      { value: 'exports', label: 'Exports', icon: Download },
+      { value: 'security', label: 'Security', icon: ShieldCheck },
+    ],
+  },
 ];
+const SYSTEM_TABS: SystemTab[] = SYSTEM_NAV_GROUPS.flatMap((g) => g.items.map((i) => i.value));
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -427,6 +458,14 @@ export function SystemPage() {
   const [tab, setTab] = React.useState<SystemTab>(
     initialTab && (SYSTEM_TABS as string[]).includes(initialTab) ? (initialTab as SystemTab) : 'reminders',
   );
+  const [navSearch, setNavSearch] = React.useState('');
+  const activeItem = SYSTEM_NAV_GROUPS.flatMap((g) => g.items).find((i) => i.value === tab);
+
+  const filteredGroups = navSearch.trim()
+    ? SYSTEM_NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.label.toLowerCase().includes(navSearch.trim().toLowerCase())) })).filter(
+        (g) => g.items.length > 0,
+      )
+    : SYSTEM_NAV_GROUPS;
 
   if (!currentAccount.roles.includes('MIS') && !currentAccount.roles.includes('Super Admin')) {
     return (
@@ -444,39 +483,72 @@ export function SystemPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">System</h2>
-        <p className="text-sm text-muted-foreground">Platform-wide switches, staff accounts, loan products, and the audit trail.</p>
+      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <span>System</span>
+        <ChevronRight className="h-3.5 w-3.5" />
+        <span className="font-medium text-foreground">{activeItem?.label ?? 'Messaging & alerts'}</span>
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as SystemTab)}>
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-8">
-          <TabsTrigger value="reminders">Messaging & Alerts</TabsTrigger>
-          <TabsTrigger value="members">User Accounts</TabsTrigger>
-          <TabsTrigger value="products">Loan Products</TabsTrigger>
-          <TabsTrigger value="documents">Document Templates</TabsTrigger>
-          <TabsTrigger value="announcements">Announcements</TabsTrigger>
-          <TabsTrigger value="activity-logs">Activity Logs</TabsTrigger>
-          <TabsTrigger value="exports">Exports</TabsTrigger>
-          <TabsTrigger value="negative-areas">Negative Areas</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <div className="flex flex-col gap-6 lg:flex-row">
+        <nav className="w-full shrink-0 space-y-4 lg:w-56">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={navSearch}
+              onChange={(e) => setNavSearch(e.target.value)}
+              placeholder="Search settings"
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
+          {filteredGroups.length === 0 ? (
+            <p className="px-1 text-xs text-muted-foreground">No settings match &ldquo;{navSearch}&rdquo;.</p>
+          ) : (
+            filteredGroups.map((group) => (
+              <div key={group.label}>
+                <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
+                <div className="grid grid-cols-2 gap-1 sm:grid-cols-1">
+                  {group.items.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setTab(item.value)}
+                      className={cn(
+                        'flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors',
+                        tab === item.value ? 'bg-primary font-medium text-primary-foreground' : 'text-foreground hover:bg-muted',
+                      )}
+                    >
+                      <item.icon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </nav>
 
-      {tab === 'reminders' && (
-        <div className="space-y-6">
-          <ReminderSettingsCard />
-          <ReminderSettingsActivityLog />
+        <div className="min-w-0 flex-1 space-y-6">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight">{activeItem?.label ?? 'System'}</h2>
+            <p className="text-sm text-muted-foreground">Platform-wide switches, staff accounts, loan products, and the audit trail.</p>
+          </div>
+
+          {tab === 'reminders' && (
+            <div className="space-y-6">
+              <ReminderSettingsCard />
+              <ReminderSettingsActivityLog />
+            </div>
+          )}
+          {tab === 'members' && <MemberListPage />}
+          {tab === 'products' && <LoanProductsPage />}
+          {tab === 'documents' && <DocumentTemplatesTab />}
+          {tab === 'announcements' && <AnnouncementsTab />}
+          {tab === 'activity-logs' && <ActivityLogPage />}
+          {tab === 'exports' && <BulkExportsPage embedded />}
+          {tab === 'negative-areas' && <NegativeAreasTab />}
+          {tab === 'security' && <TwoFactorEnforcementCard />}
         </div>
-      )}
-      {tab === 'members' && <MemberListPage />}
-      {tab === 'products' && <LoanProductsPage />}
-      {tab === 'documents' && <DocumentTemplatesTab />}
-      {tab === 'announcements' && <AnnouncementsTab />}
-      {tab === 'activity-logs' && <ActivityLogPage />}
-      {tab === 'exports' && <BulkExportsPage embedded />}
-      {tab === 'negative-areas' && <NegativeAreasTab />}
-      {tab === 'security' && <TwoFactorEnforcementCard />}
+      </div>
     </div>
   );
 }
