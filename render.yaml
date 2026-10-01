@@ -1,0 +1,62 @@
+# Render Blueprint - LMS + Portal + API in one place (cloud test).
+# Database stays on Supabase (already migrated + seeded); paste its session-pooler URL when prompted.
+services:
+  - type: web
+    name: easycash-api-eclc
+    runtime: docker
+    region: singapore
+    plan: free
+    dockerContext: ./app/easycashbackend
+    dockerfilePath: ./app/easycashbackend/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: PORTAL_JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "true"
+      - key: LIBREOFFICE_BINARY_PATH
+        value: /usr/bin/soffice
+      - key: SMS_ENABLED
+        value: "false"
+      - key: EMAIL_ENABLED
+        value: "false"
+      - key: CORS_ORIGIN
+        value: https://easycash-lms-eclc.onrender.com,https://easycash-portal-eclc.onrender.com
+      - key: SIGNING_LINK_BASE_URL
+        value: https://easycash-lms-eclc.onrender.com
+
+  - type: web
+    name: easycash-lms-eclc
+    runtime: static
+    rootDir: app/lmsfrontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://easycash-api-eclc.onrender.com/api/v1
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: web
+    name: easycash-portal-eclc
+    runtime: static
+    rootDir: app/portalfrontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://easycash-api-eclc.onrender.com/api/v1
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
